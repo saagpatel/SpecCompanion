@@ -7,6 +7,7 @@ on:
 
 jobs:
   commitlint:
+    if: ${{ github.actor != 'dependabot[bot]' && !startsWith(github.event.pull_request.head.ref, 'dependabot/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,6 +18,7 @@ jobs:
       - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed
 
   pr-title:
+    if: ${{ github.actor != 'dependabot[bot]' && !startsWith(github.event.pull_request.head.ref, 'dependabot/') }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
@@ -26,6 +28,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   branch-name:
+    if: ${{ github.actor != 'dependabot[bot]' && !startsWith(github.event.pull_request.head.ref, 'dependabot/') }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read

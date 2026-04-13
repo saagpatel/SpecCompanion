@@ -49,14 +49,14 @@ npm run tauri dev
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Desktop shell | Tauri 2 |
-| Frontend | React, TypeScript, Tailwind CSS |
+| Layer               | Technology                                     |
+| ------------------- | ---------------------------------------------- |
+| Desktop shell       | Tauri 2                                        |
+| Frontend            | React, TypeScript, Tailwind CSS                |
 | Requirement parsing | Rust + `pulldown-cmark` (AST-based, not regex) |
-| Test execution | Rust subprocess runner (Jest, PyTest) |
-| LLM integration | Anthropic Claude API (optional) |
-| Storage | SQLite (local app data dir) |
+| Test execution      | Rust subprocess runner (Jest, PyTest)          |
+| LLM integration     | Anthropic Claude API (optional)                |
+| Storage             | SQLite (local app data dir)                    |
 
 ## Architecture
 

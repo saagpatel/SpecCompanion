@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 const files = {
   bundle: ".perf-results/bundle.json",
   build: ".perf-results/build-time.json",
+  assets: ".perf-results/assets.json",
   memory: ".perf-results/memory.json",
   api: ".perf-results/api-summary.json",
 };

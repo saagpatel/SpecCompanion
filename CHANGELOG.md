@@ -10,12 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-03-21
 
 ### Added
+
 - Initial implementation of Spec Companion
 - Deterministic UI gates and blocking LCP checks
 - Lean mode and cleanup workflows
 - Comprehensive unit tests for scanner, alignment, and hooks
 
 ### Fixed
+
 - Critical bugs found during comprehensive code review
 - Lower-priority issues and audit findings across backend and frontend
 - Security hardening, transactions, and frontend bugs
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - UI visual tolerances tuned for Linux CI
 
 ### Changed
+
 - Replaced template README with comprehensive app documentation
 - Improved scanner language parity and added session audit artifacts
 - Approved pnpm build scripts for esbuild

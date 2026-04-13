@@ -1,0 +1,13 @@
+{
+  "source": "vite",
+  "totalBytes": 889942,
+  "assets": {
+    "index.html": 706,
+    "assets/index-BzmLZbZB.js": 435968,
+    "assets/index-KXUwWZvt.css": 16633,
+    "assets/query-CqXmcd4z.js": 35767,
+    "assets/recharts-BwqgQE6O.js": 354171,
+    "assets/vendor-BRjqYAXi.js": 46697
+  },
+  "capturedAt": "2026-04-12T09:48:47.049Z"
+}

@@ -28,15 +28,29 @@ function nextBundle() {
 }
 
 function viteBundle() {
-  const distAssets = "dist/assets";
-  if (!existsSync(distAssets)) return null;
+  const distRoot = "dist";
+  const distAssets = path.join(distRoot, "assets");
+  if (!existsSync(distRoot)) return null;
 
   const result = { source: "vite", totalBytes: 0, assets: {} };
+  const indexPath = path.join(distRoot, "index.html");
+  if (existsSync(indexPath)) {
+    try {
+      const size = statSync(indexPath).size;
+      result.assets["index.html"] = size;
+      result.totalBytes += size;
+    } catch {}
+  }
+
+  if (!existsSync(distAssets)) {
+    return result;
+  }
+
   for (const file of readdirSync(distAssets)) {
     const full = path.join(distAssets, file);
     try {
       const size = statSync(full).size;
-      result.assets[file] = size;
+      result.assets[`assets/${file}`] = size;
       result.totalBytes += size;
     } catch {}
   }

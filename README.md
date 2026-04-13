@@ -92,6 +92,24 @@ pnpm install
 pnpm tauri dev
 ```
 
+### Lean Development (Low Disk Mode)
+
+Use lean mode when you want to minimize repo-local disk growth while iterating.
+
+```bash
+pnpm install
+pnpm run dev:lean
+```
+
+What lean mode does:
+- Starts the same app entrypoint (`pnpm tauri dev`)
+- Redirects heavy build caches to temporary directories
+- Cleans temporary caches and heavy build artifacts when the app exits
+
+Tradeoff:
+- Uses less persistent disk in the project directory
+- Can be slower to restart than normal dev because caches are ephemeral
+
 ### Build
 
 ```bash
@@ -99,6 +117,20 @@ pnpm tauri build
 ```
 
 Produces `.app` + `.dmg` on macOS, `.msi` on Windows, `.deb`/`.AppImage` on Linux.
+
+### Cleanup Commands
+
+Targeted cleanup (heavy build artifacts only):
+
+```bash
+pnpm run clean:heavy
+```
+
+Full local cleanup (all reproducible local caches/artifacts, including `node_modules`):
+
+```bash
+pnpm run clean:full
+```
 
 ### Configuration
 

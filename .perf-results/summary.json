@@ -1,0 +1,39 @@
+{
+  "capturedAt": "2026-04-12T09:48:50.809Z",
+  "metrics": {
+    "bundle": {
+      "source": "vite",
+      "totalBytes": 889942,
+      "assets": {
+        "index.html": 706,
+        "assets/index-BzmLZbZB.js": 435968,
+        "assets/index-KXUwWZvt.css": 16633,
+        "assets/query-CqXmcd4z.js": 35767,
+        "assets/recharts-BwqgQE6O.js": 354171,
+        "assets/vendor-BRjqYAXi.js": 46697
+      },
+      "capturedAt": "2026-04-12T09:48:47.049Z"
+    },
+    "build": {
+      "buildMs": 2841,
+      "capturedAt": "2026-04-12T09:48:50.093Z",
+      "command": "npm_execpath run build"
+    },
+    "assets": {
+      "checked": 6,
+      "maxBytes": 450000,
+      "status": "pass"
+    },
+    "memory": {
+      "heapBefore": 3872888,
+      "heapAfter": 3877568,
+      "deltaMb": 0,
+      "maxDeltaMb": 10,
+      "capturedAt": "2026-04-12T09:48:50.615Z"
+    },
+    "api": {
+      "status": "not-run"
+    }
+  },
+  "status": "pass"
+}

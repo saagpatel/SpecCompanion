@@ -40,7 +40,7 @@ pub async fn generate_test_with_llm(
         .build()
         .map_err(AppError::Http)?;
     let request = ClaudeRequest {
-        model: "claude-sonnet-4-20250514".to_string(),
+        model: "claude-sonnet-4-6".to_string(),
         max_tokens: 2048,
         messages: vec![Message {
             role: "user".to_string(),

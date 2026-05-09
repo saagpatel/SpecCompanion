@@ -33,23 +33,45 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ hasError: false, error: null });
   };
 
+  handleReturnHome = () => {
+    window.location.assign("/");
+  };
+
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex items-center justify-center min-h-screen bg-surface p-8">
-          <div className="max-w-md w-full rounded-xl border border-border bg-surface-alt p-8 text-center">
-            <h2 className="text-xl font-bold text-text mb-2">Something went wrong</h2>
-            <p className="text-sm text-text-muted mb-4">
+        <main className="bg-surface flex min-h-screen items-center justify-center p-8">
+          <section
+            aria-labelledby="error-boundary-title"
+            aria-describedby="error-boundary-message"
+            className="border-border bg-surface-alt w-full max-w-md rounded-lg border p-8 text-center shadow-xl"
+            role="alert"
+          >
+            <p className="text-danger mb-2 text-xs font-semibold tracking-wide uppercase">
+              Recovery needed
+            </p>
+            <h1 id="error-boundary-title" className="text-text mb-3 text-2xl font-bold">
+              Something went wrong
+            </h1>
+            <p id="error-boundary-message" className="text-text-muted mb-6 text-sm leading-6">
               {this.state.error?.message ?? "An unexpected error occurred."}
             </p>
-            <button
-              onClick={this.handleReset}
-              className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm rounded-lg transition-colors"
-            >
-              Try Again
-            </button>
-          </div>
-        </div>
+            <div className="flex flex-col justify-center gap-3 sm:flex-row">
+              <button
+                onClick={this.handleReset}
+                className="bg-primary hover:bg-primary-dark focus-visible:outline-primary-light rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                Try again
+              </button>
+              <button
+                onClick={this.handleReturnHome}
+                className="border-border bg-surface text-text hover:bg-surface-hover focus-visible:outline-primary-light rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                Back to dashboard
+              </button>
+            </div>
+          </section>
+        </main>
       );
     }
 

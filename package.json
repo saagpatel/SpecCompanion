@@ -21,6 +21,7 @@
     "ui:test:visual": "playwright test tests/ui --grep @visual",
     "ui:test:a11y": "playwright test tests/ui --grep @a11y",
     "ui:test:lighthouse": "pnpm build && lhci autorun --config=.lighthouserc.json",
+    "workflow:smoke": "cargo test --manifest-path src-tauri/Cargo.toml desktop_workflow_smoke_generates_executes_and_reports",
     "ui:gate:regression": "pnpm ui:test:visual && pnpm ui:test:a11y",
     "ui:gate": "pnpm ui:gate:static && pnpm ui:gate:regression && pnpm ui:test:lighthouse",
     "ui:test:visual:update": "playwright test tests/ui --grep @visual --update-snapshots",

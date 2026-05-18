@@ -87,12 +87,15 @@ fn extract_symbols(content: &str, file_path: &str, ext: &str, symbols: &mut Vec<
 fn extract_js_ts_symbols(content: &str, file_path: &str, symbols: &mut Vec<CodeSymbol>) {
     for line in content.lines() {
         let trimmed = line.trim();
+        if is_comment_line(trimmed) {
+            continue;
+        }
         // function declarations
-        if let Some(name) = extract_after_keyword(trimmed, "function ") {
+        for name in extract_all_after_keyword(trimmed, "function ") {
             symbols.push(CodeSymbol { name, kind: "function".into(), file_path: file_path.into() });
         }
         // class declarations
-        if let Some(name) = extract_after_keyword(trimmed, "class ") {
+        for name in extract_all_after_keyword(trimmed, "class ") {
             symbols.push(CodeSymbol { name, kind: "class".into(), file_path: file_path.into() });
         }
         // const arrow functions: const foo = (...) =>
@@ -149,10 +152,13 @@ fn extract_rust_symbols(content: &str, file_path: &str, symbols: &mut Vec<CodeSy
 fn extract_go_symbols(content: &str, file_path: &str, symbols: &mut Vec<CodeSymbol>) {
     for line in content.lines() {
         let trimmed = line.trim();
-        if let Some(name) = extract_after_keyword(trimmed, "func ") {
+        if is_comment_line(trimmed) {
+            continue;
+        }
+        if let Some(name) = extract_go_function_name(trimmed) {
             symbols.push(CodeSymbol { name, kind: "function".into(), file_path: file_path.into() });
         }
-        if let Some(name) = extract_after_keyword(trimmed, "type ") {
+        for name in extract_all_after_keyword(trimmed, "type ") {
             if trimmed.contains(" struct") || trimmed.contains(" interface") {
                 symbols.push(CodeSymbol { name, kind: "class".into(), file_path: file_path.into() });
             }
@@ -161,12 +167,15 @@ fn extract_go_symbols(content: &str, file_path: &str, symbols: &mut Vec<CodeSymb
 }
 
 fn extract_java_symbols(content: &str, file_path: &str, symbols: &mut Vec<CodeSymbol>) {
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if let Some(name) = extract_after_keyword(trimmed, "class ") {
+    for fragment in content.split(['{', '}', ';']) {
+        let trimmed = fragment.trim();
+        if is_comment_line(trimmed) {
+            continue;
+        }
+        for name in extract_all_after_keyword(trimmed, "class ") {
             symbols.push(CodeSymbol { name, kind: "class".into(), file_path: file_path.into() });
         }
-        if let Some(name) = extract_after_keyword(trimmed, "interface ") {
+        for name in extract_all_after_keyword(trimmed, "interface ") {
             symbols.push(CodeSymbol { name, kind: "class".into(), file_path: file_path.into() });
         }
         if looks_like_java_method(trimmed) {
@@ -196,12 +205,15 @@ fn extract_ruby_symbols(content: &str, file_path: &str, symbols: &mut Vec<CodeSy
 }
 
 fn extract_csharp_symbols(content: &str, file_path: &str, symbols: &mut Vec<CodeSymbol>) {
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if let Some(name) = extract_after_keyword(trimmed, "class ") {
+    for fragment in content.split(['{', '}', ';']) {
+        let trimmed = fragment.trim();
+        if is_comment_line(trimmed) {
+            continue;
+        }
+        for name in extract_all_after_keyword(trimmed, "class ") {
             symbols.push(CodeSymbol { name, kind: "class".into(), file_path: file_path.into() });
         }
-        if let Some(name) = extract_after_keyword(trimmed, "interface ") {
+        for name in extract_all_after_keyword(trimmed, "interface ") {
             symbols.push(CodeSymbol { name, kind: "class".into(), file_path: file_path.into() });
         }
         if looks_like_csharp_method(trimmed) {
@@ -215,8 +227,8 @@ fn extract_csharp_symbols(content: &str, file_path: &str, symbols: &mut Vec<Code
 fn looks_like_java_method(line: &str) -> bool {
     line.contains('(')
         && line.contains(')')
-        && (line.ends_with('{') || line.ends_with(";") || line.contains(" throws "))
         && !line.contains(" class ")
+        && !line.contains(" interface ")
         && !line.starts_with("if ")
         && !line.starts_with("for ")
         && !line.starts_with("while ")
@@ -226,7 +238,7 @@ fn looks_like_java_method(line: &str) -> bool {
 fn looks_like_csharp_method(line: &str) -> bool {
     line.contains('(')
         && line.contains(')')
-        && (line.ends_with('{') || line.ends_with("=>") || line.contains(" => "))
+        && !line.contains(" interface ")
         && !line.contains(" class ")
         && !line.starts_with("if ")
         && !line.starts_with("for ")
@@ -262,6 +274,69 @@ fn extract_after_keyword(line: &str, keyword: &str) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_all_after_keyword(line: &str, keyword: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut start = 0;
+
+    while let Some(relative_idx) = line[start..].find(keyword) {
+        let idx = start + relative_idx;
+        let boundary_ok = idx == 0
+            || !line[..idx]
+                .chars()
+                .next_back()
+                .map(|c| c.is_alphanumeric() || c == '_')
+                .unwrap_or(false);
+
+        if boundary_ok {
+            let rest = &line[idx + keyword.len()..];
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            if !name.is_empty() {
+                names.push(name);
+            }
+        }
+
+        start = idx + keyword.len();
+    }
+
+    names
+}
+
+fn extract_go_function_name(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("func ")?;
+    if let Some(receiver_end) = rest.find(')') {
+        let after_receiver = rest[receiver_end + 1..].trim_start();
+        let name: String = after_receiver
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if !name.is_empty() {
+            return Some(name);
+        }
+    }
+
+    let name: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+fn is_comment_line(line: &str) -> bool {
+    line.is_empty()
+        || line.starts_with("//")
+        || line.starts_with("/*")
+        || line.starts_with('*')
+        || line.starts_with("*/")
+        || line.starts_with('#')
 }
 
 #[cfg(test)]

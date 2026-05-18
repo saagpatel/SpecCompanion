@@ -1,2 +1,13 @@
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm git:guard:all
 pnpm ui:gate:static
+cargo test --manifest-path src-tauri/Cargo.toml
 pnpm ui:gate:regression
+pnpm build
+pnpm perf:bundle
+node scripts/perf/compare-metric.mjs .perf-baselines/bundle.json .perf-results/bundle.json totalBytes 0.08
+pnpm perf:build
+node scripts/perf/compare-metric.mjs .perf-baselines/build-time.json .perf-results/build-time.json buildMs 0.15
+pnpm perf:assets
+pnpm perf:memory
+pnpm perf:summary

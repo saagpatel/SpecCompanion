@@ -23,12 +23,12 @@ export function AlignmentChart({ mismatches, totalRequirements, coveredRequireme
   ].filter((d) => d.value > 0);
 
   if (totalRequirements === 0) {
-    return <p className="text-sm text-text-muted">No requirements to analyze.</p>;
+    return <p className="text-text-muted text-sm">No requirements to analyze.</p>;
   }
 
   return (
-    <div className="h-48">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-48 min-w-0">
+      <ResponsiveContainer width="100%" height={192} minWidth={240}>
         <BarChart data={data} layout="vertical" margin={{ left: 60 }}>
           <XAxis type="number" tick={{ fill: "#9393a8", fontSize: 12 }} />
           <YAxis

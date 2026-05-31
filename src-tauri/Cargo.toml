@@ -25,6 +25,6 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["full"] }
-thiserror = "1"
+thiserror = "2"
 git2 = "0.20.4"
 wait-timeout = "0.2"

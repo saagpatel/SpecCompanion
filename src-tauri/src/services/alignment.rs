@@ -124,8 +124,6 @@ pub fn generate_report(conn: &Connection, project_id: &str) -> Result<AlignmentR
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Helper function to test coverage calculation
     fn calculate_coverage_percent(total: i64, covered: i64) -> f64 {
         if total > 0 {

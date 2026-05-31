@@ -1,4 +1,4 @@
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell } from "recharts";
 
 interface Props {
   coveragePercent: number;
@@ -16,25 +16,23 @@ export function CoverageGauge({ coveragePercent, total, covered }: Props) {
 
   return (
     <div className="flex items-center gap-4">
-      <div className="w-24 h-24 relative">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={28}
-              outerRadius={40}
-              startAngle={90}
-              endAngle={-270}
-              dataKey="value"
-              stroke="none"
-            >
-              <Cell fill={color} />
-              <Cell fill="#333348" />
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
+      <div className="relative h-24 w-24">
+        <PieChart width={96} height={96}>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={28}
+            outerRadius={40}
+            startAngle={90}
+            endAngle={-270}
+            dataKey="value"
+            stroke="none"
+          >
+            <Cell fill={color} />
+            <Cell fill="#333348" />
+          </Pie>
+        </PieChart>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-lg font-bold" style={{ color }}>
             {coveragePercent.toFixed(0)}%
@@ -42,10 +40,10 @@ export function CoverageGauge({ coveragePercent, total, covered }: Props) {
         </div>
       </div>
       <div>
-        <p className="text-sm text-text">{covered}/{total} requirements covered</p>
-        <p className="text-xs text-text-muted mt-0.5">
-          {total - covered} uncovered
+        <p className="text-text text-sm">
+          {covered}/{total} requirements covered
         </p>
+        <p className="text-text-muted mt-0.5 text-xs">{total - covered} uncovered</p>
       </div>
     </div>
   );

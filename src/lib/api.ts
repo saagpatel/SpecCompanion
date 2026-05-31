@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import type {
   Project,
   CreateProjectRequest,
@@ -14,40 +14,376 @@ import type {
   AppSettings,
 } from "./types";
 
+type InvokeArgs = Record<string, unknown>;
+
+interface MockState {
+  projects: Project[];
+  specs: Spec[];
+  requirements: Requirement[];
+  generatedTests: GeneratedTest[];
+  testResults: TestResult[];
+  reports: AlignmentReportWithMismatches[];
+  settings: AppSettings;
+}
+
+const mockState: MockState = {
+  projects: [],
+  specs: [],
+  requirements: [],
+  generatedTests: [],
+  testResults: [],
+  reports: [],
+  settings: {
+    api_key: "",
+    default_framework: "jest",
+    default_mode: "template",
+    scan_exclusions: ["node_modules", "dist", ".git"],
+  },
+};
+
+let mockId = 0;
+
+export const isTauriRuntime = () =>
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+function now() {
+  return new Date().toISOString();
+}
+
+function nextId(prefix: string) {
+  mockId += 1;
+  return `mock-${prefix}-${mockId}`;
+}
+
+function withStats(project: Project): ProjectWithStats {
+  const specs = mockState.specs.filter((spec) => spec.project_id === project.id);
+  const reports = mockState.reports.filter((report) => report.project_id === project.id);
+  const latestReport = reports[reports.length - 1];
+  const latestResult = mockState.testResults[mockState.testResults.length - 1];
+
+  return {
+    ...project,
+    spec_count: specs.length,
+    coverage_percent: latestReport?.coverage_percent ?? null,
+    last_run_at: latestResult?.executed_at ?? null,
+  };
+}
+
+function parseRequirements(specId: string, content: string): Requirement[] {
+  const requirements: Requirement[] = [];
+  let section = "General";
+  let inRequirementSection = false;
+
+  for (const line of content.split(/\r?\n/)) {
+    const heading = line.match(/^#{1,3}\s+(.+)$/);
+    if (heading) {
+      section = heading[1].trim();
+      const lower = section.toLowerCase();
+      inRequirementSection =
+        lower.includes("requirement") ||
+        lower.includes("user stor") ||
+        lower.includes("feature") ||
+        lower.includes("functional") ||
+        lower.includes("specification") ||
+        lower.includes("capability") ||
+        lower.includes("constraint") ||
+        lower.includes("acceptance criteria") ||
+        lower.includes("use case");
+      continue;
+    }
+
+    const item = line.match(/^\s*[-*]\s+(.+)$/);
+    if (!item) continue;
+
+    const description = item[1].trim();
+    const lower = description.toLowerCase();
+    const looksLikeRequirement =
+      lower.startsWith("as a ") ||
+      lower.startsWith("the system shall ") ||
+      lower.startsWith("the system must ") ||
+      lower.startsWith("the application shall ") ||
+      lower.startsWith("the application must ") ||
+      lower.startsWith("shall ") ||
+      lower.startsWith("must ") ||
+      lower.includes("**shall**") ||
+      lower.includes("**must**");
+
+    if (!inRequirementSection && !looksLikeRequirement) continue;
+
+    const lowerSection = section.toLowerCase();
+    const reqType =
+      lowerSection.includes("non-functional") ||
+      lowerSection.includes("performance") ||
+      lowerSection.includes("security") ||
+      lower.includes("performance") ||
+      lower.includes("latency") ||
+      lower.includes("availability")
+        ? "non_functional"
+        : lowerSection.includes("constraint") ||
+            lower.includes("constraint") ||
+            lower.includes("limitation")
+          ? "constraint"
+          : "functional";
+    const priority =
+      lower.includes("critical") || lower.includes("must have") || lower.includes("**must**")
+        ? "high"
+        : lower.includes("nice to have") || lower.includes("optional") || lower.includes("could")
+          ? "low"
+          : "medium";
+
+    requirements.push({
+      id: nextId("req"),
+      spec_id: specId,
+      section,
+      description,
+      req_type: reqType,
+      priority,
+    });
+  }
+
+  return requirements;
+}
+
+function generateMockTest(requirement: Requirement, req: GenerateTestsRequest): GeneratedTest {
+  const testName = requirement.description
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(" ")
+    .slice(0, 8)
+    .join("_");
+  const code =
+    req.framework === "pytest"
+      ? `def test_${testName || "requirement"}():\n    \"\"\"${requirement.description}\"\"\"\n    assert True\n`
+      : `describe("${requirement.section}", () => {\n  it("${requirement.description}", () => {\n    expect(true).toBe(true);\n  });\n});\n`;
+
+  return {
+    id: nextId("test"),
+    requirement_id: requirement.id,
+    framework: req.framework,
+    code,
+    generation_mode: req.mode,
+    file_path: null,
+    created_at: now(),
+  };
+}
+
+async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T> {
+  switch (command) {
+    case "create_project": {
+      const request = args.request as CreateProjectRequest;
+      const createdAt = now();
+      const project: Project = {
+        id: nextId("project"),
+        name: request.name,
+        codebase_path: request.codebase_path,
+        created_at: createdAt,
+        updated_at: createdAt,
+      };
+      mockState.projects.push(project);
+      return project as T;
+    }
+    case "list_projects":
+      return mockState.projects.map(withStats) as T;
+    case "get_project": {
+      const project = mockState.projects.find((item) => item.id === args.id);
+      if (!project) throw new Error("Project not found");
+      return withStats(project) as T;
+    }
+    case "delete_project": {
+      const id = args.id as string;
+      mockState.projects = mockState.projects.filter((item) => item.id !== id);
+      mockState.specs = mockState.specs.filter((item) => item.project_id !== id);
+      mockState.reports = mockState.reports.filter((item) => item.project_id !== id);
+      return undefined as T;
+    }
+    case "validate_path":
+      return Boolean(args.path) as T;
+    case "upload_spec": {
+      const spec: Spec = {
+        id: nextId("spec"),
+        project_id: args.project_id as string,
+        filename: args.filename as string,
+        content: args.content as string,
+        parsed_at: now(),
+        created_at: now(),
+      };
+      const requirements = parseRequirements(spec.id, spec.content);
+      mockState.specs.push(spec);
+      mockState.requirements.push(...requirements);
+      return { spec, requirements } as T;
+    }
+    case "get_spec": {
+      const spec = mockState.specs.find((item) => item.id === args.id);
+      if (!spec) throw new Error("Spec not found");
+      return {
+        spec,
+        requirements: mockState.requirements.filter((item) => item.spec_id === spec.id),
+      } as T;
+    }
+    case "list_specs":
+      return mockState.specs.filter((item) => item.project_id === args.project_id) as T;
+    case "delete_spec": {
+      const id = args.id as string;
+      mockState.specs = mockState.specs.filter((item) => item.id !== id);
+      mockState.requirements = mockState.requirements.filter((item) => item.spec_id !== id);
+      return undefined as T;
+    }
+    case "reparse_spec": {
+      const spec = mockState.specs.find((item) => item.id === args.id);
+      if (!spec) throw new Error("Spec not found");
+      mockState.requirements = mockState.requirements.filter((item) => item.spec_id !== spec.id);
+      const requirements = parseRequirements(spec.id, spec.content);
+      mockState.requirements.push(...requirements);
+      spec.parsed_at = now();
+      return requirements as T;
+    }
+    case "read_file_content":
+      throw new Error("Use the browser file picker in web preview");
+    case "generate_tests": {
+      const request = args.request as GenerateTestsRequest;
+      const tests = request.requirement_ids
+        .map((id) => mockState.requirements.find((requirement) => requirement.id === id))
+        .filter((requirement): requirement is Requirement => Boolean(requirement))
+        .map((requirement) => generateMockTest(requirement, request));
+      mockState.generatedTests.push(...tests);
+      return tests as T;
+    }
+    case "get_generated_tests":
+      return mockState.generatedTests.filter(
+        (item) => item.requirement_id === args.requirement_id,
+      ) as T;
+    case "get_all_generated_tests": {
+      const projectSpecIds = new Set(
+        mockState.specs
+          .filter((spec) => spec.project_id === args.project_id)
+          .map((spec) => spec.id),
+      );
+      const requirementIds = new Set(
+        mockState.requirements
+          .filter((requirement) => projectSpecIds.has(requirement.spec_id))
+          .map((requirement) => requirement.id),
+      );
+      return mockState.generatedTests.filter((test) =>
+        requirementIds.has(test.requirement_id),
+      ) as T;
+    }
+    case "save_test_to_disk":
+      return (args.path ?? "") as T;
+    case "save_settings":
+      mockState.settings = args.settings as AppSettings;
+      return undefined as T;
+    case "load_settings":
+      return mockState.settings as T;
+    case "execute_tests": {
+      const testIds = args.test_ids as string[];
+      const results = testIds.map<TestResult>((testId) => ({
+        id: nextId("result"),
+        generated_test_id: testId,
+        status: "passed",
+        execution_time_ms: 12,
+        stdout: "Mock browser preview execution passed",
+        stderr: "",
+        executed_at: now(),
+      }));
+      mockState.testResults.push(...results);
+      return results as T;
+    }
+    case "get_test_results":
+      return mockState.testResults as T;
+    case "get_test_result": {
+      const result = mockState.testResults.find((item) => item.id === args.id);
+      if (!result) throw new Error("Test result not found");
+      return result as T;
+    }
+    case "generate_alignment_report": {
+      const projectId = args.project_id as string;
+      const specs = mockState.specs.filter((spec) => spec.project_id === projectId);
+      const requirements = mockState.requirements.filter((requirement) =>
+        specs.some((spec) => spec.id === requirement.spec_id),
+      );
+      const covered = requirements.filter((requirement) =>
+        mockState.generatedTests.some((test) => test.requirement_id === requirement.id),
+      ).length;
+      const report: AlignmentReportWithMismatches = {
+        id: nextId("report"),
+        project_id: projectId,
+        coverage_percent: requirements.length ? (covered / requirements.length) * 100 : 0,
+        total_requirements: requirements.length,
+        covered_requirements: covered,
+        generated_at: now(),
+        mismatches: requirements
+          .filter(
+            (requirement) =>
+              !mockState.generatedTests.some((test) => test.requirement_id === requirement.id),
+          )
+          .map((requirement) => ({
+            id: nextId("mismatch"),
+            report_id: "browser-preview",
+            requirement_id: requirement.id,
+            spec_section: requirement.section,
+            code_element: null,
+            mismatch_type: "no_test_generated",
+            details: "No generated test covers this requirement in the browser preview.",
+          })),
+      };
+      report.mismatches = report.mismatches.map((mismatch) => ({
+        ...mismatch,
+        report_id: report.id,
+      }));
+      mockState.reports.push(report);
+      return report as T;
+    }
+    case "get_alignment_report": {
+      const report = mockState.reports.find((item) => item.id === args.id);
+      if (!report) throw new Error("Report not found");
+      return report as T;
+    }
+    case "list_reports":
+      return mockState.reports
+        .filter((item) => item.project_id === args.project_id)
+        .map(({ mismatches: _mismatches, ...report }) => report) as T;
+    case "export_report":
+      return JSON.stringify(
+        mockState.reports.find((item) => item.id === args.report_id) ?? null,
+        null,
+        2,
+      ) as T;
+    default:
+      throw new Error(`Unsupported browser preview command: ${command}`);
+  }
+}
+
+function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
+  return isTauriRuntime() ? tauriInvoke<T>(command, args) : mockInvoke<T>(command, args);
+}
+
 // Project commands
 export const createProject = (req: CreateProjectRequest) =>
   invoke<Project>("create_project", { request: req });
 
-export const listProjects = () =>
-  invoke<ProjectWithStats[]>("list_projects");
+export const listProjects = () => invoke<ProjectWithStats[]>("list_projects");
 
-export const getProject = (id: string) =>
-  invoke<ProjectWithStats>("get_project", { id });
+export const getProject = (id: string) => invoke<ProjectWithStats>("get_project", { id });
 
-export const deleteProject = (id: string) =>
-  invoke<void>("delete_project", { id });
+export const deleteProject = (id: string) => invoke<void>("delete_project", { id });
 
-export const validatePath = (path: string) =>
-  invoke<boolean>("validate_path", { path });
+export const validatePath = (path: string) => invoke<boolean>("validate_path", { path });
 
 // Spec commands
 export const uploadSpec = (projectId: string, filename: string, content: string) =>
   invoke<ParsedSpec>("upload_spec", { project_id: projectId, filename, content });
 
-export const getSpec = (id: string) =>
-  invoke<ParsedSpec>("get_spec", { id });
+export const getSpec = (id: string) => invoke<ParsedSpec>("get_spec", { id });
 
 export const listSpecs = (projectId: string) =>
   invoke<Spec[]>("list_specs", { project_id: projectId });
 
-export const deleteSpec = (id: string) =>
-  invoke<void>("delete_spec", { id });
+export const deleteSpec = (id: string) => invoke<void>("delete_spec", { id });
 
-export const reparseSpec = (id: string) =>
-  invoke<Requirement[]>("reparse_spec", { id });
+export const reparseSpec = (id: string) => invoke<Requirement[]>("reparse_spec", { id });
 
-export const readFileContent = (path: string) =>
-  invoke<string>("read_file_content", { path });
+export const readFileContent = (path: string) => invoke<string>("read_file_content", { path });
 
 // Test generation commands
 export const generateTests = (req: GenerateTestsRequest) =>
@@ -63,11 +399,9 @@ export const saveTestToDisk = (testId: string, path: string) =>
   invoke<string>("save_test_to_disk", { test_id: testId, path });
 
 // Settings commands
-export const saveSettings = (settings: AppSettings) =>
-  invoke<void>("save_settings", { settings });
+export const saveSettings = (settings: AppSettings) => invoke<void>("save_settings", { settings });
 
-export const loadSettings = () =>
-  invoke<AppSettings>("load_settings");
+export const loadSettings = () => invoke<AppSettings>("load_settings");
 
 // Test execution commands
 export const executeTests = (projectId: string, testIds: string[]) =>
@@ -76,8 +410,7 @@ export const executeTests = (projectId: string, testIds: string[]) =>
 export const getTestResults = (projectId: string) =>
   invoke<TestResult[]>("get_test_results", { project_id: projectId });
 
-export const getTestResult = (id: string) =>
-  invoke<TestResult>("get_test_result", { id });
+export const getTestResult = (id: string) => invoke<TestResult>("get_test_result", { id });
 
 // Report commands
 export const generateAlignmentReport = (projectId: string) =>

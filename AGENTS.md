@@ -48,8 +48,8 @@ Portfolio truth currently marks this project as `active` with `boilerplate` cont
 ## How To Run
 
 ```
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
 
 Optionally set ANTHROPIC_API_KEY for Claude-assisted spec suggestions. App works fully offline without it.

@@ -31,14 +31,14 @@ Built with Tauri v2 (Rust backend, React frontend). Runs locally, works offline,
 ```bash
 git clone https://github.com/saagpatel/SpecCompanion
 cd SpecCompanion
-npm install
+pnpm install
 ```
 
 ### Usage
 
 ```bash
 # Start in development mode
-npm run tauri dev
+pnpm tauri dev
 ```
 
 1. Select your codebase directory and upload a markdown spec

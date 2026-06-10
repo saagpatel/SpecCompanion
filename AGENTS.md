@@ -1,26 +1,17 @@
-## UI Hard Gates (Required for frontend/UI changes)
+# AGENTS.md
 
 <!-- comm-contract:start -->
 
-## Communication Contract (Global)
+## Communication Contract
 
-- Follow `/Users/d/.codex/policies/communication/BigPictureReportingV1.md` for all user-facing updates.
-- Use exact section labels from `BigPictureReportingV1.md` for formal delivery, blocker, waiting, risk, decision, or explicit status/report requests.
-- Keep ordinary in-flight updates conversational, warm, PM-readable, operator-grade, and low-noise.
-- Keep technical details in internal artifacts unless explicitly requested by the user or required by failure, risk, or verification.
-- Honor toggles literally: `simple mode`, `show receipts`, `tech mode`, `debug mode`.
+- Inherit global Codex communication and reporting rules from `/Users/d/.codex/AGENTS.override.md` and `/Users/d/.codex/policies/communication/BigPictureReportingV1.md`.
+- Repo-specific instructions below add project constraints only; do not restate global voice or status-reporting rules here.
 <!-- comm-contract:end -->
 
-1. Read-only reviewer agent must output `UIFindingV1[]`.
-2. Fixer agent must apply findings in severity order: `P0 -> P1 -> P2 -> P3`.
-3. Required states per changed UI surface: loading, empty, error, success, disabled, focus-visible.
-4. Required pre-done gates:
-   - eslint + typecheck + stylelint
-   - visual regression (Playwright snapshots)
-   - accessibility regression (axe)
-   - responsive parity checks (mobile + desktop)
-   - Lighthouse CI thresholds
-5. Done-state is blocked if any required gate is `fail` or `not-run`.
+## Inherited Operating Rules
+
+- Inherit global git, review/fix, testing, docs, UI, security, skill-use, and reporting gates from `/Users/d/.codex/AGENTS.md` and active session instructions.
+- Use `.codex/verify.commands` and `.codex/scripts/run_verify_commands.sh` as this repo-local verification authority when present.
 
 <!-- portfolio-context:start -->
 

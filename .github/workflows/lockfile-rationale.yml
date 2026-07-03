@@ -7,4 +7,5 @@ on:
 
 jobs:
   enforce:
+    if: github.actor != 'dependabot[bot]'
     uses: saagpatel/sovereign/.github/workflows/lockfile-rationale.yml@fdd225434bc1185911e53f8df1834ac058949580

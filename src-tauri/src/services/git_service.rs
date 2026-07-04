@@ -92,7 +92,7 @@ pub fn get_changed_files(path: &str, since_commit: Option<&str>) -> Result<Vec<C
         // No base commit — show working directory changes
         let statuses = repo.statuses(None)?;
         for entry in statuses.iter() {
-            if let Some(path) = entry.path() {
+            if let Ok(path) = entry.path() {
                 let st = entry.status();
                 let status = if st.contains(git2::Status::WT_NEW) || st.contains(git2::Status::INDEX_NEW) {
                     "added"

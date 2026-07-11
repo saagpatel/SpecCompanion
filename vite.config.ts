@@ -19,6 +19,7 @@ export default defineConfig(async () => ({
           recharts: ["recharts"],
           vendor: ["react", "react-dom", "react-router-dom"],
           query: ["@tanstack/react-query"],
+          prism: ["prism-react-renderer"],
         },
       },
     },

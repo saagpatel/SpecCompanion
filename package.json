@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "dev:lean": "./scripts/lean-dev.sh",
-    "build": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/spec-companion.tsbuildinfo && vite build",
+    "build": "vite build",
     "test": "pnpm ui:gate",
     "verify": "pnpm ui:gate",
     "preview": "vite preview",

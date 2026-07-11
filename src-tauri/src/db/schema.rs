@@ -1,26 +1,69 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i32 = 1;
+const CURRENT_VERSION: i32 = 2;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_version (
             version INTEGER NOT NULL
-        );"
+        );",
     )?;
 
     let version: i32 = conn
-        .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_version", [], |row| row.get(0))
+        .query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+            [],
+            |row| row.get(0),
+        )
         .unwrap_or(0);
 
     if version < CURRENT_VERSION {
         let tx = conn.unchecked_transaction()?;
-        migrate_v1(&tx)?;
+        if version < 1 {
+            migrate_v1(&tx)?;
+        }
+        if version < 2 {
+            migrate_v2(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
-        tx.execute("INSERT INTO schema_version (version) VALUES (?1)", [CURRENT_VERSION])?;
+        tx.execute(
+            "INSERT INTO schema_version (version) VALUES (?1)",
+            [CURRENT_VERSION],
+        )?;
         tx.commit()?;
     }
 
+    Ok(())
+}
+
+fn migrate_v2(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "ALTER TABLE requirements ADD COLUMN content_fingerprint TEXT NOT NULL DEFAULT '';
+         ALTER TABLE requirements ADD COLUMN source_line_start INTEGER NOT NULL DEFAULT 0;
+         ALTER TABLE requirements ADD COLUMN source_line_end INTEGER NOT NULL DEFAULT 0;
+         ALTER TABLE alignment_reports ADD COLUMN verified_requirements INTEGER NOT NULL DEFAULT 0;
+         ALTER TABLE alignment_reports ADD COLUMN partial_requirements INTEGER NOT NULL DEFAULT 0;
+         ALTER TABLE alignment_reports ADD COLUMN failed_requirements INTEGER NOT NULL DEFAULT 0;
+         ALTER TABLE alignment_reports ADD COLUMN unknown_requirements INTEGER NOT NULL DEFAULT 0;
+         ALTER TABLE alignment_reports ADD COLUMN evidence_digest TEXT NOT NULL DEFAULT '';
+         ALTER TABLE alignment_reports ADD COLUMN checked_languages_json TEXT NOT NULL DEFAULT '[]';
+         ALTER TABLE alignment_reports ADD COLUMN skipped_languages_json TEXT NOT NULL DEFAULT '[]';
+         ALTER TABLE alignment_reports ADD COLUMN diagnostics_json TEXT NOT NULL DEFAULT '[]';
+
+         CREATE TABLE requirement_alignments (
+             report_id TEXT NOT NULL,
+             requirement_id TEXT NOT NULL,
+             classification TEXT NOT NULL,
+             reason TEXT NOT NULL,
+             details_json TEXT NOT NULL,
+             sort_index INTEGER NOT NULL,
+             PRIMARY KEY (report_id, requirement_id),
+             FOREIGN KEY (report_id) REFERENCES alignment_reports(id) ON DELETE CASCADE,
+             FOREIGN KEY (requirement_id) REFERENCES requirements(id) ON DELETE CASCADE
+         );
+         CREATE INDEX idx_requirement_alignments_report_id
+             ON requirement_alignments(report_id, sort_index);",
+    )?;
     Ok(())
 }
 
@@ -107,4 +150,57 @@ fn migrate_v1(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_database_reaches_evidence_schema() {
+        let conn = Connection::open_in_memory().expect("database");
+        run_migrations(&conn).expect("migrations");
+        let version: i32 = conn
+            .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+                row.get(0)
+            })
+            .expect("version");
+        assert_eq!(version, CURRENT_VERSION);
+        conn.prepare(
+            "SELECT content_fingerprint, source_line_start, source_line_end FROM requirements",
+        )
+        .expect("requirement evidence columns");
+        conn.prepare("SELECT evidence_digest, checked_languages_json FROM alignment_reports")
+            .expect("report evidence columns");
+        conn.prepare("SELECT details_json FROM requirement_alignments")
+            .expect("alignment evidence table");
+    }
+
+    #[test]
+    fn version_one_upgrade_preserves_existing_requirements_as_untrusted() {
+        let conn = Connection::open_in_memory().expect("database");
+        conn.execute_batch("CREATE TABLE schema_version (version INTEGER NOT NULL); INSERT INTO schema_version VALUES (1);")
+            .expect("version table");
+        migrate_v1(&conn).expect("v1 schema");
+        conn.execute(
+            "INSERT INTO projects VALUES ('project', 'Project', '/tmp/project', 'now', 'now')",
+            [],
+        )
+        .expect("project");
+        conn.execute(
+            "INSERT INTO specs VALUES ('spec', 'project', 'spec.md', 'content', NULL, 'now')",
+            [],
+        )
+        .expect("spec");
+        conn.execute("INSERT INTO requirements (id, spec_id, section, description, req_type, priority) VALUES ('legacy', 'spec', 'Requirements', 'Legacy requirement', 'functional', 'medium')", [])
+            .expect("legacy requirement");
+
+        run_migrations(&conn).expect("upgrade");
+        let row: (String, i64) = conn.query_row(
+            "SELECT content_fingerprint, source_line_start FROM requirements WHERE id = 'legacy'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).expect("legacy evidence defaults");
+        assert_eq!(row, (String::new(), 0));
+    }
 }

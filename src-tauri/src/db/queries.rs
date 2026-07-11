@@ -1,11 +1,11 @@
+use crate::errors::AppError;
+use crate::models::project::{CreateProjectRequest, Project, ProjectWithStats};
+use crate::models::report::{AlignmentReport, AlignmentReportWithEvidence, RequirementAlignment};
+use crate::models::spec::{Requirement, Spec};
+use crate::models::test::{GeneratedTest, TestResult};
+use chrono::Utc;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
-use chrono::Utc;
-use crate::models::project::{Project, CreateProjectRequest, ProjectWithStats};
-use crate::models::spec::{Spec, Requirement};
-use crate::models::test::{GeneratedTest, TestResult};
-use crate::models::report::{AlignmentReport, Mismatch, AlignmentReportWithMismatches};
-use crate::errors::AppError;
 
 // ─── Projects ───────────────────────────────────────────────────
 
@@ -98,7 +98,12 @@ pub fn touch_project_updated_at(conn: &Connection, project_id: &str) -> Result<(
 
 // ─── Specs ──────────────────────────────────────────────────────
 
-pub fn create_spec(conn: &Connection, project_id: &str, filename: &str, content: &str) -> Result<Spec, AppError> {
+pub fn create_spec(
+    conn: &Connection,
+    project_id: &str,
+    filename: &str,
+    content: &str,
+) -> Result<Spec, AppError> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     conn.execute(
@@ -129,7 +134,8 @@ pub fn get_spec(conn: &Connection, id: &str) -> Result<Spec, AppError> {
                 created_at: row.get(5)?,
             })
         },
-    ).map_err(|_| AppError::NotFound(format!("Spec not found: {}", id)))
+    )
+    .map_err(|_| AppError::NotFound(format!("Spec not found: {}", id)))
 }
 
 pub fn list_specs(conn: &Connection, project_id: &str) -> Result<Vec<Spec>, AppError> {
@@ -172,19 +178,35 @@ pub fn update_spec_parsed_at(conn: &Connection, spec_id: &str) -> Result<(), App
 
 // ─── Requirements ───────────────────────────────────────────────
 
-pub fn insert_requirements(conn: &Connection, requirements: &[Requirement]) -> Result<(), AppError> {
+pub fn insert_requirements(
+    conn: &Connection,
+    requirements: &[Requirement],
+) -> Result<(), AppError> {
     let mut stmt = conn.prepare(
-        "INSERT INTO requirements (id, spec_id, section, description, req_type, priority) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        "INSERT INTO requirements (id, spec_id, section, description, req_type, priority, content_fingerprint, source_line_start, source_line_end) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
     )?;
     for req in requirements {
-        stmt.execute(params![req.id, req.spec_id, req.section, req.description, req.req_type, req.priority])?;
+        stmt.execute(params![
+            req.id,
+            req.spec_id,
+            req.section,
+            req.description,
+            req.req_type,
+            req.priority,
+            req.content_fingerprint,
+            req.source_line_start,
+            req.source_line_end
+        ])?;
     }
     Ok(())
 }
 
-pub fn get_requirements_for_spec(conn: &Connection, spec_id: &str) -> Result<Vec<Requirement>, AppError> {
+pub fn get_requirements_for_spec(
+    conn: &Connection,
+    spec_id: &str,
+) -> Result<Vec<Requirement>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT id, spec_id, section, description, req_type, priority FROM requirements WHERE spec_id = ?1 ORDER BY section, id"
+        "SELECT id, spec_id, section, description, req_type, priority, content_fingerprint, source_line_start, source_line_end FROM requirements WHERE spec_id = ?1 ORDER BY source_line_start, id"
     )?;
     let rows = stmt.query_map(params![spec_id], |row| {
         Ok(Requirement {
@@ -194,6 +216,9 @@ pub fn get_requirements_for_spec(conn: &Connection, spec_id: &str) -> Result<Vec
             description: row.get(3)?,
             req_type: row.get(4)?,
             priority: row.get(5)?,
+            content_fingerprint: row.get(6)?,
+            source_line_start: row.get(7)?,
+            source_line_end: row.get(8)?,
         })
     })?;
     let mut reqs = Vec::new();
@@ -203,13 +228,16 @@ pub fn get_requirements_for_spec(conn: &Connection, spec_id: &str) -> Result<Vec
     Ok(reqs)
 }
 
-pub fn get_requirements_for_project(conn: &Connection, project_id: &str) -> Result<Vec<Requirement>, AppError> {
+pub fn get_requirements_for_project(
+    conn: &Connection,
+    project_id: &str,
+) -> Result<Vec<Requirement>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT r.id, r.spec_id, r.section, r.description, r.req_type, r.priority
+        "SELECT r.id, r.spec_id, r.section, r.description, r.req_type, r.priority, r.content_fingerprint, r.source_line_start, r.source_line_end
          FROM requirements r
          JOIN specs s ON r.spec_id = s.id
          WHERE s.project_id = ?1
-         ORDER BY r.section, r.id"
+         ORDER BY s.filename, r.source_line_start, r.id"
     )?;
     let rows = stmt.query_map(params![project_id], |row| {
         Ok(Requirement {
@@ -219,6 +247,9 @@ pub fn get_requirements_for_project(conn: &Connection, project_id: &str) -> Resu
             description: row.get(3)?,
             req_type: row.get(4)?,
             priority: row.get(5)?,
+            content_fingerprint: row.get(6)?,
+            source_line_start: row.get(7)?,
+            source_line_end: row.get(8)?,
         })
     })?;
     let mut reqs = Vec::new();
@@ -229,14 +260,25 @@ pub fn get_requirements_for_project(conn: &Connection, project_id: &str) -> Resu
 }
 
 pub fn delete_requirements_for_spec(conn: &Connection, spec_id: &str) -> Result<(), AppError> {
-    conn.execute("DELETE FROM requirements WHERE spec_id = ?1", params![spec_id])?;
+    conn.execute(
+        "DELETE FROM requirements WHERE spec_id = ?1",
+        params![spec_id],
+    )?;
     Ok(())
 }
 
-pub fn get_requirement(conn: &Connection, id: &str) -> Result<Requirement, AppError> {
+pub fn get_requirement_for_project(
+    conn: &Connection,
+    id: &str,
+    project_id: &str,
+) -> Result<Requirement, AppError> {
     conn.query_row(
-        "SELECT id, spec_id, section, description, req_type, priority FROM requirements WHERE id = ?1",
-        params![id],
+        "SELECT r.id, r.spec_id, r.section, r.description, r.req_type, r.priority,
+                r.content_fingerprint, r.source_line_start, r.source_line_end
+         FROM requirements r
+         JOIN specs s ON r.spec_id = s.id
+         WHERE r.id = ?1 AND s.project_id = ?2",
+        params![id, project_id],
         |row| {
             Ok(Requirement {
                 id: row.get(0)?,
@@ -245,9 +287,17 @@ pub fn get_requirement(conn: &Connection, id: &str) -> Result<Requirement, AppEr
                 description: row.get(3)?,
                 req_type: row.get(4)?,
                 priority: row.get(5)?,
+                content_fingerprint: row.get(6)?,
+                source_line_start: row.get(7)?,
+                source_line_end: row.get(8)?,
             })
         },
-    ).map_err(|_| AppError::NotFound(format!("Requirement not found: {}", id)))
+    )
+    .map_err(|_| {
+        AppError::NotFound(format!(
+            "Requirement {id} does not belong to project {project_id}"
+        ))
+    })
 }
 
 // ─── Generated Tests ────────────────────────────────────────────
@@ -260,7 +310,10 @@ pub fn insert_generated_test(conn: &Connection, test: &GeneratedTest) -> Result<
     Ok(())
 }
 
-pub fn get_generated_tests_for_requirement(conn: &Connection, requirement_id: &str) -> Result<Vec<GeneratedTest>, AppError> {
+pub fn get_generated_tests_for_requirement(
+    conn: &Connection,
+    requirement_id: &str,
+) -> Result<Vec<GeneratedTest>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, requirement_id, framework, code, generation_mode, file_path, created_at FROM generated_tests WHERE requirement_id = ?1 ORDER BY created_at DESC"
     )?;
@@ -300,6 +353,26 @@ pub fn get_generated_test(conn: &Connection, id: &str) -> Result<GeneratedTest, 
     ).map_err(|_| AppError::NotFound(format!("Generated test not found: {}", id)))
 }
 
+pub fn get_generated_test_for_project(
+    conn: &Connection,
+    id: &str,
+    project_id: &str,
+) -> Result<GeneratedTest, AppError> {
+    conn.query_row(
+        "SELECT gt.id, gt.requirement_id, gt.framework, gt.code, gt.generation_mode, gt.file_path, gt.created_at
+         FROM generated_tests gt
+         JOIN requirements r ON gt.requirement_id = r.id
+         JOIN specs s ON r.spec_id = s.id
+         WHERE gt.id = ?1 AND s.project_id = ?2",
+        params![id, project_id],
+        |row| Ok(GeneratedTest {
+            id: row.get(0)?, requirement_id: row.get(1)?, framework: row.get(2)?,
+            code: row.get(3)?, generation_mode: row.get(4)?, file_path: row.get(5)?,
+            created_at: row.get(6)?,
+        }),
+    ).map_err(|_| AppError::NotFound(format!("Generated test {id} does not belong to project {project_id}")))
+}
+
 pub fn update_generated_test_path(conn: &Connection, id: &str, path: &str) -> Result<(), AppError> {
     conn.execute(
         "UPDATE generated_tests SET file_path = ?1 WHERE id = ?2",
@@ -308,7 +381,10 @@ pub fn update_generated_test_path(conn: &Connection, id: &str, path: &str) -> Re
     Ok(())
 }
 
-pub fn get_generated_tests_for_project(conn: &Connection, project_id: &str) -> Result<Vec<GeneratedTest>, AppError> {
+pub fn get_generated_tests_for_project(
+    conn: &Connection,
+    project_id: &str,
+) -> Result<Vec<GeneratedTest>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT gt.id, gt.requirement_id, gt.framework, gt.code, gt.generation_mode, gt.file_path, gt.created_at
          FROM generated_tests gt
@@ -345,7 +421,10 @@ pub fn insert_test_result(conn: &Connection, result: &TestResult) -> Result<(), 
     Ok(())
 }
 
-pub fn get_test_results_for_project(conn: &Connection, project_id: &str) -> Result<Vec<TestResult>, AppError> {
+pub fn get_test_results_for_project(
+    conn: &Connection,
+    project_id: &str,
+) -> Result<Vec<TestResult>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT tr.id, tr.generated_test_id, tr.status, tr.execution_time_ms, tr.stdout, tr.stderr, tr.executed_at
          FROM test_results tr
@@ -391,7 +470,10 @@ pub fn get_test_result(conn: &Connection, id: &str) -> Result<TestResult, AppErr
     ).map_err(|_| AppError::NotFound(format!("Test result not found: {}", id)))
 }
 
-pub fn get_latest_test_result_for_test(conn: &Connection, generated_test_id: &str) -> Result<Option<TestResult>, AppError> {
+pub fn get_latest_test_result_for_test(
+    conn: &Connection,
+    generated_test_id: &str,
+) -> Result<Option<TestResult>, AppError> {
     let result = conn.query_row(
         "SELECT id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at FROM test_results WHERE generated_test_id = ?1 ORDER BY executed_at DESC LIMIT 1",
         params![generated_test_id],
@@ -416,25 +498,40 @@ pub fn get_latest_test_result_for_test(conn: &Connection, generated_test_id: &st
 
 // ─── Alignment Reports ─────────────────────────────────────────
 
-pub fn insert_alignment_report(conn: &Connection, report: &AlignmentReport) -> Result<(), AppError> {
+pub fn insert_alignment_report(
+    conn: &Connection,
+    report: &AlignmentReport,
+) -> Result<(), AppError> {
+    let checked_languages = serde_json::to_string(&report.checked_languages)?;
+    let skipped_languages = serde_json::to_string(&report.skipped_languages)?;
+    let diagnostics = serde_json::to_string(&report.diagnostics)?;
     conn.execute(
-        "INSERT INTO alignment_reports (id, project_id, coverage_percent, total_requirements, covered_requirements, generated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![report.id, report.project_id, report.coverage_percent, report.total_requirements, report.covered_requirements, report.generated_at],
+        "INSERT INTO alignment_reports (id, project_id, coverage_percent, total_requirements, covered_requirements, verified_requirements, partial_requirements, failed_requirements, unknown_requirements, evidence_digest, checked_languages_json, skipped_languages_json, diagnostics_json, generated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        params![report.id, report.project_id, report.coverage_percent, report.total_requirements, report.covered_requirements, report.verified_requirements, report.partial_requirements, report.failed_requirements, report.unknown_requirements, report.evidence_digest, checked_languages, skipped_languages, diagnostics, report.generated_at],
     )?;
     Ok(())
 }
 
-pub fn insert_mismatch(conn: &Connection, mismatch: &Mismatch) -> Result<(), AppError> {
+pub fn insert_requirement_alignment(
+    conn: &Connection,
+    alignment: &RequirementAlignment,
+    report_id: &str,
+    sort_index: usize,
+) -> Result<(), AppError> {
+    let details = serde_json::to_string(alignment)?;
     conn.execute(
-        "INSERT INTO alignment_mismatches (id, report_id, requirement_id, spec_section, code_element, mismatch_type, details) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![mismatch.id, mismatch.report_id, mismatch.requirement_id, mismatch.spec_section, mismatch.code_element, mismatch.mismatch_type, mismatch.details],
+        "INSERT INTO requirement_alignments (report_id, requirement_id, classification, reason, details_json, sort_index) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![report_id, alignment.requirement_id, alignment.classification.as_str(), alignment.reason.as_str(), details, sort_index as i64],
     )?;
     Ok(())
 }
 
-pub fn get_alignment_report(conn: &Connection, id: &str) -> Result<AlignmentReportWithMismatches, AppError> {
+pub fn get_alignment_report(
+    conn: &Connection,
+    id: &str,
+) -> Result<AlignmentReportWithEvidence, AppError> {
     let report = conn.query_row(
-        "SELECT id, project_id, coverage_percent, total_requirements, covered_requirements, generated_at FROM alignment_reports WHERE id = ?1",
+        "SELECT id, project_id, coverage_percent, total_requirements, covered_requirements, verified_requirements, partial_requirements, failed_requirements, unknown_requirements, evidence_digest, checked_languages_json, skipped_languages_json, diagnostics_json, generated_at FROM alignment_reports WHERE id = ?1",
         params![id],
         |row| {
             Ok(AlignmentReport {
@@ -443,41 +540,44 @@ pub fn get_alignment_report(conn: &Connection, id: &str) -> Result<AlignmentRepo
                 coverage_percent: row.get(2)?,
                 total_requirements: row.get(3)?,
                 covered_requirements: row.get(4)?,
-                generated_at: row.get(5)?,
+                verified_requirements: row.get(5)?, partial_requirements: row.get(6)?,
+                failed_requirements: row.get(7)?, unknown_requirements: row.get(8)?,
+                evidence_digest: row.get(9)?,
+                checked_languages: parse_json_column(row.get(10)?)?,
+                skipped_languages: parse_json_column(row.get(11)?)?,
+                diagnostics: parse_json_column(row.get(12)?)?,
+                generated_at: row.get(13)?,
             })
         },
     ).map_err(|_| AppError::NotFound(format!("Report not found: {}", id)))?;
 
-    let mismatches = get_mismatches_for_report(conn, &report.id)?;
-
-    Ok(AlignmentReportWithMismatches { report, mismatches })
+    let alignments = get_requirement_alignments_for_report(conn, &report.id)?;
+    Ok(AlignmentReportWithEvidence { report, alignments })
 }
 
-pub fn get_mismatches_for_report(conn: &Connection, report_id: &str) -> Result<Vec<Mismatch>, AppError> {
+pub fn get_requirement_alignments_for_report(
+    conn: &Connection,
+    report_id: &str,
+) -> Result<Vec<RequirementAlignment>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT id, report_id, requirement_id, spec_section, code_element, mismatch_type, details FROM alignment_mismatches WHERE report_id = ?1"
+        "SELECT details_json FROM requirement_alignments WHERE report_id = ?1 ORDER BY sort_index, requirement_id"
     )?;
     let rows = stmt.query_map(params![report_id], |row| {
-        Ok(Mismatch {
-            id: row.get(0)?,
-            report_id: row.get(1)?,
-            requirement_id: row.get(2)?,
-            spec_section: row.get(3)?,
-            code_element: row.get(4)?,
-            mismatch_type: row.get(5)?,
-            details: row.get(6)?,
+        let json: String = row.get(0)?;
+        serde_json::from_str::<RequirementAlignment>(&json).map_err(|err| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
         })
     })?;
-    let mut mismatches = Vec::new();
+    let mut alignments = Vec::new();
     for row in rows {
-        mismatches.push(row?);
+        alignments.push(row?);
     }
-    Ok(mismatches)
+    Ok(alignments)
 }
 
 pub fn list_reports(conn: &Connection, project_id: &str) -> Result<Vec<AlignmentReport>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, coverage_percent, total_requirements, covered_requirements, generated_at FROM alignment_reports WHERE project_id = ?1 ORDER BY generated_at DESC"
+        "SELECT id, project_id, coverage_percent, total_requirements, covered_requirements, verified_requirements, partial_requirements, failed_requirements, unknown_requirements, evidence_digest, checked_languages_json, skipped_languages_json, diagnostics_json, generated_at FROM alignment_reports WHERE project_id = ?1 ORDER BY generated_at DESC"
     )?;
     let rows = stmt.query_map(params![project_id], |row| {
         Ok(AlignmentReport {
@@ -486,7 +586,15 @@ pub fn list_reports(conn: &Connection, project_id: &str) -> Result<Vec<Alignment
             coverage_percent: row.get(2)?,
             total_requirements: row.get(3)?,
             covered_requirements: row.get(4)?,
-            generated_at: row.get(5)?,
+            verified_requirements: row.get(5)?,
+            partial_requirements: row.get(6)?,
+            failed_requirements: row.get(7)?,
+            unknown_requirements: row.get(8)?,
+            evidence_digest: row.get(9)?,
+            checked_languages: parse_json_column(row.get(10)?)?,
+            skipped_languages: parse_json_column(row.get(11)?)?,
+            diagnostics: parse_json_column(row.get(12)?)?,
+            generated_at: row.get(13)?,
         })
     })?;
     let mut reports = Vec::new();
@@ -494,4 +602,69 @@ pub fn list_reports(conn: &Connection, project_id: &str) -> Result<Vec<Alignment
         reports.push(row?);
     }
     Ok(reports)
+}
+
+fn parse_json_column(value: String) -> Result<Vec<String>, rusqlite::Error> {
+    serde_json::from_str(&value).map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::schema;
+    use crate::models::test::GeneratedTest;
+
+    #[test]
+    fn project_scoped_queries_reject_cross_project_ids() {
+        let conn = Connection::open_in_memory().expect("database");
+        conn.execute_batch("PRAGMA foreign_keys=ON")
+            .expect("foreign keys");
+        schema::run_migrations(&conn).expect("migrations");
+        let first = create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "First".into(),
+                codebase_path: "/tmp/first".into(),
+            },
+        )
+        .expect("first project");
+        let second = create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Second".into(),
+                codebase_path: "/tmp/second".into(),
+            },
+        )
+        .expect("second project");
+        let spec = create_spec(&conn, &first.id, "spec.md", "content").expect("spec");
+        let requirement = Requirement {
+            id: "req-one".into(),
+            spec_id: spec.id,
+            section: "Requirements".into(),
+            description: "The system shall add numbers".into(),
+            req_type: "functional".into(),
+            priority: "medium".into(),
+            content_fingerprint: "fingerprint".into(),
+            source_line_start: 1,
+            source_line_end: 1,
+        };
+        insert_requirements(&conn, std::slice::from_ref(&requirement)).expect("requirement");
+        let test = GeneratedTest {
+            id: "test-one".into(),
+            requirement_id: requirement.id.clone(),
+            framework: "jest".into(),
+            code: "expect(add(2, 3)).toBe(5)".into(),
+            generation_mode: "fixture".into(),
+            file_path: None,
+            created_at: "now".into(),
+        };
+        insert_generated_test(&conn, &test).expect("test");
+
+        assert!(get_requirement_for_project(&conn, &requirement.id, &second.id).is_err());
+        assert!(get_generated_test_for_project(&conn, &test.id, &second.id).is_err());
+        assert!(get_requirement_for_project(&conn, &requirement.id, &first.id).is_ok());
+        assert!(get_generated_test_for_project(&conn, &test.id, &first.id).is_ok());
+    }
 }

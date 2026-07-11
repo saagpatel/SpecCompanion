@@ -1,9 +1,9 @@
-use tauri::State;
-use crate::db::Database;
 use crate::db::queries;
-use crate::models::spec::{Spec, Requirement, ParsedSpec};
-use crate::services::spec_parser;
+use crate::db::Database;
 use crate::errors::AppError;
+use crate::models::spec::{ParsedSpec, Requirement, Spec};
+use crate::services::spec_parser;
+use tauri::State;
 
 #[tauri::command]
 pub fn upload_spec(
@@ -19,7 +19,9 @@ pub fn upload_spec(
         return Err(AppError::InvalidInput("Filename cannot be empty".into()));
     }
     if content.trim().is_empty() {
-        return Err(AppError::InvalidInput("Spec content cannot be empty".into()));
+        return Err(AppError::InvalidInput(
+            "Spec content cannot be empty".into(),
+        ));
     }
     // Sanitize filename — strip path components
     let safe_filename = std::path::Path::new(&filename)
@@ -28,14 +30,17 @@ pub fn upload_spec(
         .unwrap_or("unnamed_spec.md")
         .to_string();
 
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
 
     queries::get_project(&conn, &project_id)?;
 
     let tx = conn.unchecked_transaction().map_err(AppError::Database)?;
 
     let spec = queries::create_spec(&tx, &project_id, &safe_filename, &content)?;
-    let requirements = spec_parser::parse_spec(&spec.id, &content);
+    let requirements = spec_parser::parse_spec(&spec.id, &content)?;
 
     if !requirements.is_empty() {
         queries::insert_requirements(&tx, &requirements)?;
@@ -58,7 +63,10 @@ pub fn get_spec(state: State<'_, Database>, id: String) -> Result<ParsedSpec, Ap
     if id.trim().is_empty() {
         return Err(AppError::InvalidInput("Spec ID cannot be empty".into()));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     let spec = queries::get_spec(&conn, &id)?;
     let requirements = queries::get_requirements_for_spec(&conn, &id)?;
     Ok(ParsedSpec { spec, requirements })
@@ -69,7 +77,10 @@ pub fn list_specs(state: State<'_, Database>, project_id: String) -> Result<Vec<
     if project_id.trim().is_empty() {
         return Err(AppError::InvalidInput("Project ID cannot be empty".into()));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     queries::list_specs(&conn, &project_id)
 }
 
@@ -78,7 +89,10 @@ pub fn delete_spec(state: State<'_, Database>, id: String) -> Result<(), AppErro
     if id.trim().is_empty() {
         return Err(AppError::InvalidInput("Spec ID cannot be empty".into()));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     let spec = queries::get_spec(&conn, &id)?;
     queries::delete_spec(&conn, &id)?;
     let _ = queries::touch_project_updated_at(&conn, &spec.project_id);
@@ -90,14 +104,17 @@ pub fn reparse_spec(state: State<'_, Database>, id: String) -> Result<Vec<Requir
     if id.trim().is_empty() {
         return Err(AppError::InvalidInput("Spec ID cannot be empty".into()));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     let spec = queries::get_spec(&conn, &id)?;
 
     let tx = conn.unchecked_transaction().map_err(AppError::Database)?;
 
     queries::delete_requirements_for_spec(&tx, &id)?;
 
-    let requirements = spec_parser::parse_spec(&id, &spec.content);
+    let requirements = spec_parser::parse_spec(&id, &spec.content)?;
 
     if !requirements.is_empty() {
         queries::insert_requirements(&tx, &requirements)?;
@@ -120,7 +137,9 @@ pub fn read_file_content(path: String) -> Result<String, AppError> {
     let home = crate::utils::home_dir()
         .ok_or_else(|| AppError::General("Cannot determine home directory".into()))?;
     if !canonical.starts_with(&home) {
-        return Err(AppError::InvalidInput("Access denied: path is outside home directory".into()));
+        return Err(AppError::InvalidInput(
+            "Access denied: path is outside home directory".into(),
+        ));
     }
     let metadata = std::fs::metadata(&canonical).map_err(AppError::Io)?;
     const MAX_FILE_SIZE: u64 = 50 * 1024 * 1024; // 50 MB
@@ -132,4 +151,3 @@ pub fn read_file_content(path: String) -> Result<String, AppError> {
     }
     std::fs::read_to_string(&canonical).map_err(AppError::Io)
 }
-

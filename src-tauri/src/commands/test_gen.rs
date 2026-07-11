@@ -1,12 +1,12 @@
-use tauri::{State, AppHandle, Manager};
-use uuid::Uuid;
-use chrono::Utc;
-use crate::db::Database;
 use crate::db::queries;
-use crate::models::test::{GeneratedTest, GenerateTestsRequest};
-use crate::services::{template_generator, llm_generator, codebase_scanner};
+use crate::db::Database;
 use crate::errors::AppError;
+use crate::models::test::{GenerateTestsRequest, GeneratedTest};
+use crate::services::{codebase_scanner, llm_generator, template_generator};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager, State};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppSettings {
@@ -40,32 +40,46 @@ pub async fn generate_tests(
         return Err(AppError::InvalidInput("No requirements selected".into()));
     }
     if !matches!(request.framework.as_str(), "jest" | "pytest") {
-        return Err(AppError::InvalidInput(format!("Unsupported framework: {}", request.framework)));
+        return Err(AppError::InvalidInput(format!(
+            "Unsupported framework: {}",
+            request.framework
+        )));
     }
     if !matches!(request.mode.as_str(), "template" | "llm") {
-        return Err(AppError::InvalidInput(format!("Unsupported mode: {}", request.mode)));
+        return Err(AppError::InvalidInput(format!(
+            "Unsupported mode: {}",
+            request.mode
+        )));
     }
 
     let settings = load_settings_internal(&app_handle)?;
     if request.mode == "llm" && settings.api_key.is_empty() {
-        return Err(AppError::InvalidInput("API key is required for LLM mode. Set it in Settings.".into()));
+        return Err(AppError::InvalidInput(
+            "API key is required for LLM mode. Set it in Settings.".into(),
+        ));
     }
 
     // Fetch project + requirements under a single lock
     let (codebase_path, requirements) = {
-        let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+        let conn = state
+            .conn
+            .lock()
+            .map_err(|e| AppError::General(e.to_string()))?;
         let project = queries::get_project(&conn, &request.project_id)?;
         let codebase_path = project.project.codebase_path.clone();
 
         let mut requirements = Vec::new();
         for req_id in &request.requirement_ids {
-            requirements.push(queries::get_requirement(&conn, req_id)?);
+            requirements.push(queries::get_requirement_for_project(
+                &conn,
+                req_id,
+                &request.project_id,
+            )?);
         }
         (codebase_path, requirements)
     }; // lock released
 
-    let symbols = codebase_scanner::scan_codebase(&codebase_path, &settings.scan_exclusions)
-        .unwrap_or_default();
+    let symbols = codebase_scanner::scan_codebase(&codebase_path, &settings.scan_exclusions)?;
 
     let mut generated_tests = Vec::new();
 
@@ -77,7 +91,8 @@ pub async fn generate_tests(
                     req,
                     &request.framework,
                     &symbols,
-                ).await?
+                )
+                .await?
             }
             _ => match request.framework.as_str() {
                 "pytest" => template_generator::generate_pytest_test(req, &symbols),
@@ -98,7 +113,10 @@ pub async fn generate_tests(
 
     // Batch insert all tests under a single lock + transaction
     {
-        let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+        let conn = state
+            .conn
+            .lock()
+            .map_err(|e| AppError::General(e.to_string()))?;
         let tx = conn.unchecked_transaction().map_err(AppError::Database)?;
         for test in &generated_tests {
             queries::insert_generated_test(&tx, test)?;
@@ -115,9 +133,14 @@ pub fn get_generated_tests(
     requirement_id: String,
 ) -> Result<Vec<GeneratedTest>, AppError> {
     if requirement_id.trim().is_empty() {
-        return Err(AppError::InvalidInput("Requirement ID cannot be empty".into()));
+        return Err(AppError::InvalidInput(
+            "Requirement ID cannot be empty".into(),
+        ));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     queries::get_generated_tests_for_requirement(&conn, &requirement_id)
 }
 
@@ -129,7 +152,10 @@ pub fn get_all_generated_tests(
     if project_id.trim().is_empty() {
         return Err(AppError::InvalidInput("Project ID cannot be empty".into()));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     queries::get_generated_tests_for_project(&conn, &project_id)
 }
 
@@ -159,17 +185,24 @@ pub fn save_test_to_disk(
         let mut check = parent.to_path_buf();
         while !check.exists() {
             if !check.pop() {
-                return Err(AppError::InvalidInput("Invalid path: no existing ancestor directory".into()));
+                return Err(AppError::InvalidInput(
+                    "Invalid path: no existing ancestor directory".into(),
+                ));
             }
         }
         let canonical_ancestor = std::fs::canonicalize(&check).map_err(AppError::Io)?;
         if !canonical_ancestor.starts_with(&home) {
-            return Err(AppError::InvalidInput("Access denied: path is outside home directory".into()));
+            return Err(AppError::InvalidInput(
+                "Access denied: path is outside home directory".into(),
+            ));
         }
         std::fs::create_dir_all(parent)?;
     }
 
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     let test = queries::get_generated_test(&conn, &test_id)?;
 
     std::fs::write(&abs_path, &test.code)?;
@@ -182,10 +215,16 @@ pub fn save_test_to_disk(
 #[tauri::command]
 pub fn save_settings(app_handle: AppHandle, settings: AppSettings) -> Result<(), AppError> {
     if !matches!(settings.default_framework.as_str(), "jest" | "pytest") {
-        return Err(AppError::InvalidInput(format!("Unsupported framework: {}", settings.default_framework)));
+        return Err(AppError::InvalidInput(format!(
+            "Unsupported framework: {}",
+            settings.default_framework
+        )));
     }
     if !matches!(settings.default_mode.as_str(), "template" | "llm") {
-        return Err(AppError::InvalidInput(format!("Unsupported mode: {}", settings.default_mode)));
+        return Err(AppError::InvalidInput(format!(
+            "Unsupported mode: {}",
+            settings.default_mode
+        )));
     }
     let config_dir = app_handle
         .path()
@@ -203,7 +242,7 @@ pub fn load_settings(app_handle: AppHandle) -> Result<AppSettings, AppError> {
     load_settings_internal(&app_handle)
 }
 
-fn load_settings_internal(app_handle: &AppHandle) -> Result<AppSettings, AppError> {
+pub(crate) fn load_settings_internal(app_handle: &AppHandle) -> Result<AppSettings, AppError> {
     let config_dir = app_handle
         .path()
         .app_data_dir()

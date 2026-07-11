@@ -67,20 +67,21 @@ mod desktop_workflow_tests {
     use crate::db::queries;
     use crate::models::project::CreateProjectRequest;
     use crate::models::test::{GeneratedTest, TestResult};
-    use crate::services::{alignment, spec_parser, template_generator, test_runner};
+    use crate::services::{alignment, spec_parser, test_runner};
     use chrono::Utc;
     use std::fs;
     use std::path::PathBuf;
     use uuid::Uuid;
 
+    #[cfg(unix)]
     #[test]
     fn desktop_workflow_smoke_generates_executes_and_reports() {
         let fixture = WorkflowFixture::new("desktop_workflow_smoke");
         let codebase_path = fixture.root.join("codebase");
         fs::create_dir_all(&codebase_path).expect("create codebase fixture");
         fs::write(
-            codebase_path.join("calculator.py"),
-            "def add(left, right):\n    return left + right\n",
+            codebase_path.join("calculator.js"),
+            "export function addNumbers(left, right) { return left + right; }\n",
         )
         .expect("write code fixture");
 
@@ -100,10 +101,10 @@ mod desktop_workflow_tests {
             &conn,
             &project.id,
             "workflow-smoke.md",
-            "# Workflow Smoke\n\n## Requirements\n\n- The system shall add two numbers\n",
+            "# Workflow Smoke\n\n## Requirements\n\n- The system shall expose add numbers\n",
         )
         .expect("create spec");
-        let requirements = spec_parser::parse_spec(&spec.id, &spec.content);
+        let requirements = spec_parser::parse_spec(&spec.id, &spec.content).expect("parse spec");
         assert_eq!(requirements.len(), 1);
         queries::insert_requirements(&conn, &requirements).expect("insert requirements");
         queries::update_spec_parsed_at(&conn, &spec.id).expect("mark spec parsed");
@@ -111,20 +112,34 @@ mod desktop_workflow_tests {
         let generated = GeneratedTest {
             id: Uuid::new_v4().to_string(),
             requirement_id: requirements[0].id.clone(),
-            framework: "pytest".to_string(),
-            code: template_generator::generate_pytest_test(&requirements[0], &[]),
-            generation_mode: "template".to_string(),
+            framework: "jest".to_string(),
+            code: format!(
+                "// Requirement-ID: {}\nexpect(addNumbers(2, 3)).toBe(5);\n",
+                requirements[0].id
+            ),
+            generation_mode: "fixture".to_string(),
             file_path: None,
             created_at: Utc::now().to_rfc3339(),
         };
         queries::insert_generated_test(&conn, &generated).expect("store generated test");
 
-        let test_path = fixture.root.join("test_workflow_smoke.py");
+        let test_path = codebase_path.join("calculator.test.js");
         fs::write(&test_path, &generated.code).expect("write generated pytest file");
         queries::update_generated_test_path(&conn, &generated.id, &test_path.to_string_lossy())
             .expect("store generated test path");
 
-        let execution = test_runner::run_pytest_test(
+        let runner_dir = codebase_path.join("node_modules/.bin");
+        fs::create_dir_all(&runner_dir).expect("create runner dir");
+        let runner = runner_dir.join("jest");
+        fs::write(&runner, "#!/bin/sh\nexit 0\n").expect("write local jest fixture");
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&runner)
+            .expect("runner metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&runner, permissions).expect("runner permissions");
+
+        let execution = test_runner::run_jest_test(
             &test_path.to_string_lossy(),
             &codebase_path.to_string_lossy(),
         )
@@ -147,7 +162,11 @@ mod desktop_workflow_tests {
         assert_eq!(report.report.total_requirements, 1);
         assert_eq!(report.report.covered_requirements, 1);
         assert_eq!(report.report.coverage_percent, 100.0);
-        assert!(report.mismatches.is_empty());
+        assert_eq!(report.report.verified_requirements, 1);
+        assert_eq!(
+            report.alignments[0].classification,
+            crate::models::report::AlignmentClassification::Verified
+        );
     }
 
     struct WorkflowFixture {

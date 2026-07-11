@@ -18,6 +18,9 @@ pub struct Requirement {
     pub description: String,
     pub req_type: String,
     pub priority: String,
+    pub content_fingerprint: String,
+    pub source_line_start: i64,
+    pub source_line_end: i64,
 }
 
 #[derive(Debug, Serialize, Clone)]

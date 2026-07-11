@@ -4,4 +4,5 @@ pub mod llm_generator;
 pub mod test_runner;
 pub mod alignment;
 pub mod codebase_scanner;
+pub mod evidence;
 pub mod git_service;

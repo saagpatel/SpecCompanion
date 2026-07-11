@@ -3754,11 +3754,13 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "git2",
+ "libc",
  "pulldown-cmark",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

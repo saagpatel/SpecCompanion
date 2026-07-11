@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- Replace pass-equals-coverage reporting with evidence-backed `VERIFIED`, `PARTIAL`, `FAILED`, and `UNKNOWN` classifications.
+- Add stable source-linked requirements, placeholder assertion rejection, deterministic JavaScript/TypeScript and Python evidence, and bounded test execution.
+- Add exact evidence trails and explanatory accessible report states.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

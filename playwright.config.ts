@@ -20,6 +20,9 @@ export default defineConfig({
     timezoneId: "UTC",
     locale: "en-US",
     colorScheme: "light",
+    launchOptions: process.env.PLAYWRIGHT_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
+      : undefined,
   },
   expect: {
     toHaveScreenshot: { maxDiffPixelRatio: 0.002, threshold: 0.2 },

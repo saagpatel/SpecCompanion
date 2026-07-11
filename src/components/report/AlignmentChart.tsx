@@ -1,36 +1,28 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import type { Mismatch } from "../../lib/types";
 
 interface Props {
-  mismatches: Mismatch[];
+  verified: number;
+  partial: number;
+  failed: number;
+  unknown: number;
   totalRequirements: number;
-  coveredRequirements: number;
 }
 
-export function AlignmentChart({ mismatches, totalRequirements, coveredRequirements }: Props) {
-  // Count by mismatch type
-  const counts: Record<string, number> = {};
-  for (const m of mismatches) {
-    counts[m.mismatch_type] = (counts[m.mismatch_type] || 0) + 1;
-  }
-
+export function AlignmentChart({ verified, partial, failed, unknown, totalRequirements }: Props) {
   const data = [
-    { name: "Covered", value: coveredRequirements, color: "#22c55e" },
-    { name: "No Test", value: counts.no_test_generated || 0, color: "#eab308" },
-    { name: "Failing", value: counts.test_failing || 0, color: "#ef4444" },
-    { name: "Not Run", value: counts.not_implemented || 0, color: "#6366f1" },
-    { name: "Partial", value: counts.partial_coverage || 0, color: "#f97316" },
-  ].filter((d) => d.value > 0);
+    { name: "Verified", value: verified, color: "#22c55e" },
+    { name: "Partial", value: partial, color: "#eab308" },
+    { name: "Failed", value: failed, color: "#ef4444" },
+    { name: "Unknown", value: unknown, color: "#6366f1" },
+  ].filter((item) => item.value > 0);
 
-  if (totalRequirements === 0) {
+  if (totalRequirements === 0)
     return <p className="text-text-muted text-sm">No requirements to analyze.</p>;
-  }
-
   return (
-    <div className="h-48 min-w-0">
+    <div className="h-48 min-w-0" role="img" aria-label="Requirement classification breakdown">
       <ResponsiveContainer width="100%" height={192} minWidth={240}>
         <BarChart data={data} layout="vertical" margin={{ left: 60 }}>
-          <XAxis type="number" tick={{ fill: "#9393a8", fontSize: 12 }} />
+          <XAxis type="number" allowDecimals={false} tick={{ fill: "#9393a8", fontSize: 12 }} />
           <YAxis
             type="category"
             dataKey="name"

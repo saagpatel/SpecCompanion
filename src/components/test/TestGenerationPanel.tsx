@@ -58,31 +58,31 @@ export function TestGenerationPanel({ projectId, requirements }: Props) {
       },
       {
         onSuccess: (data) => setResults(data),
-      }
+      },
     );
   };
 
   return (
     <div className="space-y-6">
       {/* Controls */}
-      <div className="flex items-center gap-4 flex-wrap">
+      <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-text-muted">Mode:</label>
+          <label className="text-text-muted text-sm">Mode:</label>
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value as "template" | "llm")}
-            className="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-text"
+            className="bg-surface border-border text-text rounded-lg border px-3 py-1.5 text-sm"
           >
             <option value="template">Template</option>
             <option value="llm">LLM (Claude)</option>
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-text-muted">Framework:</label>
+          <label className="text-text-muted text-sm">Framework:</label>
           <select
             value={framework}
             onChange={(e) => setFramework(e.target.value as "jest" | "pytest")}
-            className="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-text"
+            className="bg-surface border-border text-text rounded-lg border px-3 py-1.5 text-sm"
           >
             <option value="jest">Jest</option>
             <option value="pytest">PyTest</option>
@@ -90,17 +90,27 @@ export function TestGenerationPanel({ projectId, requirements }: Props) {
         </div>
         <button
           onClick={selectAll}
-          className="text-sm text-primary-light hover:text-primary transition-colors"
+          className="text-primary-light hover:text-primary text-sm transition-colors"
         >
           {selected.size === requirements.length ? "Deselect All" : "Select All"}
         </button>
         <button
           onClick={handleGenerate}
           disabled={selected.size === 0 || generateTests.isPending}
-          className="ml-auto px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+          className="bg-primary hover:bg-primary-dark ml-auto rounded-lg px-4 py-2 text-sm text-white transition-colors disabled:opacity-50"
         >
           {generateTests.isPending ? "Generating..." : `Generate (${selected.size})`}
         </button>
+      </div>
+
+      <div
+        role="note"
+        className="border-border bg-surface-alt text-text-muted rounded-lg border p-3 text-sm"
+      >
+        Offline templates are editable scaffolds, not verification. Placeholder assertions remain
+        <span className="text-primary-light font-semibold"> UNKNOWN </span>
+        even if their test process exits successfully. Claude-assisted generation is optional and is
+        judged by the same evidence rules.
       </div>
 
       {/* Requirements */}
@@ -116,9 +126,9 @@ export function TestGenerationPanel({ projectId, requirements }: Props) {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Generated Tests</h3>
           {results.map((test) => (
-            <div key={test.id} className="border border-border rounded-lg overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2 bg-surface-alt border-b border-border">
-                <span className="text-xs text-text-muted">
+            <div key={test.id} className="border-border overflow-hidden rounded-lg border">
+              <div className="bg-surface-alt border-border flex items-center justify-between border-b px-4 py-2">
+                <span className="text-text-muted text-xs">
                   {test.framework} | {test.generation_mode}
                 </span>
               </div>
@@ -128,7 +138,10 @@ export function TestGenerationPanel({ projectId, requirements }: Props) {
                 language={test.framework === "pytest" ? "python" : "javascript"}
               >
                 {({ style, tokens, getLineProps, getTokenProps }) => (
-                  <pre style={{ ...style, margin: 0, padding: "1rem" }} className="text-xs overflow-x-auto">
+                  <pre
+                    style={{ ...style, margin: 0, padding: "1rem" }}
+                    className="overflow-x-auto text-xs"
+                  >
                     {tokens.map((line, i) => (
                       <div key={i} {...getLineProps({ line })}>
                         {line.map((token, key) => (
@@ -145,8 +158,10 @@ export function TestGenerationPanel({ projectId, requirements }: Props) {
       )}
 
       {generateTests.isError && (
-        <div className="rounded-lg bg-danger/10 border border-danger/30 p-3 text-sm text-danger">
-          {generateTests.error instanceof Error ? generateTests.error.message : String(generateTests.error)}
+        <div className="bg-danger/10 border-danger/30 text-danger rounded-lg border p-3 text-sm">
+          {generateTests.error instanceof Error
+            ? generateTests.error.message
+            : String(generateTests.error)}
         </div>
       )}
     </div>

@@ -1,32 +1,40 @@
-use tauri::State;
-use crate::db::Database;
 use crate::db::queries;
-use crate::services::alignment;
-use crate::models::report::{AlignmentReport, AlignmentReportWithMismatches};
+use crate::db::Database;
 use crate::errors::AppError;
+use crate::models::report::{AlignmentReport, AlignmentReportWithEvidence};
+use crate::services::alignment;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub fn generate_alignment_report(
     state: State<'_, Database>,
+    app_handle: AppHandle,
     project_id: String,
-) -> Result<AlignmentReportWithMismatches, AppError> {
+) -> Result<AlignmentReportWithEvidence, AppError> {
     if project_id.trim().is_empty() {
         return Err(AppError::InvalidInput("Project ID cannot be empty".into()));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     queries::get_project(&conn, &project_id)?;
-    alignment::generate_report(&conn, &project_id)
+    let settings = crate::commands::test_gen::load_settings_internal(&app_handle)?;
+    alignment::generate_report_with_exclusions(&conn, &project_id, &settings.scan_exclusions)
 }
 
 #[tauri::command]
 pub fn get_alignment_report(
     state: State<'_, Database>,
     id: String,
-) -> Result<AlignmentReportWithMismatches, AppError> {
+) -> Result<AlignmentReportWithEvidence, AppError> {
     if id.trim().is_empty() {
         return Err(AppError::InvalidInput("Report ID cannot be empty".into()));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     queries::get_alignment_report(&conn, &id)
 }
 
@@ -38,7 +46,10 @@ pub fn list_reports(
     if project_id.trim().is_empty() {
         return Err(AppError::InvalidInput("Project ID cannot be empty".into()));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     queries::list_reports(&conn, &project_id)
 }
 
@@ -52,25 +63,30 @@ pub fn export_report(
         return Err(AppError::InvalidInput("Report ID cannot be empty".into()));
     }
     if !matches!(format.as_str(), "json" | "html" | "csv") {
-        return Err(AppError::InvalidInput(format!("Unsupported format: {}", format)));
+        return Err(AppError::InvalidInput(format!(
+            "Unsupported format: {}",
+            format
+        )));
     }
-    let conn = state.conn.lock().map_err(|e| AppError::General(e.to_string()))?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|e| AppError::General(e.to_string()))?;
     let report = queries::get_alignment_report(&conn, &report_id)?;
 
     match format.as_str() {
-        "json" => {
-            serde_json::to_string_pretty(&report).map_err(AppError::Serde)
-        }
+        "json" => serde_json::to_string_pretty(&report).map_err(AppError::Serde),
         "csv" => {
-            let mut csv = String::from("requirement_id,spec_section,mismatch_type,code_element,details\n");
-            for m in &report.mismatches {
+            let mut csv =
+                String::from("requirement_id,spec_section,classification,reason,details\n");
+            for alignment in &report.alignments {
                 csv.push_str(&format!(
                     "{},{},{},{},{}\n",
-                    escape_csv(&m.requirement_id),
-                    escape_csv(&m.spec_section),
-                    escape_csv(&m.mismatch_type),
-                    escape_csv(m.code_element.as_deref().unwrap_or("")),
-                    escape_csv(&m.details),
+                    escape_csv(&alignment.requirement_id),
+                    escape_csv(&alignment.section),
+                    escape_csv(alignment.classification.as_str()),
+                    escape_csv(alignment.reason.as_str()),
+                    escape_csv(&alignment.summary),
                 ));
             }
             Ok(csv)
@@ -84,10 +100,10 @@ table { border-collapse: collapse; width: 100%; }
 th, td { border: 1px solid #333348; padding: 8px 12px; text-align: left; }
 th { background: #252538; }
 .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
-.no_test_generated { background: #eab308; color: #000; }
-.test_failing { background: #ef4444; color: #fff; }
-.not_implemented { background: #6366f1; color: #fff; }
-.partial_coverage { background: #f97316; color: #fff; }
+.VERIFIED { background: #22c55e; color: #000; }
+.FAILED { background: #ef4444; color: #fff; }
+.UNKNOWN { background: #6366f1; color: #fff; }
+.PARTIAL { background: #f97316; color: #fff; }
 </style></head><body>"#,
             );
             html.push_str(&format!(
@@ -97,17 +113,18 @@ th { background: #252538; }
                 report.report.total_requirements,
             ));
 
-            if report.mismatches.is_empty() {
-                html.push_str("<p>No mismatches found.</p>");
+            if report.alignments.is_empty() {
+                html.push_str("<p>No requirements were available to classify.</p>");
             } else {
                 html.push_str("<table><thead><tr><th>Section</th><th>Type</th><th>Details</th></tr></thead><tbody>");
-                for m in &report.mismatches {
+                for alignment in &report.alignments {
+                    let classification = alignment.classification.as_str();
                     html.push_str(&format!(
                         "<tr><td>{}</td><td><span class=\"badge {}\">{}</span></td><td>{}</td></tr>",
-                        html_escape(&m.spec_section),
-                        html_escape(&m.mismatch_type),
-                        html_escape(&m.mismatch_type.replace('_', " ")),
-                        html_escape(&m.details),
+                        html_escape(&alignment.section),
+                        html_escape(classification),
+                        html_escape(classification),
+                        html_escape(&alignment.summary),
                     ));
                 }
                 html.push_str("</tbody></table>");
@@ -116,7 +133,10 @@ th { background: #252538; }
             html.push_str("</body></html>");
             Ok(html)
         }
-        _ => Err(AppError::InvalidInput(format!("Unsupported format: {}", format))),
+        _ => Err(AppError::InvalidInput(format!(
+            "Unsupported format: {}",
+            format
+        ))),
     }
 }
 

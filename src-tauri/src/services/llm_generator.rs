@@ -86,7 +86,10 @@ fn build_context(symbols: &[CodeSymbol]) -> String {
 
     let mut context = String::from("Codebase symbols:\n");
     for sym in symbols.iter().take(30) {
-        context.push_str(&format!("- {} {} (in {})\n", sym.kind, sym.name, sym.file_path));
+        context.push_str(&format!(
+            "- {} {} (in {})\n",
+            sym.kind, sym.name, sym.file_path
+        ));
     }
     context
 }
@@ -102,6 +105,7 @@ fn build_prompt(requirement: &Requirement, framework: &str, context: &str) -> St
         r#"Generate a test for the following requirement. Output ONLY the test code, no explanations.
 
 Requirement: {}
+Requirement-ID: {}
 Section: {}
 Type: {}
 Priority: {}
@@ -113,21 +117,31 @@ Test framework: {}
 Generate a comprehensive test that:
 1. Has clear arrange/act/assert structure
 2. Includes meaningful assertions (not just placeholders)
-3. Has a traceability comment linking to the requirement
+3. Has an exact traceability comment `Requirement-ID: {}`
 4. Covers the main happy path and at least one edge case
 5. Uses realistic mock data where needed"#,
         requirement.description,
+        requirement.id,
         requirement.section,
         requirement.req_type,
         requirement.priority,
         framework_info,
-        context
+        context,
+        requirement.id
     )
 }
 
 fn extract_code_block(text: &str) -> Option<String> {
     // Try to find ```typescript, ```javascript, ```python, or generic ``` blocks
-    let patterns = ["```typescript", "```javascript", "```python", "```js", "```ts", "```py", "```"];
+    let patterns = [
+        "```typescript",
+        "```javascript",
+        "```python",
+        "```js",
+        "```ts",
+        "```py",
+        "```",
+    ];
     for pattern in patterns {
         if let Some(start) = text.find(pattern) {
             let code_start = start + pattern.len();

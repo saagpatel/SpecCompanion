@@ -34,41 +34,60 @@ export function Settings() {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    saveSettings.mutate({ ...form, scan_exclusions: exclusions }, {
-      onSuccess: () => {
-        setShowSaved(true);
-        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-        savedTimerRef.current = setTimeout(() => setShowSaved(false), 3000);
+    saveSettings.mutate(
+      { ...form, scan_exclusions: exclusions },
+      {
+        onSuccess: () => {
+          setShowSaved(true);
+          if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+          savedTimerRef.current = setTimeout(() => setShowSaved(false), 3000);
+        },
       },
-    });
+    );
   };
 
-  if (isLoading) return <p className="text-text-muted">Loading settings...</p>;
+  if (isLoading)
+    return (
+      <p role="status" className="text-text-muted">
+        Loading settings...
+      </p>
+    );
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Settings</h2>
+      <h2 className="mb-6 text-2xl font-bold">Settings</h2>
       <div className="max-w-lg space-y-6">
         {/* API Key */}
         <div>
-          <label className="block text-sm text-text-muted mb-1">Claude API Key</label>
+          <label htmlFor="claude-api-key" className="text-text-muted mb-1 block text-sm">
+            Claude API Key (optional)
+          </label>
           <input
+            id="claude-api-key"
             type="password"
             value={form.api_key}
             onChange={(e) => setForm({ ...form, api_key: e.target.value })}
             placeholder="sk-ant-..."
-            className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+            className="bg-surface border-border text-text focus:border-primary w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
           />
-          <p className="text-xs text-text-muted mt-1">Required for LLM-powered test generation.</p>
+          <p className="text-text-muted mt-1 text-xs">
+            Only used when you explicitly choose Claude-assisted generation. Offline evidence
+            analysis does not need it.
+          </p>
         </div>
 
         {/* Default Framework */}
         <div>
-          <label className="block text-sm text-text-muted mb-1">Default Framework</label>
+          <label htmlFor="default-framework" className="text-text-muted mb-1 block text-sm">
+            Default Framework
+          </label>
           <select
+            id="default-framework"
             value={form.default_framework}
-            onChange={(e) => setForm({ ...form, default_framework: e.target.value as "jest" | "pytest" })}
-            className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
+            onChange={(e) =>
+              setForm({ ...form, default_framework: e.target.value as "jest" | "pytest" })
+            }
+            className="bg-surface border-border text-text rounded-lg border px-3 py-2 text-sm"
           >
             <option value="jest">Jest</option>
             <option value="pytest">PyTest</option>
@@ -77,11 +96,16 @@ export function Settings() {
 
         {/* Default Mode */}
         <div>
-          <label className="block text-sm text-text-muted mb-1">Default Generation Mode</label>
+          <label htmlFor="default-mode" className="text-text-muted mb-1 block text-sm">
+            Default Generation Mode
+          </label>
           <select
+            id="default-mode"
             value={form.default_mode}
-            onChange={(e) => setForm({ ...form, default_mode: e.target.value as "template" | "llm" })}
-            className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
+            onChange={(e) =>
+              setForm({ ...form, default_mode: e.target.value as "template" | "llm" })
+            }
+            className="bg-surface border-border text-text rounded-lg border px-3 py-2 text-sm"
           >
             <option value="template">Template (offline)</option>
             <option value="llm">LLM (Claude API)</option>
@@ -90,30 +114,39 @@ export function Settings() {
 
         {/* Scan Exclusions */}
         <div>
-          <label className="block text-sm text-text-muted mb-1">Scan Exclusion Patterns</label>
+          <label htmlFor="scan-exclusions" className="text-text-muted mb-1 block text-sm">
+            Scan Exclusion Patterns
+          </label>
           <input
+            id="scan-exclusions"
             type="text"
             value={exclusionInput}
             onChange={(e) => setExclusionInput(e.target.value)}
             placeholder="dist, build, .cache"
-            className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary"
+            className="bg-surface border-border text-text focus:border-primary w-full rounded-lg border px-3 py-2 text-sm focus:outline-none"
           />
-          <p className="text-xs text-text-muted mt-1">Comma-separated directory names to skip during codebase scanning.</p>
+          <p className="text-text-muted mt-1 text-xs">
+            Comma-separated directory names to skip during codebase scanning.
+          </p>
         </div>
 
         <button
           onClick={handleSave}
           disabled={saveSettings.isPending}
-          className="px-6 py-2 bg-primary hover:bg-primary-dark text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+          className="bg-primary hover:bg-primary-dark rounded-lg px-6 py-2 text-sm text-white transition-colors disabled:opacity-50"
         >
           {saveSettings.isPending ? "Saving..." : "Save Settings"}
         </button>
 
         {showSaved && (
-          <p className="text-sm text-success">Settings saved.</p>
+          <p role="status" className="text-success text-sm">
+            Settings saved.
+          </p>
         )}
         {saveSettings.isError && (
-          <p className="text-sm text-danger">Failed to save settings.</p>
+          <p role="alert" className="text-danger text-sm">
+            Failed to save settings.
+          </p>
         )}
       </div>
     </div>

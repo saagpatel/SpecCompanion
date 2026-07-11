@@ -13,7 +13,11 @@ export function TestExecution() {
   const { data: results, isError: resultsError } = useTestResults(projectId);
   const executeTests = useExecuteTests(projectId ?? "");
 
-  const { data: allTests, isLoading: testsLoading, isError: testsError } = useQuery({
+  const {
+    data: allTests,
+    isLoading: testsLoading,
+    isError: testsError,
+  } = useQuery({
     queryKey: ["all-generated-tests", projectId],
     queryFn: () => getAllGeneratedTests(projectId!),
     enabled: !!projectId,
@@ -46,8 +50,10 @@ export function TestExecution() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
-        <Link to="/" className="hover:text-text transition-colors">Dashboard</Link>
+      <div className="text-text-muted mb-1 flex items-center gap-2 text-sm">
+        <Link to="/" className="hover:text-text transition-colors">
+          Dashboard
+        </Link>
         <span>/</span>
         <Link to={`/project/${projectId}`} className="hover:text-text transition-colors">
           {project?.name ?? "Project"}
@@ -55,64 +61,73 @@ export function TestExecution() {
         <span>/</span>
         <span className="text-text">Execute Tests</span>
       </div>
-      <h2 className="text-2xl font-bold mb-6">Test Execution</h2>
+      <h2 className="mb-6 text-2xl font-bold">Test Execution</h2>
 
       <ExecutionProgress />
 
       {(testsError || resultsError || executeTests.isError) && (
-        <div className="rounded-lg border border-danger/30 bg-danger/5 p-4 text-sm text-danger mb-4">
+        <div className="border-danger/30 bg-danger/5 text-danger mb-4 rounded-lg border p-4 text-sm">
           {executeTests.isError
             ? `Execution failed: ${String(executeTests.error)}`
             : "Failed to load test data. Please try again."}
         </div>
       )}
 
-      {testsLoading && (
-        <p className="text-text-muted mb-4">Loading generated tests...</p>
-      )}
+      {testsLoading && <p className="text-text-muted mb-4">Loading generated tests...</p>}
 
       {/* Test selection */}
       {allTests && allTests.length > 0 && (
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
+          <div className="mb-3 flex items-center justify-between">
             <h3 className="text-lg font-semibold">Generated Tests ({allTests.length})</h3>
             <div className="flex gap-2">
               <button
                 onClick={selectAll}
-                className="text-sm text-primary-light hover:text-primary transition-colors"
+                className="text-primary-light hover:text-primary text-sm transition-colors"
               >
                 {selectedTests.size === allTests.length ? "Deselect All" : "Select All"}
               </button>
               <button
                 onClick={handleExecute}
                 disabled={selectedTests.size === 0 || executeTests.isPending}
-                className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                className="bg-primary hover:bg-primary-dark rounded-lg px-4 py-2 text-sm text-white transition-colors disabled:opacity-50"
               >
                 {executeTests.isPending ? "Running..." : `Run (${selectedTests.size})`}
               </button>
             </div>
           </div>
-          <div className="space-y-1 max-h-64 overflow-y-auto">
+          <div className="max-h-64 space-y-1 overflow-y-auto">
             {allTests.map((test) => (
               <div
                 key={test.id}
-                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
                   selectedTests.has(test.id)
                     ? "border-primary bg-primary/5"
                     : "border-border bg-surface-alt hover:bg-surface-hover"
                 }`}
                 onClick={() => toggleTest(test.id)}
+                role="checkbox"
+                aria-checked={selectedTests.has(test.id)}
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggleTest(test.id);
+                  }
+                }}
               >
                 <input
                   type="checkbox"
                   checked={selectedTests.has(test.id)}
                   readOnly
+                  aria-hidden="true"
+                  tabIndex={-1}
                   className="accent-primary"
                 />
-                <span className="text-sm text-text truncate flex-1">
+                <span className="text-text flex-1 truncate text-sm">
                   {test.id.slice(0, 8)} — {test.framework} ({test.generation_mode})
                 </span>
-                <span className="text-xs text-text-muted">
+                <span className="text-text-muted text-xs">
                   {new Date(test.created_at).toLocaleDateString()}
                 </span>
               </div>
@@ -122,11 +137,11 @@ export function TestExecution() {
       )}
 
       {allTests && allTests.length === 0 && (
-        <div className="rounded-xl border border-border bg-surface-alt p-8 text-center mb-6">
+        <div className="border-border bg-surface-alt mb-6 rounded-xl border p-8 text-center">
           <p className="text-text-muted">No tests generated yet.</p>
           <Link
             to={`/project/${projectId}/generate`}
-            className="text-primary-light text-sm hover:underline mt-2 inline-block"
+            className="text-primary-light mt-2 inline-block text-sm hover:underline"
           >
             Generate tests first
           </Link>
@@ -136,7 +151,7 @@ export function TestExecution() {
       {/* Results */}
       {results && results.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-3">Results</h3>
+          <h3 className="mb-3 text-lg font-semibold">Results</h3>
           <TestResultsTable results={results} />
         </div>
       )}

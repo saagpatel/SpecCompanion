@@ -35,6 +35,9 @@ export interface Requirement {
   description: string;
   req_type: "functional" | "non_functional" | "constraint";
   priority: "high" | "medium" | "low";
+  content_fingerprint: string;
+  source_line_start: number;
+  source_line_end: number;
 }
 
 export interface ParsedSpec {
@@ -64,7 +67,14 @@ export interface GenerateTestsRequest {
 export interface TestResult {
   id: string;
   generated_test_id: string;
-  status: "passed" | "failed" | "skipped" | "error";
+  status:
+    | "passed"
+    | "failed"
+    | "timed_out"
+    | "runtime_unavailable"
+    | "blocked"
+    | "unsupported"
+    | "error";
   execution_time_ms: number;
   stdout: string;
   stderr: string;
@@ -85,21 +95,44 @@ export interface AlignmentReport {
   coverage_percent: number;
   total_requirements: number;
   covered_requirements: number;
+  verified_requirements: number;
+  partial_requirements: number;
+  failed_requirements: number;
+  unknown_requirements: number;
+  evidence_digest: string;
+  checked_languages: string[];
+  skipped_languages: string[];
+  diagnostics: string[];
   generated_at: string;
 }
 
-export interface Mismatch {
+export type AlignmentClassification = "VERIFIED" | "PARTIAL" | "FAILED" | "UNKNOWN";
+
+export interface EvidenceRecord {
   id: string;
-  report_id: string;
-  requirement_id: string;
-  spec_section: string;
-  code_element: string | null;
-  mismatch_type: "not_implemented" | "test_failing" | "no_test_generated" | "partial_coverage";
-  details: string;
+  kind: "requirement" | "implementation" | "test" | "assertion" | "execution" | "diagnostic";
+  path: string | null;
+  line_start: number | null;
+  line_end: number | null;
+  symbol: string | null;
+  status: string;
+  summary: string;
 }
 
-export interface AlignmentReportWithMismatches extends AlignmentReport {
-  mismatches: Mismatch[];
+export interface RequirementAlignment {
+  requirement_id: string;
+  classification: AlignmentClassification;
+  reason: string;
+  description: string;
+  section: string;
+  source_line_start: number;
+  source_line_end: number;
+  summary: string;
+  evidence: EvidenceRecord[];
+}
+
+export interface AlignmentReportWithEvidence extends AlignmentReport {
+  alignments: RequirementAlignment[];
 }
 
 // Settings

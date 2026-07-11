@@ -10,8 +10,9 @@ import type {
   GenerateTestsRequest,
   TestResult,
   AlignmentReport,
-  AlignmentReportWithMismatches,
+  AlignmentReportWithEvidence,
   AppSettings,
+  EvidenceRecord,
 } from "./types";
 
 type InvokeArgs = Record<string, unknown>;
@@ -22,7 +23,7 @@ interface MockState {
   requirements: Requirement[];
   generatedTests: GeneratedTest[];
   testResults: TestResult[];
-  reports: AlignmentReportWithMismatches[];
+  reports: AlignmentReportWithEvidence[];
   settings: AppSettings;
 }
 
@@ -74,7 +75,7 @@ function parseRequirements(specId: string, content: string): Requirement[] {
   let section = "General";
   let inRequirementSection = false;
 
-  for (const line of content.split(/\r?\n/)) {
+  for (const [lineIndex, line] of content.split(/\r?\n/).entries()) {
     const heading = line.match(/^#{1,3}\s+(.+)$/);
     if (heading) {
       section = heading[1].trim();
@@ -138,6 +139,9 @@ function parseRequirements(specId: string, content: string): Requirement[] {
       description,
       req_type: reqType,
       priority,
+      content_fingerprint: `${section.toLowerCase()}::${description.toLowerCase()}::${requirements.length}`,
+      source_line_start: lineIndex + 1,
+      source_line_end: lineIndex + 1,
     });
   }
 
@@ -154,8 +158,8 @@ function generateMockTest(requirement: Requirement, req: GenerateTestsRequest): 
     .join("_");
   const code =
     req.framework === "pytest"
-      ? `def test_${testName || "requirement"}():\n    \"\"\"${requirement.description}\"\"\"\n    assert True\n`
-      : `describe("${requirement.section}", () => {\n  it("${requirement.description}", () => {\n    expect(true).toBe(true);\n  });\n});\n`;
+      ? `# Requirement-ID: ${requirement.id}\ndef test_${testName || "requirement"}():\n    \"\"\"${requirement.description}\"\"\"\n    assert True\n`
+      : `// Requirement-ID: ${requirement.id}\ndescribe("${requirement.section}", () => {\n  it("${requirement.description}", () => {\n    expect(true).toBe(true);\n  });\n});\n`;
 
   return {
     id: nextId("test"),
@@ -302,35 +306,94 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       const requirements = mockState.requirements.filter((requirement) =>
         specs.some((spec) => spec.id === requirement.spec_id),
       );
-      const covered = requirements.filter((requirement) =>
-        mockState.generatedTests.some((test) => test.requirement_id === requirement.id),
-      ).length;
-      const report: AlignmentReportWithMismatches = {
+      const alignments = requirements.map((requirement) => {
+        const generated = mockState.generatedTests.find(
+          (test) => test.requirement_id === requirement.id,
+        );
+        const result = generated
+          ? mockState.testResults.find((item) => item.generated_test_id === generated.id)
+          : undefined;
+        const failed = ["failed", "timed_out", "error"].includes(result?.status ?? "");
+        const evidence: EvidenceRecord[] = [
+          {
+            id: `${requirement.id}-requirement`,
+            kind: "requirement",
+            path: null,
+            line_start: requirement.source_line_start,
+            line_end: requirement.source_line_end,
+            symbol: null,
+            status: "parsed",
+            summary: "Requirement parsed in browser preview.",
+          },
+        ];
+        if (generated) {
+          evidence.push({
+            id: `${requirement.id}-assertion`,
+            kind: "assertion",
+            path: `generated:/${requirement.id}/${generated.id}`,
+            line_start: 4,
+            line_end: 4,
+            symbol: null,
+            status: "placeholder",
+            summary: "This tautology is non-probative and cannot verify the requirement.",
+          });
+        }
+        if (result) {
+          evidence.push({
+            id: `${requirement.id}-execution`,
+            kind: "execution",
+            path: null,
+            line_start: null,
+            line_end: null,
+            symbol: generated?.id ?? null,
+            status: result.status,
+            summary:
+              "Browser preview simulates process execution; placeholder assertions remain non-probative.",
+          });
+        }
+        return {
+          requirement_id: requirement.id,
+          classification: (failed ? "FAILED" : "UNKNOWN") as "FAILED" | "UNKNOWN",
+          reason: failed
+            ? result?.status === "timed_out"
+              ? "test_timed_out"
+              : "test_failed"
+            : generated
+              ? "test_non_probative"
+              : "evidence_unavailable",
+          description: requirement.description,
+          section: requirement.section,
+          source_line_start: requirement.source_line_start,
+          source_line_end: requirement.source_line_end,
+          summary: failed
+            ? "The associated test process failed."
+            : generated
+              ? "A test ran, but its placeholder assertion is not evidence."
+              : "Browser preview cannot scan the selected local project.",
+          evidence,
+        };
+      });
+      const verified = 0;
+      const partial = 0;
+      const failed = alignments.filter((item) => item.classification === "FAILED").length;
+      const unknown = alignments.length - failed;
+      const report: AlignmentReportWithEvidence = {
         id: nextId("report"),
         project_id: projectId,
-        coverage_percent: requirements.length ? (covered / requirements.length) * 100 : 0,
+        coverage_percent: 0,
         total_requirements: requirements.length,
-        covered_requirements: covered,
+        covered_requirements: verified,
+        verified_requirements: verified,
+        partial_requirements: partial,
+        failed_requirements: failed,
+        unknown_requirements: unknown,
+        evidence_digest: `preview-${requirements.length}-${failed}-${unknown}`,
+        checked_languages: [],
+        skipped_languages: [],
+        diagnostics: ["Browser preview cannot scan or execute a local target repository."],
         generated_at: now(),
-        mismatches: requirements
-          .filter(
-            (requirement) =>
-              !mockState.generatedTests.some((test) => test.requirement_id === requirement.id),
-          )
-          .map((requirement) => ({
-            id: nextId("mismatch"),
-            report_id: "browser-preview",
-            requirement_id: requirement.id,
-            spec_section: requirement.section,
-            code_element: null,
-            mismatch_type: "no_test_generated",
-            details: "No generated test covers this requirement in the browser preview.",
-          })),
+        alignments,
       };
-      report.mismatches = report.mismatches.map((mismatch) => ({
-        ...mismatch,
-        report_id: report.id,
-      }));
       mockState.reports.push(report);
       return report as T;
     }
@@ -342,7 +405,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
     case "list_reports":
       return mockState.reports
         .filter((item) => item.project_id === args.project_id)
-        .map(({ mismatches: _mismatches, ...report }) => report) as T;
+        .map(({ alignments: _alignments, ...report }) => report) as T;
     case "export_report":
       return JSON.stringify(
         mockState.reports.find((item) => item.id === args.report_id) ?? null,
@@ -414,10 +477,10 @@ export const getTestResult = (id: string) => invoke<TestResult>("get_test_result
 
 // Report commands
 export const generateAlignmentReport = (projectId: string) =>
-  invoke<AlignmentReportWithMismatches>("generate_alignment_report", { project_id: projectId });
+  invoke<AlignmentReportWithEvidence>("generate_alignment_report", { project_id: projectId });
 
 export const getAlignmentReport = (id: string) =>
-  invoke<AlignmentReportWithMismatches>("get_alignment_report", { id });
+  invoke<AlignmentReportWithEvidence>("get_alignment_report", { id });
 
 export const listReports = (projectId: string) =>
   invoke<AlignmentReport[]>("list_reports", { project_id: projectId });

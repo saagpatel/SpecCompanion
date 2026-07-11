@@ -8,8 +8,8 @@ interface Props {
 
 export function CoverageGauge({ coveragePercent, total, covered }: Props) {
   const data = [
-    { name: "Covered", value: covered },
-    { name: "Uncovered", value: total - covered },
+    { name: "Verified", value: covered },
+    { name: "Not verified", value: total - covered },
   ];
 
   const color = coveragePercent >= 80 ? "#22c55e" : coveragePercent >= 50 ? "#eab308" : "#ef4444";
@@ -41,9 +41,9 @@ export function CoverageGauge({ coveragePercent, total, covered }: Props) {
       </div>
       <div>
         <p className="text-text text-sm">
-          {covered}/{total} requirements covered
+          {covered}/{total} requirements verified
         </p>
-        <p className="text-text-muted mt-0.5 text-xs">{total - covered} uncovered</p>
+        <p className="text-text-muted mt-0.5 text-xs">Only evidence-backed passes count</p>
       </div>
     </div>
   );

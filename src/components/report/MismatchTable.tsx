@@ -1,46 +1,120 @@
-import type { Mismatch } from "../../lib/types";
+import { Fragment, useState } from "react";
+import type { RequirementAlignment } from "../../lib/types";
 
 interface Props {
-  mismatches: Mismatch[];
+  alignments: RequirementAlignment[];
 }
 
-const typeBadge: Record<string, { bg: string; label: string }> = {
-  no_test_generated: { bg: "bg-warning/20 text-warning", label: "No Test" },
-  test_failing: { bg: "bg-danger/20 text-danger", label: "Failing" },
-  not_implemented: { bg: "bg-primary/20 text-primary-light", label: "Not Implemented" },
-  partial_coverage: { bg: "bg-warning/20 text-warning", label: "Partial" },
+const badge: Record<string, string> = {
+  VERIFIED: "bg-success/20 text-success",
+  PARTIAL: "bg-warning/20 text-warning",
+  FAILED: "bg-danger/20 text-danger",
+  UNKNOWN: "bg-primary/20 text-primary-light",
 };
 
-export function MismatchTable({ mismatches }: Props) {
-  if (mismatches.length === 0) {
+export function EvidenceTable({ alignments }: Props) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  if (alignments.length === 0) {
     return (
-      <div className="rounded-lg border border-success/30 bg-success/5 p-4 text-sm text-success">
-        All requirements have passing tests.
+      <div className="border-border bg-surface-alt text-text-muted rounded-lg border p-4 text-sm">
+        No requirements were available to classify.
       </div>
     );
   }
 
+  const toggle = (id: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="border-border overflow-x-auto rounded-lg border">
+      <table className="w-full min-w-[760px] text-sm">
+        <caption className="sr-only">Requirement classifications and exact evidence</caption>
         <thead>
-          <tr className="bg-surface-alt border-b border-border">
-            <th className="text-left px-4 py-2 text-text-muted font-medium">Section</th>
-            <th className="text-left px-4 py-2 text-text-muted font-medium">Type</th>
-            <th className="text-left px-4 py-2 text-text-muted font-medium">Details</th>
+          <tr className="bg-surface-alt border-border border-b">
+            <th scope="col" className="text-text-muted px-4 py-2 text-left font-medium">
+              Requirement
+            </th>
+            <th scope="col" className="text-text-muted px-4 py-2 text-left font-medium">
+              Classification
+            </th>
+            <th scope="col" className="text-text-muted px-4 py-2 text-left font-medium">
+              Why
+            </th>
+            <th scope="col" className="text-text-muted px-4 py-2 text-right font-medium">
+              Evidence
+            </th>
           </tr>
         </thead>
         <tbody>
-          {mismatches.map((m) => {
-            const badge = typeBadge[m.mismatch_type] ?? { bg: "bg-border text-text-muted", label: m.mismatch_type };
+          {alignments.map((alignment) => {
+            const isExpanded = expanded.has(alignment.requirement_id);
             return (
-              <tr key={m.id} className="border-b border-border">
-                <td className="px-4 py-2 text-text-muted">{m.spec_section}</td>
-                <td className="px-4 py-2">
-                  <span className={`text-xs px-2 py-0.5 rounded ${badge.bg}`}>{badge.label}</span>
-                </td>
-                <td className="px-4 py-2 text-text">{m.details}</td>
-              </tr>
+              <Fragment key={alignment.requirement_id}>
+                <tr className="border-border border-b align-top">
+                  <td className="text-text px-4 py-3">
+                    <p>{alignment.description}</p>
+                    <p className="text-text-muted mt-1 text-xs">
+                      {alignment.section}, line {alignment.source_line_start}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs font-semibold ${badge[alignment.classification]}`}
+                    >
+                      {alignment.classification}
+                    </span>
+                  </td>
+                  <td className="text-text px-4 py-3">
+                    <p>{alignment.summary}</p>
+                    <p className="text-text-muted mt-1 font-mono text-xs">{alignment.reason}</p>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-controls={`evidence-${alignment.requirement_id}`}
+                      onClick={() => toggle(alignment.requirement_id)}
+                      className="text-primary-light hover:text-primary rounded px-2 py-1 focus-visible:outline-2 focus-visible:outline-offset-2"
+                    >
+                      {isExpanded ? "Hide" : "Show"} {alignment.evidence.length}
+                    </button>
+                  </td>
+                </tr>
+                {isExpanded && (
+                  <tr>
+                    <td colSpan={4} className="bg-surface-alt px-4 py-3">
+                      <ul id={`evidence-${alignment.requirement_id}`} className="space-y-2">
+                        {alignment.evidence.map((item) => (
+                          <li key={item.id} className="border-border rounded border p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-text text-xs font-semibold uppercase">
+                                {item.kind}
+                              </span>
+                              <span className="bg-surface text-text-muted rounded px-1.5 py-0.5 font-mono text-xs">
+                                {item.status}
+                              </span>
+                              {item.path && (
+                                <span className="text-text-muted font-mono text-xs break-all">
+                                  {item.path}
+                                  {item.line_start ? `:${item.line_start}` : ""}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-text mt-1 text-xs">{item.summary}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             );
           })}
         </tbody>

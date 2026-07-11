@@ -35,31 +35,47 @@ export function RequirementsList({ requirements, selectable, selected, onToggle 
     <div className="space-y-4">
       {Object.entries(grouped).map(([section, reqs]) => (
         <div key={section}>
-          <h4 className="text-sm font-medium text-text-muted mb-2">{section}</h4>
+          <h4 className="text-text-muted mb-2 text-sm font-medium">{section}</h4>
           <div className="space-y-1">
             {reqs.map((req) => (
               <div
                 key={req.id}
-                className={`flex items-start gap-3 p-3 rounded-lg border border-border bg-surface ${
-                  selectable ? "cursor-pointer hover:bg-surface-hover" : ""
+                className={`border-border bg-surface flex items-start gap-3 rounded-lg border p-3 ${
+                  selectable ? "hover:bg-surface-hover cursor-pointer" : ""
                 } ${selected?.has(req.id) ? "border-primary bg-primary/5" : ""}`}
                 onClick={() => selectable && onToggle?.(req.id)}
+                role={selectable ? "checkbox" : undefined}
+                aria-checked={selectable ? (selected?.has(req.id) ?? false) : undefined}
+                tabIndex={selectable ? 0 : undefined}
+                onKeyDown={(event) => {
+                  if (selectable && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    onToggle?.(req.id);
+                  }
+                }}
               >
                 {selectable && (
                   <input
                     type="checkbox"
                     checked={selected?.has(req.id) ?? false}
                     readOnly
-                    className="mt-1 accent-primary"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    className="accent-primary mt-1"
                   />
                 )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-text">{req.description}</p>
-                  <div className="flex gap-2 mt-1">
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${typeBadgeColors[req.req_type] ?? "bg-border text-text-muted"}`}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-text text-sm">{req.description}</p>
+                  <div className="mt-1 flex gap-2">
+                    <span className="text-text-muted text-xs">line {req.source_line_start}</span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-xs ${typeBadgeColors[req.req_type] ?? "bg-border text-text-muted"}`}
+                    >
                       {req.req_type.replace("_", "-")}
                     </span>
-                    <span className={`text-xs ${priorityBadgeColors[req.priority] ?? "text-text-muted"}`}>
+                    <span
+                      className={`text-xs ${priorityBadgeColors[req.priority] ?? "text-text-muted"}`}
+                    >
                       {req.priority}
                     </span>
                   </div>

@@ -9,7 +9,7 @@ import {
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
-import { MismatchTable } from "../components/report/MismatchTable";
+import { EvidenceTable } from "../components/report/MismatchTable";
 
 export function Reports() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -19,7 +19,11 @@ export function Reports() {
   const exportReport = useExportReport();
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
-  const { data: report } = useAlignmentReport(selectedReportId);
+  const {
+    data: report,
+    isLoading: reportLoading,
+    isError: reportError,
+  } = useAlignmentReport(selectedReportId);
 
   // Auto-select latest report
   useEffect(() => {
@@ -35,7 +39,8 @@ export function Reports() {
       {
         onSuccess: (content) => {
           const blob = new Blob([content], {
-            type: format === "json" ? "application/json" : format === "html" ? "text/html" : "text/csv",
+            type:
+              format === "json" ? "application/json" : format === "html" ? "text/html" : "text/csv",
           });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
@@ -44,14 +49,16 @@ export function Reports() {
           a.click();
           URL.revokeObjectURL(url);
         },
-      }
+      },
     );
   };
 
   return (
     <div>
-      <div className="flex items-center gap-2 text-sm text-text-muted mb-1">
-        <Link to="/" className="hover:text-text transition-colors">Dashboard</Link>
+      <div className="text-text-muted mb-1 flex items-center gap-2 text-sm">
+        <Link to="/" className="hover:text-text transition-colors">
+          Dashboard
+        </Link>
         <span>/</span>
         <Link to={`/project/${projectId}`} className="hover:text-text transition-colors">
           {project?.name ?? "Project"}
@@ -60,15 +67,17 @@ export function Reports() {
         <span className="text-text">Reports</span>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <h2 className="text-2xl font-bold">Alignment Reports</h2>
         <div className="flex gap-2">
           <button
-            onClick={() => generateReport.mutate(undefined, {
-              onSuccess: (data) => setSelectedReportId(data.id),
-            })}
+            onClick={() =>
+              generateReport.mutate(undefined, {
+                onSuccess: (data) => setSelectedReportId(data.id),
+              })
+            }
             disabled={generateReport.isPending}
-            className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+            className="bg-primary hover:bg-primary-dark rounded-lg px-4 py-2 text-sm text-white transition-colors disabled:opacity-50"
           >
             {generateReport.isPending ? "Generating..." : "Generate Report"}
           </button>
@@ -76,68 +85,127 @@ export function Reports() {
       </div>
 
       {(reportsError || generateReport.isError) && (
-        <div className="rounded-lg border border-danger/30 bg-danger/5 p-4 text-sm text-danger mb-4">
-          {generateReport.isError ? `Failed to generate report: ${String(generateReport.error)}` : `Failed to load reports.`}
+        <div className="border-danger/30 bg-danger/5 text-danger mb-4 rounded-lg border p-4 text-sm">
+          {generateReport.isError
+            ? `Failed to generate report: ${String(generateReport.error)}`
+            : `Failed to load reports.`}
+        </div>
+      )}
+
+      {reportError && (
+        <div
+          role="alert"
+          className="border-danger/30 bg-danger/5 text-danger mb-4 rounded-lg border p-4 text-sm"
+        >
+          The selected report could not be loaded. Its evidence remains unknown.
         </div>
       )}
 
       {/* Report selector */}
       {reports && reports.length > 1 && (
         <div className="mb-4">
-          <label className="text-sm text-text-muted mr-2">Report:</label>
+          <label className="text-text-muted mr-2 text-sm">Report:</label>
           <select
             value={selectedReportId ?? ""}
             onChange={(e) => setSelectedReportId(e.target.value)}
-            className="bg-surface border border-border rounded-lg px-3 py-1.5 text-sm text-text"
+            className="bg-surface border-border text-text rounded-lg border px-3 py-1.5 text-sm"
           >
             {reports.map((r) => (
               <option key={r.id} value={r.id}>
-                {new Date(r.generated_at).toLocaleString()} — {r.coverage_percent.toFixed(0)}%
+                {new Date(r.generated_at).toLocaleString()} — {r.verified_requirements}/
+                {r.total_requirements} verified
               </option>
             ))}
           </select>
         </div>
       )}
 
-      {report ? (
+      {reportLoading ? (
+        <p role="status" className="text-text-muted">
+          Loading evidence report...
+        </p>
+      ) : report ? (
         <div className="space-y-6">
+          <section
+            aria-labelledby="scan-scope-heading"
+            className="border-border bg-surface-alt rounded-xl border p-4"
+          >
+            <h3 id="scan-scope-heading" className="text-sm font-semibold">
+              What was checked
+            </h3>
+            <p className="text-text-muted mt-1 text-sm">
+              {report.checked_languages.length > 0
+                ? `Deterministic source scan: ${report.checked_languages.join(", ")}.`
+                : "No supported source language could be checked."}
+              {report.skipped_languages.length > 0 &&
+                ` Skipped as unsupported: ${report.skipped_languages.join(", ")}.`}
+            </p>
+            {report.diagnostics.length > 0 && (
+              <ul className="text-text-muted mt-2 list-disc space-y-1 pl-5 text-xs">
+                {report.diagnostics.map((diagnostic) => (
+                  <li key={diagnostic}>{diagnostic}</li>
+                ))}
+              </ul>
+            )}
+          </section>
           {/* Coverage and chart */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-xl border border-border bg-surface-alt p-6">
-              <h3 className="text-sm text-text-muted mb-4">Coverage</h3>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="border-border bg-surface-alt rounded-xl border p-6">
+              <h3 className="text-text-muted mb-4 text-sm">Coverage</h3>
               <CoverageGauge
                 coveragePercent={report.coverage_percent}
                 total={report.total_requirements}
                 covered={report.covered_requirements}
               />
             </div>
-            <div className="rounded-xl border border-border bg-surface-alt p-6">
-              <h3 className="text-sm text-text-muted mb-4">Breakdown</h3>
+            <div className="border-border bg-surface-alt rounded-xl border p-6">
+              <h3 className="text-text-muted mb-4 text-sm">Breakdown</h3>
               <AlignmentChart
-                mismatches={report.mismatches}
+                verified={report.verified_requirements}
+                partial={report.partial_requirements}
+                failed={report.failed_requirements}
+                unknown={report.unknown_requirements}
                 totalRequirements={report.total_requirements}
-                coveredRequirements={report.covered_requirements}
               />
             </div>
           </div>
 
           {/* Export */}
           <div className="flex gap-2">
-            <span className="text-sm text-text-muted pt-1">Export:</span>
-            <button onClick={() => handleExport("json")} className="text-sm text-primary-light hover:underline">JSON</button>
-            <button onClick={() => handleExport("html")} className="text-sm text-primary-light hover:underline">HTML</button>
-            <button onClick={() => handleExport("csv")} className="text-sm text-primary-light hover:underline">CSV</button>
+            <span className="text-text-muted pt-1 text-sm">Export:</span>
+            <button
+              onClick={() => handleExport("json")}
+              className="text-primary-light text-sm hover:underline"
+            >
+              JSON
+            </button>
+            <button
+              onClick={() => handleExport("html")}
+              className="text-primary-light text-sm hover:underline"
+            >
+              HTML
+            </button>
+            <button
+              onClick={() => handleExport("csv")}
+              className="text-primary-light text-sm hover:underline"
+            >
+              CSV
+            </button>
           </div>
 
-          {/* Mismatches */}
+          {/* Evidence */}
           <div>
-            <h3 className="text-lg font-semibold mb-3">Mismatches ({report.mismatches.length})</h3>
-            <MismatchTable mismatches={report.mismatches} />
+            <h3 className="mb-3 text-lg font-semibold">
+              Requirement evidence ({report.alignments.length})
+            </h3>
+            <EvidenceTable alignments={report.alignments} />
           </div>
         </div>
       ) : reports && reports.length === 0 ? (
-        <div className="rounded-xl border border-border bg-surface-alt p-8 text-center">
-          <p className="text-text-muted">No reports generated yet. Generate one to see alignment analysis.</p>
+        <div className="border-border bg-surface-alt rounded-xl border p-8 text-center">
+          <p className="text-text-muted">
+            No reports generated yet. Generate one to see alignment analysis.
+          </p>
         </div>
       ) : null}
     </div>

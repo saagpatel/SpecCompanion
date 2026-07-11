@@ -336,6 +336,22 @@ pub fn has_requirement_trace(code: &str, requirement: &Requirement) -> bool {
     })
 }
 
+pub fn test_references_implementation(code: &str, candidates: &[&ImplementationCandidate]) -> bool {
+    let executable_identifiers: BTreeSet<String> = code
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            !trimmed.starts_with("//") && !trimmed.starts_with('#')
+        })
+        .flat_map(|line| line.split(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '$')))
+        .filter(|value| !value.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    candidates
+        .iter()
+        .any(|candidate| executable_identifiers.contains(&candidate.symbol.to_lowercase()))
+}
+
 fn is_placeholder_assertion(compact: &str) -> bool {
     let tautologies = [
         "expect(true).tobe(true)",
@@ -557,6 +573,24 @@ mod tests {
             &req
         ));
         assert!(!has_requirement_trace("// Requirement: Adds stuff", &req));
+    }
+
+    #[test]
+    fn meaningful_test_must_reference_the_matched_implementation() {
+        let candidate = ImplementationCandidate {
+            path: "src/math.py".into(),
+            line: 1,
+            symbol: "add_numbers".into(),
+            language: "python".into(),
+        };
+        assert!(test_references_implementation(
+            "assert add_numbers(2, 3) == 5",
+            &[&candidate]
+        ));
+        assert!(!test_references_implementation(
+            "# add_numbers is mentioned only in a comment\nassert subtract_numbers(5, 2) == 3",
+            &[&candidate]
+        ));
     }
 
     #[test]

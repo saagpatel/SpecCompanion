@@ -141,13 +141,16 @@ fn classify_requirement(
         let traced = evidence::has_requirement_trace(&test.code, requirement);
         let quality = evidence::analyze_assertions(&test.code);
         let (quality_status, assertion_lines) = match &quality {
-            AssertionQuality::Meaningful(lines) if traced => {
+            AssertionQuality::Meaningful(lines)
+                if traced
+                    && evidence::test_references_implementation(&test.code, &implementations) =>
+            {
                 has_meaningful = true;
                 ("meaningful", lines.clone())
             }
             AssertionQuality::Meaningful(lines) => {
                 has_non_probative = true;
-                ("unlinked", lines.clone())
+                ("unlinked_or_unmatched", lines.clone())
             }
             AssertionQuality::Placeholder(lines) => {
                 has_non_probative = true;
@@ -189,8 +192,8 @@ fn classify_requirement(
                 "placeholder" => {
                     "Tautology or placeholder assertion cannot verify a requirement".into()
                 }
-                "unlinked" => {
-                    "Assertion may be meaningful, but its requirement link is unavailable".into()
+                "unlinked_or_unmatched" => {
+                    "Assertion may be meaningful, but its requirement link or implementation target is unavailable".into()
                 }
                 _ => "No assertion was found".into(),
             },
@@ -230,10 +233,16 @@ fn classify_requirement(
         has_linked_test = true;
         let (quality_status, assertion_lines) = match evidence::analyze_assertions(&candidate.code)
         {
-            AssertionQuality::Meaningful(lines) => {
+            AssertionQuality::Meaningful(lines)
+                if evidence::test_references_implementation(&candidate.code, &implementations) =>
+            {
                 has_meaningful = true;
                 has_not_run = true;
                 ("meaningful", lines)
+            }
+            AssertionQuality::Meaningful(lines) => {
+                has_non_probative = true;
+                ("unmatched_implementation", lines)
             }
             AssertionQuality::Placeholder(lines) => {
                 has_non_probative = true;
@@ -553,6 +562,22 @@ mod tests {
             AlignmentReason::TestNonProbative
         );
         assert_eq!(report.report.verified_requirements, 0);
+    }
+
+    #[test]
+    fn unrelated_meaningful_assertion_is_not_verified() {
+        let report = seed(
+            "# Requirement-ID: $REQ\ndef test_other():\n    assert subtract_numbers(5, 2) == 3\n",
+            Some("passed"),
+        );
+        assert_eq!(
+            report.alignments[0].classification,
+            AlignmentClassification::Unknown
+        );
+        assert_eq!(
+            report.alignments[0].reason,
+            AlignmentReason::TestNonProbative
+        );
     }
 
     #[test]

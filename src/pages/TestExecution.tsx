@@ -79,7 +79,7 @@ export function TestExecution() {
       {allTests && allTests.length > 0 && (
         <div className="mb-6">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Generated Tests ({allTests.length})</h3>
+            <h3 className="text-lg font-semibold">Executable evidence ({allTests.length})</h3>
             <div className="flex gap-2">
               <button
                 onClick={selectAll}
@@ -125,7 +125,8 @@ export function TestExecution() {
                   className="accent-primary"
                 />
                 <span className="text-text flex-1 truncate text-sm">
-                  {test.id.slice(0, 8)} — {test.framework} ({test.generation_mode})
+                  {test.id.slice(0, 8)} — {test.framework} ({test.generation_mode.replace("_", " ")}
+                  )
                 </span>
                 <span className="text-text-muted text-xs">
                   {new Date(test.created_at).toLocaleDateString()}
@@ -138,12 +139,12 @@ export function TestExecution() {
 
       {allTests && allTests.length === 0 && (
         <div className="border-border bg-surface-alt mb-6 rounded-xl border p-8 text-center">
-          <p className="text-text-muted">No tests generated yet.</p>
+          <p className="text-text-muted">No generated or linked tests are ready to run.</p>
           <Link
             to={`/project/${projectId}/generate`}
             className="text-primary-light mt-2 inline-block text-sm hover:underline"
           >
-            Generate tests first
+            Generate or link test evidence
           </Link>
         </div>
       )}

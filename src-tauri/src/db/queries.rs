@@ -381,6 +381,14 @@ pub fn update_generated_test_path(conn: &Connection, id: &str, path: &str) -> Re
     Ok(())
 }
 
+pub fn update_generated_test_code(conn: &Connection, id: &str, code: &str) -> Result<(), AppError> {
+    conn.execute(
+        "UPDATE generated_tests SET code = ?1 WHERE id = ?2",
+        params![code, id],
+    )?;
+    Ok(())
+}
+
 pub fn get_generated_tests_for_project(
     conn: &Connection,
     project_id: &str,

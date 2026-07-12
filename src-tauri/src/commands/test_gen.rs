@@ -1,8 +1,10 @@
 use crate::db::queries;
 use crate::db::Database;
 use crate::errors::AppError;
-use crate::models::test::{GenerateTestsRequest, GeneratedTest};
-use crate::services::{codebase_scanner, llm_generator, template_generator};
+use crate::models::test::{
+    GenerateTestsRequest, GeneratedTest, LinkRepositoryTestRequest, RepositoryTestCandidate,
+};
+use crate::services::{codebase_scanner, llm_generator, repository_tests, template_generator};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
@@ -157,6 +159,48 @@ pub fn get_all_generated_tests(
         .lock()
         .map_err(|e| AppError::General(e.to_string()))?;
     queries::get_generated_tests_for_project(&conn, &project_id)
+}
+
+#[tauri::command]
+pub fn list_repository_tests(
+    state: State<'_, Database>,
+    app_handle: AppHandle,
+    project_id: String,
+) -> Result<Vec<RepositoryTestCandidate>, AppError> {
+    if project_id.trim().is_empty() {
+        return Err(AppError::InvalidInput("Project ID cannot be empty".into()));
+    }
+    let settings = load_settings_internal(&app_handle)?;
+    let codebase_path = {
+        let conn = state
+            .conn
+            .lock()
+            .map_err(|error| AppError::General(error.to_string()))?;
+        queries::get_project(&conn, &project_id)?
+            .project
+            .codebase_path
+    };
+    repository_tests::discover(&codebase_path, &settings.scan_exclusions)
+}
+
+#[tauri::command]
+pub fn link_repository_test(
+    state: State<'_, Database>,
+    app_handle: AppHandle,
+    request: LinkRepositoryTestRequest,
+) -> Result<GeneratedTest, AppError> {
+    let settings = load_settings_internal(&app_handle)?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    repository_tests::link(
+        &conn,
+        &request.project_id,
+        &request.requirement_id,
+        &request.path,
+        &settings.scan_exclusions,
+    )
 }
 
 #[tauri::command]

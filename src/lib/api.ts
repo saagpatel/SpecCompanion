@@ -13,6 +13,8 @@ import type {
   AlignmentReportWithEvidence,
   AppSettings,
   EvidenceRecord,
+  LinkRepositoryTestRequest,
+  RepositoryTestCandidate,
 } from "./types";
 
 type InvokeArgs = Record<string, unknown>;
@@ -272,6 +274,37 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         requirementIds.has(test.requirement_id),
       ) as T;
     }
+    case "list_repository_tests":
+      return [
+        {
+          path: "tests/model.test.ts",
+          language: "typescript",
+          framework: "vitest",
+          assertion_status: "meaningful",
+          assertion_lines: [8],
+        },
+      ] as T;
+    case "link_repository_test": {
+      const request = args.request as LinkRepositoryTestRequest;
+      const existing = mockState.generatedTests.find(
+        (test) =>
+          test.requirement_id === request.requirement_id &&
+          test.generation_mode === "repository_link" &&
+          test.file_path?.endsWith(request.path),
+      );
+      if (existing) return existing as T;
+      const linked: GeneratedTest = {
+        id: nextId("test"),
+        requirement_id: request.requirement_id,
+        framework: "vitest",
+        generation_mode: "repository_link",
+        file_path: `/preview/javascript-fixture/${request.path}`,
+        code: "import { expect, it } from 'vitest';\nimport { simulate } from '../src/model';\nit('exercises linked behavior', () => { expect(simulate({ faults: [], rollback: false }).id).toBeDefined(); });\n",
+        created_at: now(),
+      };
+      mockState.generatedTests.push(linked);
+      return linked as T;
+    }
     case "save_test_to_disk":
       return (args.path ?? "") as T;
     case "save_settings":
@@ -314,6 +347,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           ? mockState.testResults.find((item) => item.generated_test_id === generated.id)
           : undefined;
         const failed = ["failed", "timed_out", "error"].includes(result?.status ?? "");
+        const repositoryLink = generated?.generation_mode === "repository_link";
         const evidence: EvidenceRecord[] = [
           {
             id: `${requirement.id}-requirement`,
@@ -327,6 +361,18 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           },
         ];
         if (generated) {
+          if (repositoryLink) {
+            evidence.push({
+              id: `${requirement.id}-test`,
+              kind: "test",
+              path: generated.file_path,
+              line_start: 1,
+              line_end: generated.code.split(/\r?\n/).length,
+              symbol: generated.id,
+              status: "explicitly_linked",
+              summary: "The user explicitly linked this contained repository test.",
+            });
+          }
           evidence.push({
             id: `${requirement.id}-assertion`,
             kind: "assertion",
@@ -334,8 +380,10 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
             line_start: 4,
             line_end: 4,
             symbol: null,
-            status: "placeholder",
-            summary: "This tautology is non-probative and cannot verify the requirement.",
+            status: repositoryLink ? "meaningful" : "placeholder",
+            summary: repositoryLink
+              ? "The repository test has a non-placeholder assertion; browser preview cannot scan implementation evidence."
+              : "This tautology is non-probative and cannot verify the requirement.",
           });
         }
         if (result) {
@@ -347,8 +395,9 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
             line_end: null,
             symbol: generated?.id ?? null,
             status: result.status,
-            summary:
-              "Browser preview simulates process execution; placeholder assertions remain non-probative.",
+            summary: repositoryLink
+              ? "Browser preview simulates execution but cannot scan the selected local implementation."
+              : "Browser preview simulates process execution; placeholder assertions remain non-probative.",
           });
         }
         return {
@@ -358,18 +407,22 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
             ? result?.status === "timed_out"
               ? "test_timed_out"
               : "test_failed"
-            : generated
-              ? "test_non_probative"
-              : "evidence_unavailable",
+            : repositoryLink
+              ? "evidence_unavailable"
+              : generated
+                ? "test_non_probative"
+                : "evidence_unavailable",
           description: requirement.description,
           section: requirement.section,
           source_line_start: requirement.source_line_start,
           source_line_end: requirement.source_line_end,
           summary: failed
             ? "The associated test process failed."
-            : generated
-              ? "A test ran, but its placeholder assertion is not evidence."
-              : "Browser preview cannot scan the selected local project.",
+            : repositoryLink
+              ? "The repository test is explicitly linked, but browser preview cannot scan implementation evidence."
+              : generated
+                ? "A test ran, but its placeholder assertion is not evidence."
+                : "Browser preview cannot scan the selected local project.",
           evidence,
         };
       });
@@ -457,6 +510,12 @@ export const getGeneratedTests = (requirementId: string) =>
 
 export const getAllGeneratedTests = (projectId: string) =>
   invoke<GeneratedTest[]>("get_all_generated_tests", { project_id: projectId });
+
+export const listRepositoryTests = (projectId: string) =>
+  invoke<RepositoryTestCandidate[]>("list_repository_tests", { project_id: projectId });
+
+export const linkRepositoryTest = (request: LinkRepositoryTestRequest) =>
+  invoke<GeneratedTest>("link_repository_test", { request });
 
 export const saveTestToDisk = (testId: string, path: string) =>
   invoke<string>("save_test_to_disk", { test_id: testId, path });

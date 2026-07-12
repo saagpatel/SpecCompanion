@@ -39,6 +39,14 @@ pub fn run_pytest_test(test_file: &str, working_dir: &str) -> Result<ExecutionRe
     run_pytest_test_with_config(test_file, working_dir, RunnerConfig::default())
 }
 
+pub fn run_vitest_test(test_file: &str, working_dir: &str) -> Result<ExecutionResult, AppError> {
+    run_vitest_test_with_config(test_file, working_dir, RunnerConfig::default())
+}
+
+pub fn run_unittest_test(test_file: &str, working_dir: &str) -> Result<ExecutionResult, AppError> {
+    run_unittest_test_with_config(test_file, working_dir, RunnerConfig::default())
+}
+
 pub fn run_jest_test_with_config(
     test_file: &str,
     working_dir: &str,
@@ -107,6 +115,80 @@ pub fn run_pytest_test_with_config(
         .env("PYTHONDONTWRITEBYTECODE", "1")
         .env("NO_COLOR", "1");
     spawn_bounded(command, &paths.root, config, "PyTest")
+}
+
+pub fn run_vitest_test_with_config(
+    test_file: &str,
+    working_dir: &str,
+    config: RunnerConfig,
+) -> Result<ExecutionResult, AppError> {
+    let paths = validate_execution_paths(test_file, working_dir)?;
+    if !matches!(
+        paths.test.extension().and_then(|value| value.to_str()),
+        Some("js" | "jsx" | "ts" | "tsx")
+    ) {
+        return Ok(blocked(
+            "Vitest execution requires a JavaScript or TypeScript test file",
+        ));
+    }
+    let runner = paths.root.join("node_modules/.bin/vitest");
+    if !runner.exists() {
+        return Ok(runtime_unavailable(
+            "Local Vitest was not found at node_modules/.bin/vitest",
+        ));
+    }
+    let runner = std::fs::canonicalize(&runner)?;
+    if !runner.starts_with(paths.root.join("node_modules")) {
+        return Ok(blocked(
+            "The Vitest executable resolves outside this project",
+        ));
+    }
+    let mut command = Command::new(&runner);
+    command
+        .args([
+            "run",
+            paths.test.to_string_lossy().as_ref(),
+            "--reporter=verbose",
+        ])
+        .env(
+            "PATH",
+            safe_path(&paths.root, Some(runner.parent().unwrap_or(&paths.root))),
+        )
+        .env("NO_COLOR", "1")
+        .env("CI", "1");
+    spawn_bounded(command, &paths.root, config, "Vitest")
+}
+
+pub fn run_unittest_test_with_config(
+    test_file: &str,
+    working_dir: &str,
+    config: RunnerConfig,
+) -> Result<ExecutionResult, AppError> {
+    let paths = validate_execution_paths(test_file, working_dir)?;
+    if paths.test.extension().and_then(|value| value.to_str()) != Some("py") {
+        return Ok(blocked("unittest execution requires a Python test file"));
+    }
+    let Some(python) = find_allowed_python(&paths.root) else {
+        return Ok(runtime_unavailable(
+            "Python 3 was not found on the allowlisted PATH",
+        ));
+    };
+    let python_path =
+        std::env::join_paths([paths.root.join("src"), paths.root.clone()]).unwrap_or_default();
+    let mut command = Command::new(&python);
+    command
+        .args([
+            "-m",
+            "unittest",
+            "-v",
+            paths.test.to_string_lossy().as_ref(),
+        ])
+        .env("PATH", safe_path(&paths.root, None))
+        .env("PYTHONPATH", python_path)
+        .env("PYTHONNOUSERSITE", "1")
+        .env("PYTHONDONTWRITEBYTECODE", "1")
+        .env("NO_COLOR", "1");
+    spawn_bounded(command, &paths.root, config, "unittest")
 }
 
 #[derive(Debug)]
@@ -349,7 +431,9 @@ pub fn check_framework_available(framework: &str, working_dir: &str) -> bool {
     };
     match framework {
         "jest" => root.join("node_modules/.bin/jest").is_file(),
+        "vitest" => root.join("node_modules/.bin/vitest").is_file(),
         "pytest" => find_allowed_python(&root).is_some(),
+        "unittest" => find_allowed_python(&root).is_some(),
         _ => false,
     }
 }
@@ -399,6 +483,16 @@ mod tests {
     }
 
     #[test]
+    fn missing_local_vitest_is_explicitly_unknown() {
+        let fixture = Fixture::new();
+        let test = fixture.root.join("safe.test.ts");
+        fs::write(&test, "expect(add(2, 3)).toBe(5)").expect("test");
+        let result = run_vitest_test(&test.to_string_lossy(), &fixture.root.to_string_lossy())
+            .expect("result");
+        assert_eq!(result.status, "runtime_unavailable");
+    }
+
+    #[test]
     fn output_reader_caps_bytes_without_blocking_the_stream() {
         let input = vec![b'x'; 4096];
         let (output, truncated) = read_limited(input.as_slice(), 128);
@@ -415,11 +509,11 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn write_jest_runner(root: &Path, source: &str) {
+    fn write_node_runner(root: &Path, name: &str, source: &str) {
         use std::os::unix::fs::PermissionsExt;
         let directory = root.join("node_modules/.bin");
         fs::create_dir_all(&directory).expect("runner directory");
-        let runner = directory.join("jest");
+        let runner = directory.join(name);
         fs::write(&runner, source).expect("runner source");
         let mut permissions = fs::metadata(&runner)
             .expect("runner metadata")
@@ -435,7 +529,11 @@ mod tests {
         let marker = fixture.root.join("should-not-exist");
         let test = fixture.root.join("safe;touch should-not-exist.test.js");
         fs::write(&test, "expect(add(2, 3)).toBe(5)").expect("test");
-        write_jest_runner(&fixture.root, "#!/usr/bin/env node\nprocess.exit(0);\n");
+        write_node_runner(
+            &fixture.root,
+            "jest",
+            "#!/usr/bin/env node\nprocess.exit(0);\n",
+        );
         let result = run_jest_test(&test.to_string_lossy(), &fixture.root.to_string_lossy())
             .expect("execution result");
         assert_eq!(result.status, "passed");
@@ -443,6 +541,50 @@ mod tests {
             !marker.exists(),
             "filename must never be shell-interpolated"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn vitest_runner_receives_the_contained_path_without_shell_interpolation() {
+        let fixture = Fixture::new();
+        let marker = fixture.root.join("vitest-should-not-exist");
+        let test = fixture
+            .root
+            .join("safe;touch vitest-should-not-exist.test.ts");
+        fs::write(&test, "expect(add(2, 3)).toBe(5)").expect("test");
+        write_node_runner(
+            &fixture.root,
+            "vitest",
+            "#!/usr/bin/env node\nprocess.exit(0);\n",
+        );
+        let result = run_vitest_test(&test.to_string_lossy(), &fixture.root.to_string_lossy())
+            .expect("execution result");
+        assert_eq!(result.status, "passed");
+        assert!(!marker.exists());
+    }
+
+    #[test]
+    fn unittest_executes_a_contained_stdlib_test_without_bytecode_writes() {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.root.join("src/example")).expect("source tree");
+        fs::create_dir_all(fixture.root.join("tests")).expect("test tree");
+        fs::write(fixture.root.join("src/example/__init__.py"), "").expect("package");
+        fs::write(
+            fixture.root.join("src/example/math.py"),
+            "def add(left, right):\n    return left + right\n",
+        )
+        .expect("source");
+        let test = fixture.root.join("tests/test_math.py");
+        fs::write(
+            &test,
+            "import unittest\nfrom example.math import add\n\nclass MathTests(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n",
+        )
+        .expect("test");
+        let result = run_unittest_test(&test.to_string_lossy(), &fixture.root.to_string_lossy())
+            .expect("execution result");
+        assert_eq!(result.status, "passed", "stderr: {}", result.stderr);
+        assert!(!fixture.root.join("tests/__pycache__").exists());
+        assert!(!fixture.root.join("src/example/__pycache__").exists());
     }
 
     #[cfg(unix)]
@@ -460,7 +602,7 @@ mod tests {
         let runner = format!(
             "#!/usr/bin/env node\nrequire('child_process').spawn(process.execPath, ['-e', {child_json}], {{stdio:'ignore'}});\nsetTimeout(() => {{}}, 5000);\n"
         );
-        write_jest_runner(&fixture.root, &runner);
+        write_node_runner(&fixture.root, "jest", &runner);
         let result = run_jest_test_with_config(
             &test.to_string_lossy(),
             &fixture.root.to_string_lossy(),

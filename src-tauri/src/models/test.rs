@@ -1,5 +1,16 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
+pub struct ExecutionControls {
+    pub profile: String,
+    pub timeout: String,
+    pub output_limit: String,
+    pub process_tree_kill: String,
+    pub network: String,
+    pub filesystem_write: String,
+    pub child_process: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GeneratedTest {
     pub id: String,
@@ -44,6 +55,8 @@ pub struct TestResult {
     pub stdout: String,
     pub stderr: String,
     pub executed_at: String,
+    #[serde(default)]
+    pub execution_controls: ExecutionControls,
 }
 
 #[derive(Debug, Serialize, Clone)]

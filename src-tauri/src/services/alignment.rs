@@ -225,7 +225,11 @@ fn classify_requirement(
                 line_end: None,
                 symbol: Some(test.id.clone()),
                 status: result.status.clone(),
-                summary: execution_summary(&result.status, result.execution_time_ms),
+                summary: format!(
+                    "{}; controls: {}",
+                    execution_summary(&result.status, result.execution_time_ms),
+                    execution_controls_summary(&result.execution_controls)
+                ),
             });
         } else if quality_status == "meaningful" {
             has_not_run = true;
@@ -429,6 +433,16 @@ fn execution_summary(status: &str, execution_time_ms: i64) -> String {
     }
 }
 
+fn execution_controls_summary(controls: &crate::models::test::ExecutionControls) -> String {
+    if controls.profile.is_empty() {
+        return "unavailable (legacy result)".into();
+    }
+    format!(
+        "profile={}, network={}, filesystem_write={}, child_process={}",
+        controls.profile, controls.network, controls.filesystem_write, controls.child_process
+    )
+}
+
 fn count(alignments: &[RequirementAlignment], classification: AlignmentClassification) -> i64 {
     alignments
         .iter()
@@ -525,6 +539,7 @@ mod tests {
                     stdout: String::new(),
                     stderr: String::new(),
                     executed_at: "2026-01-01T00:00:00Z".into(),
+                    execution_controls: Default::default(),
                 },
             )
             .expect("result");

@@ -365,6 +365,15 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         stdout: "Mock browser preview execution passed",
         stderr: "",
         executed_at: now(),
+        execution_controls: {
+          profile: "bounded",
+          timeout: "applied",
+          output_limit: "applied",
+          process_tree_kill: "applied",
+          network: "not_enforced",
+          filesystem_write: "not_enforced",
+          child_process: "not_enforced",
+        },
       }));
       mockState.testResults.push(...results);
       return results as T;

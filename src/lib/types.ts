@@ -182,6 +182,19 @@ export interface AlignmentReportWithEvidence extends AlignmentReport {
   alignments: RequirementAlignment[];
 }
 
+export interface EvidenceBundleVerification {
+  status: "verified" | "stale" | "invalid" | "unsupported";
+  schema: string;
+  report_id?: string;
+  payload_integrity: "verified" | "invalid";
+  bundle_integrity: "verified" | "invalid";
+  report_integrity: "verified" | "invalid";
+  signature_status: string;
+  freshness_status: "fresh" | "stale" | "unknown";
+  age_seconds?: number;
+  diagnostics: string[];
+}
+
 // Settings
 export interface AppSettings {
   api_key: string;

@@ -38,6 +38,14 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await page.getByRole("link", { name: "Evidence Workflow" }).click();
   await page.getByRole("link", { name: "Reports" }).click();
   await page.getByRole("button", { name: "Generate Report" }).click();
+  await expect(page.getByRole("heading", { name: "Verify an evidence bundle" })).toBeVisible();
+  await page.getByLabel("Choose bundle JSON").setInputFiles({
+    name: "evidence-bundle.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("{}"),
+  });
+  await expect(page.getByText(/Bundle status: unsupported/i)).toBeVisible();
+  await expect(page.getByText(/never added to this project/i)).toBeVisible();
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Evidence bundle" })).toBeVisible();

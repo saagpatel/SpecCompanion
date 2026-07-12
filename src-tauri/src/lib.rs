@@ -58,6 +58,7 @@ pub fn run() {
             commands::report::get_alignment_report,
             commands::report::list_reports,
             commands::report::export_report,
+            commands::report::verify_evidence_bundle,
             // Git
             commands::git::get_repo_info,
             commands::git::get_changed_files,

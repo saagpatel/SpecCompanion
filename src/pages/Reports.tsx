@@ -6,6 +6,7 @@ import {
   useAlignmentReport,
   useGenerateAlignmentReport,
   useExportReport,
+  useVerifyEvidenceBundle,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -17,6 +18,7 @@ export function Reports() {
   const { data: reports, isError: reportsError } = useReports(projectId);
   const generateReport = useGenerateAlignmentReport(projectId ?? "");
   const exportReport = useExportReport();
+  const verifyBundle = useVerifyEvidenceBundle();
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
   const {
@@ -96,6 +98,66 @@ export function Reports() {
             : `Failed to load reports.`}
         </div>
       )}
+
+      <section
+        aria-labelledby="verify-bundle-heading"
+        className="border-border bg-surface-alt mb-6 rounded-xl border p-4"
+      >
+        <h3 id="verify-bundle-heading" className="text-sm font-semibold">
+          Verify an evidence bundle
+        </h3>
+        <p className="text-text-muted mt-1 text-sm">
+          Verification is offline and read-only. Imported evidence is never added to this project.
+        </p>
+        <label className="text-primary-light mt-3 inline-block cursor-pointer text-sm hover:underline">
+          Choose bundle JSON
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              verifyBundle.mutate(await file.text());
+              event.target.value = "";
+            }}
+          />
+        </label>
+        {verifyBundle.isPending && (
+          <p role="status" className="text-text-muted mt-3 text-sm">
+            Verifying bundle...
+          </p>
+        )}
+        {verifyBundle.data && (
+          <div
+            role="status"
+            className={`mt-3 rounded-lg border p-3 text-sm ${verifyBundle.data.status === "verified" ? "border-success/30 bg-success/5 text-success" : "border-warning/30 bg-warning/5 text-warning"}`}
+          >
+            <p className="font-medium">Bundle status: {verifyBundle.data.status}.</p>
+            <p>
+              Integrity: payload {verifyBundle.data.payload_integrity}, bundle{" "}
+              {verifyBundle.data.bundle_integrity}, report {verifyBundle.data.report_integrity}.
+              Freshness: {verifyBundle.data.freshness_status}. Signature:{" "}
+              {verifyBundle.data.signature_status}.
+            </p>
+            {verifyBundle.data.signature_status === "unsigned" && (
+              <p>Integrity is not proof of authorship or trusted time.</p>
+            )}
+            {verifyBundle.data.diagnostics.length > 0 && (
+              <ul className="mt-2 list-disc pl-5">
+                {verifyBundle.data.diagnostics.map((diagnostic) => (
+                  <li key={diagnostic}>{diagnostic}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {verifyBundle.isError && (
+          <p role="alert" className="text-danger mt-3 text-sm">
+            The selected file could not be verified. No evidence was imported.
+          </p>
+        )}
+      </section>
 
       {reportError && (
         <div

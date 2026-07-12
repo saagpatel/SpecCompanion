@@ -45,6 +45,7 @@ impl AlignmentClassification {
 pub enum AlignmentReason {
     MeaningfulTestPassed,
     PartialEvidence,
+    InsufficientEnforcement,
     ImplementationUntested,
     TestNonProbative,
     TestFailed,
@@ -61,6 +62,7 @@ impl AlignmentReason {
         match self {
             Self::MeaningfulTestPassed => "meaningful_test_passed",
             Self::PartialEvidence => "partial_evidence",
+            Self::InsufficientEnforcement => "insufficient_enforcement",
             Self::ImplementationUntested => "implementation_untested",
             Self::TestNonProbative => "test_non_probative",
             Self::TestFailed => "test_failed",

@@ -131,6 +131,7 @@ fn classify_requirement(
     let mut has_meaningful = false;
     let mut has_non_probative = false;
     let mut has_pass = false;
+    let mut has_pass_with_insufficient_enforcement = false;
     let mut has_not_run = false;
     let mut has_failure = false;
     let mut has_timeout = false;
@@ -211,7 +212,13 @@ fn classify_requirement(
 
         if let Some(result) = queries::get_latest_test_result_for_test(conn, &test.id)? {
             match result.status.as_str() {
-                "passed" if quality_status == "meaningful" => has_pass = true,
+                "passed" if quality_status == "meaningful" => {
+                    if enforcement_sufficient(&test.framework, &result.execution_controls) {
+                        has_pass = true;
+                    } else {
+                        has_pass_with_insufficient_enforcement = true;
+                    }
+                }
                 "failed" | "error" => has_failure = true,
                 "timed_out" => has_timeout = true,
                 "runtime_unavailable" | "unsupported" | "blocked" => has_runtime_unavailable = true,
@@ -362,6 +369,12 @@ fn classify_requirement(
             AlignmentReason::TestNonProbative,
             "Test evidence exists, but its assertions are placeholder, missing, or unlinked".into(),
         )
+    } else if has_pass_with_insufficient_enforcement {
+        (
+            AlignmentClassification::Partial,
+            AlignmentReason::InsufficientEnforcement,
+            "A linked meaningful Python test passed, but its execution controls are insufficient for VERIFIED".into(),
+        )
     } else if has_pass && !has_not_run {
         (
             AlignmentClassification::Verified,
@@ -403,6 +416,21 @@ fn classify_requirement(
         summary,
         evidence: evidence_records,
     })
+}
+
+fn enforcement_sufficient(
+    framework: &str,
+    controls: &crate::models::test::ExecutionControls,
+) -> bool {
+    if !matches!(framework, "pytest" | "unittest") {
+        return true;
+    }
+    controls.profile == "macos_isolated"
+        && controls.timeout == "applied"
+        && controls.output_limit == "applied"
+        && controls.process_tree_kill == "applied"
+        && controls.network == "denied"
+        && controls.filesystem_write.starts_with("denied_except:")
 }
 
 trait EvidenceRank {
@@ -489,13 +517,35 @@ mod tests {
     }
 
     fn seed(test_code: &str, status: Option<&str>) -> AlignmentReportWithEvidence {
-        seed_with_mode(test_code, status, "fixture")
+        seed_with_controls(test_code, status, "fixture", Default::default())
     }
 
     fn seed_with_mode(
         test_code: &str,
         status: Option<&str>,
         generation_mode: &str,
+    ) -> AlignmentReportWithEvidence {
+        seed_with_controls(
+            test_code,
+            status,
+            generation_mode,
+            crate::models::test::ExecutionControls {
+                profile: "macos_isolated".into(),
+                timeout: "applied".into(),
+                output_limit: "applied".into(),
+                process_tree_kill: "applied".into(),
+                network: "denied".into(),
+                filesystem_write: "denied_except:/tmp".into(),
+                child_process: "allowed_for_test_runtime".into(),
+            },
+        )
+    }
+
+    fn seed_with_controls(
+        test_code: &str,
+        status: Option<&str>,
+        generation_mode: &str,
+        execution_controls: crate::models::test::ExecutionControls,
     ) -> AlignmentReportWithEvidence {
         let fixture = Fixture::new();
         let db = Database::new(&fixture.root.join("app-data")).expect("db");
@@ -539,7 +589,7 @@ mod tests {
                     stdout: String::new(),
                     stderr: String::new(),
                     executed_at: "2026-01-01T00:00:00Z".into(),
-                    execution_controls: Default::default(),
+                    execution_controls,
                 },
             )
             .expect("result");
@@ -615,14 +665,32 @@ mod tests {
 
     #[test]
     fn meaningful_linked_pass_is_verified() {
+        let report = seed_with_mode(
+            "# Requirement-ID: $REQ\ndef test_add():\n    assert add_numbers(2, 3) == 5\n",
+            Some("passed"),
+            "fixture",
+        );
+        assert_eq!(
+            report.alignments[0].classification,
+            AlignmentClassification::Verified
+        );
+    }
+
+    #[test]
+    fn meaningful_python_pass_with_unproven_enforcement_is_partial() {
         let report = seed(
             "# Requirement-ID: $REQ\ndef test_add():\n    assert add_numbers(2, 3) == 5\n",
             Some("passed"),
         );
         assert_eq!(
             report.alignments[0].classification,
-            AlignmentClassification::Verified
+            AlignmentClassification::Partial
         );
+        assert_eq!(
+            report.alignments[0].reason,
+            AlignmentReason::InsufficientEnforcement
+        );
+        assert_eq!(report.report.verified_requirements, 0);
     }
 
     #[test]
@@ -735,5 +803,27 @@ mod tests {
             AlignmentReason::UnsupportedLanguage
         );
         assert_eq!(report.report.skipped_languages, vec!["rs"]);
+    }
+    #[test]
+    fn python_verification_requires_sufficient_typed_enforcement() {
+        let bounded = crate::models::test::ExecutionControls {
+            profile: "bounded".into(),
+            timeout: "applied".into(),
+            output_limit: "applied".into(),
+            process_tree_kill: "applied".into(),
+            network: "not_enforced".into(),
+            filesystem_write: "not_enforced".into(),
+            child_process: "not_enforced".into(),
+        };
+        assert!(!enforcement_sufficient("pytest", &bounded));
+        assert!(enforcement_sufficient("vitest", &bounded));
+
+        let isolated = crate::models::test::ExecutionControls {
+            profile: "macos_isolated".into(),
+            network: "denied".into(),
+            filesystem_write: "denied_except:/tmp".into(),
+            ..bounded
+        };
+        assert!(enforcement_sufficient("unittest", &isolated));
     }
 }

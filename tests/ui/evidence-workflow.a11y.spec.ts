@@ -46,6 +46,15 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   });
   await expect(page.getByText(/Bundle status: unsupported/i)).toBeVisible();
   await expect(page.getByText(/never added to this project/i)).toBeVisible();
+  await page.getByLabel("Choose bundle JSON").setInputFiles({
+    name: "signed-evidence-bundle.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("preview-signed"),
+  });
+  await expect(page.getByText(/Bundle status: signed_untrusted/i)).toBeVisible();
+  await expect(page.getByLabel("Trust decision provenance")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mark trusted" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Mark revoked" })).toBeDisabled();
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Evidence bundle" })).toBeVisible();

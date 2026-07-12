@@ -13,6 +13,7 @@ import type {
   AlignmentReportWithEvidence,
   EvidenceBundleVerification,
   SigningIdentityInfo,
+  SignerTrustRecord,
   AppSettings,
   EvidenceRecord,
   LinkRepositoryTestRequest,
@@ -542,6 +543,21 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         2,
       ) as T;
     case "verify_evidence_bundle":
+      if (String(args.bundle_json).includes("preview-signed")) {
+        return {
+          status: "signed_untrusted",
+          schema: "speccompanion.evidence-bundle.v1",
+          payload_integrity: "verified",
+          bundle_integrity: "verified",
+          report_integrity: "verified",
+          signature_status: "valid_untrusted_identity",
+          freshness_status: "fresh",
+          diagnostics: [],
+          trust_status: "unknown",
+          key_fingerprint: "a".repeat(64),
+          signer_identity: "Preview signer",
+        } as T;
+      }
       return {
         status: "unsupported",
         schema: "unknown",
@@ -551,6 +567,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         signature_status: "unknown",
         freshness_status: "unknown",
         diagnostics: ["Browser preview cannot run the native offline bundle verifier."],
+        trust_status: "unknown",
       } as T;
     default:
       throw new Error(`Unsupported browser preview command: ${command}`);
@@ -651,8 +668,29 @@ export const listReports = (projectId: string) =>
 export const exportReport = (reportId: string, format: "json" | "html" | "csv" | "bundle") =>
   invoke<string>("export_report", { report_id: reportId, format });
 
-export const verifyEvidenceBundle = (bundleJson: string) =>
-  invoke<EvidenceBundleVerification>("verify_evidence_bundle", { bundle_json: bundleJson });
+export const verifyEvidenceBundle = (bundleJson: string, projectId?: string) =>
+  invoke<EvidenceBundleVerification>("verify_evidence_bundle", {
+    bundle_json: bundleJson,
+    project_id: projectId,
+  });
+
+export const setSignerTrust = (
+  projectId: string,
+  keyFingerprint: string,
+  signerIdentity: string,
+  status: "trusted" | "revoked",
+  provenance: string,
+) =>
+  invoke<SignerTrustRecord>("set_signer_trust", {
+    project_id: projectId,
+    key_fingerprint: keyFingerprint,
+    signer_identity: signerIdentity,
+    status,
+    provenance,
+  });
+
+export const listSignerTrust = (projectId: string) =>
+  invoke<SignerTrustRecord[]>("list_signer_trust", { project_id: projectId });
 
 export const createSigningIdentity = (signerIdentity: string) =>
   invoke<SigningIdentityInfo>("create_signing_identity", { signer_identity: signerIdentity });

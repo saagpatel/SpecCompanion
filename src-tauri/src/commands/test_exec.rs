@@ -46,6 +46,9 @@ pub async fn execute_tests(
     }; // lock released before any I/O
 
     let total = tests_to_run.len();
+    let settings = crate::commands::test_gen::load_settings_internal(&app_handle)?;
+    let python_environment = (!settings.python_environment_root.trim().is_empty())
+        .then_some(settings.python_environment_root.as_str());
     let mut results = Vec::new();
     let mut executed_code_updates = Vec::new();
 
@@ -105,10 +108,18 @@ pub async fn execute_tests(
                 stderr: error.clone(),
             },
             Ok(_) => match test.framework.as_str() {
-                "pytest" => test_runner::run_pytest_test(&test_file_path, &codebase_path),
+                "pytest" => test_runner::run_pytest_test_with_environment(
+                    &test_file_path,
+                    &codebase_path,
+                    python_environment,
+                ),
                 "jest" => test_runner::run_jest_test(&test_file_path, &codebase_path),
                 "vitest" => test_runner::run_vitest_test(&test_file_path, &codebase_path),
-                "unittest" => test_runner::run_unittest_test(&test_file_path, &codebase_path),
+                "unittest" => test_runner::run_unittest_test_with_environment(
+                    &test_file_path,
+                    &codebase_path,
+                    python_environment,
+                ),
                 unsupported => Ok(test_runner::ExecutionResult {
                     status: "unsupported".into(),
                     execution_time_ms: 0,

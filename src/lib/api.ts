@@ -41,6 +41,7 @@ const mockState: MockState = {
     default_framework: "jest",
     default_mode: "template",
     scan_exclusions: ["node_modules", "dist", ".git"],
+    python_environment_root: "",
   },
 };
 

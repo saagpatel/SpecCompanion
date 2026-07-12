@@ -16,6 +16,8 @@ pub struct AppSettings {
     pub default_framework: String,
     pub default_mode: String,
     pub scan_exclusions: Vec<String>,
+    #[serde(default)]
+    pub python_environment_root: String,
 }
 
 impl Default for AppSettings {
@@ -25,6 +27,7 @@ impl Default for AppSettings {
             default_framework: "jest".to_string(),
             default_mode: "template".to_string(),
             scan_exclusions: Vec::new(),
+            python_environment_root: String::new(),
         }
     }
 }

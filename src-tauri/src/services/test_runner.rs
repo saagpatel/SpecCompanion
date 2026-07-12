@@ -39,12 +39,38 @@ pub fn run_pytest_test(test_file: &str, working_dir: &str) -> Result<ExecutionRe
     run_pytest_test_with_config(test_file, working_dir, RunnerConfig::default())
 }
 
+pub fn run_pytest_test_with_environment(
+    test_file: &str,
+    working_dir: &str,
+    environment_root: Option<&str>,
+) -> Result<ExecutionResult, AppError> {
+    run_pytest_test_with_runtime_config(
+        test_file,
+        working_dir,
+        environment_root,
+        RunnerConfig::default(),
+    )
+}
+
 pub fn run_vitest_test(test_file: &str, working_dir: &str) -> Result<ExecutionResult, AppError> {
     run_vitest_test_with_config(test_file, working_dir, RunnerConfig::default())
 }
 
 pub fn run_unittest_test(test_file: &str, working_dir: &str) -> Result<ExecutionResult, AppError> {
     run_unittest_test_with_config(test_file, working_dir, RunnerConfig::default())
+}
+
+pub fn run_unittest_test_with_environment(
+    test_file: &str,
+    working_dir: &str,
+    environment_root: Option<&str>,
+) -> Result<ExecutionResult, AppError> {
+    run_unittest_test_with_runtime_config(
+        test_file,
+        working_dir,
+        environment_root,
+        RunnerConfig::default(),
+    )
 }
 
 pub fn run_jest_test_with_config(
@@ -92,11 +118,24 @@ pub fn run_pytest_test_with_config(
     working_dir: &str,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
+    run_pytest_test_with_runtime_config(test_file, working_dir, None, config)
+}
+
+fn run_pytest_test_with_runtime_config(
+    test_file: &str,
+    working_dir: &str,
+    environment_root: Option<&str>,
+    config: RunnerConfig,
+) -> Result<ExecutionResult, AppError> {
     let paths = validate_execution_paths(test_file, working_dir)?;
     if paths.test.extension().and_then(|value| value.to_str()) != Some("py") {
         return Ok(blocked("PyTest execution requires a Python test file"));
     }
-    let Some(python) = find_allowed_python(&paths.root) else {
+    let python = match resolve_python(&paths.root, environment_root) {
+        Ok(python) => python,
+        Err(message) => return Ok(runtime_unavailable(&message)),
+    };
+    let Some(python) = python else {
         return Ok(runtime_unavailable(
             "Python 3 was not found on the allowlisted PATH",
         ));
@@ -164,11 +203,24 @@ pub fn run_unittest_test_with_config(
     working_dir: &str,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
+    run_unittest_test_with_runtime_config(test_file, working_dir, None, config)
+}
+
+fn run_unittest_test_with_runtime_config(
+    test_file: &str,
+    working_dir: &str,
+    environment_root: Option<&str>,
+    config: RunnerConfig,
+) -> Result<ExecutionResult, AppError> {
     let paths = validate_execution_paths(test_file, working_dir)?;
     if paths.test.extension().and_then(|value| value.to_str()) != Some("py") {
         return Ok(blocked("unittest execution requires a Python test file"));
     }
-    let Some(python) = find_allowed_python(&paths.root) else {
+    let python = match resolve_python(&paths.root, environment_root) {
+        Ok(python) => python,
+        Err(message) => return Ok(runtime_unavailable(&message)),
+    };
+    let Some(python) = python else {
         return Ok(runtime_unavailable(
             "Python 3 was not found on the allowlisted PATH",
         ));
@@ -364,6 +416,46 @@ fn find_allowed_python(project_root: &Path) -> Option<PathBuf> {
     None
 }
 
+fn resolve_python(
+    project_root: &Path,
+    environment_root: Option<&str>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(environment_root) = environment_root else {
+        return Ok(find_allowed_python(project_root));
+    };
+    let configured = Path::new(environment_root);
+    if !configured.is_absolute() {
+        return Err("Trusted Python environment must use an absolute path".into());
+    }
+    let metadata = std::fs::symlink_metadata(configured)
+        .map_err(|_| "Trusted Python environment is missing or unreadable".to_string())?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(
+            "Trusted Python environment root must be a real directory, not a symlink".into(),
+        );
+    }
+    let root = std::fs::canonicalize(configured)
+        .map_err(|_| "Trusted Python environment cannot be resolved".to_string())?;
+    if root.starts_with(project_root) || project_root.starts_with(&root) {
+        return Err("Trusted Python environment must be separate from the target project".into());
+    }
+    #[cfg(windows)]
+    let candidates = [root.join("Scripts/python.exe")];
+    #[cfg(not(windows))]
+    let candidates = [root.join("bin/python3"), root.join("bin/python")];
+    for candidate in candidates {
+        if candidate.is_file() {
+            let target = std::fs::canonicalize(&candidate)
+                .map_err(|_| "Trusted Python interpreter cannot be resolved".to_string())?;
+            if target.starts_with(project_root) {
+                return Err("Trusted Python interpreter resolves into the target project".into());
+            }
+            return Ok(Some(candidate));
+        }
+    }
+    Err("Trusted Python environment has no bin/python3 or bin/python interpreter".into())
+}
+
 fn safe_path(project_root: &Path, prepend: Option<&Path>) -> std::ffi::OsString {
     let mut entries = Vec::new();
     if let Some(prepend) = prepend {
@@ -506,6 +598,75 @@ mod tests {
             normalize_runtime_failure("failed".into(), "/usr/bin/python3: No module named pytest"),
             "runtime_unavailable"
         );
+    }
+
+    #[test]
+    fn trusted_python_environment_must_be_absolute_and_external() {
+        let fixture = Fixture::new();
+        let project_root = fs::canonicalize(&fixture.root).expect("canonical project");
+        let relative = resolve_python(&project_root, Some(".venv")).expect_err("relative path");
+        assert!(relative.contains("absolute path"));
+
+        let inside = fixture.root.join(".venv");
+        fs::create_dir_all(inside.join("bin")).expect("environment tree");
+        let rejected = resolve_python(&project_root, Some(inside.to_string_lossy().as_ref()))
+            .expect_err("project-controlled environment");
+        assert!(rejected.contains("separate from the target project"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn trusted_python_environment_root_cannot_be_a_symlink() {
+        use std::os::unix::fs::symlink;
+        let fixture = Fixture::new();
+        let environment =
+            std::env::temp_dir().join(format!("spec-python-environment-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&environment).expect("environment");
+        let link = fixture.root.with_extension("environment-link");
+        symlink(&environment, &link).expect("environment link");
+        let rejected = resolve_python(&fixture.root, Some(link.to_string_lossy().as_ref()))
+            .expect_err("symlink root");
+        assert!(rejected.contains("not a symlink"));
+        let _ = fs::remove_file(link);
+        let _ = fs::remove_dir_all(environment);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn trusted_external_environment_executes_without_package_installation() {
+        use std::os::unix::fs::symlink;
+        let fixture = Fixture::new();
+        let environment =
+            std::env::temp_dir().join(format!("spec-python-environment-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(environment.join("bin")).expect("environment bin");
+        let system_python = find_allowed_python(&fixture.root).expect("system Python");
+        symlink(system_python, environment.join("bin/python3")).expect("python entry");
+        let test = fixture.root.join("trusted_runtime_test.py");
+        fs::write(
+            &test,
+            "import unittest\n\nclass TrustedRuntimeTest(unittest.TestCase):\n    def test_runtime(self):\n        self.assertEqual(2 + 3, 5)\n",
+        )
+        .expect("test");
+        let result = run_unittest_test_with_environment(
+            test.to_string_lossy().as_ref(),
+            fixture.root.to_string_lossy().as_ref(),
+            Some(environment.to_string_lossy().as_ref()),
+        )
+        .expect("execution result");
+        assert_eq!(result.status, "passed", "stderr: {}", result.stderr);
+        let _ = fs::remove_dir_all(environment);
+    }
+
+    #[test]
+    #[ignore = "set SPECCOMPANION_DOGFOOD_PROJECT, SPECCOMPANION_DOGFOOD_TEST, and SPECCOMPANION_DOGFOOD_PYTHON_ENV"]
+    fn dogfoods_a_dependencyful_external_python_environment() {
+        let project = std::env::var("SPECCOMPANION_DOGFOOD_PROJECT").expect("dogfood project");
+        let test = std::env::var("SPECCOMPANION_DOGFOOD_TEST").expect("dogfood test");
+        let environment =
+            std::env::var("SPECCOMPANION_DOGFOOD_PYTHON_ENV").expect("dogfood environment");
+        let result = run_pytest_test_with_environment(&test, &project, Some(&environment))
+            .expect("dogfood execution");
+        assert_eq!(result.status, "passed", "stderr: {}", result.stderr);
     }
 
     #[cfg(unix)]

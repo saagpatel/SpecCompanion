@@ -3,7 +3,10 @@ use crate::db::Database;
 use crate::errors::AppError;
 use crate::models::report::{AlignmentReport, AlignmentReportWithEvidence};
 use crate::services::alignment;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{DateTime, Utc};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
@@ -25,6 +28,14 @@ struct EvidenceBundleManifest {
     payload_sha256: String,
     signature_status: String,
     trust_scope: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    signature_algorithm: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    signer_identity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    public_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    key_fingerprint: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -38,6 +49,8 @@ struct EvidenceBundle<'a> {
     manifest: &'a EvidenceBundleManifest,
     report: &'a AlignmentReportWithEvidence,
     bundle_sha256: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    signature: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -46,6 +59,8 @@ struct ImportedEvidenceBundle {
     manifest: EvidenceBundleManifest,
     report: AlignmentReportWithEvidence,
     bundle_sha256: String,
+    #[serde(default)]
+    signature: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -60,7 +75,19 @@ pub struct EvidenceBundleVerification {
     pub freshness_status: String,
     pub age_seconds: Option<i64>,
     pub diagnostics: Vec<String>,
+    pub key_fingerprint: Option<String>,
+    pub signer_identity: Option<String>,
 }
+
+#[derive(Serialize)]
+pub struct SigningIdentityInfo {
+    pub signer_identity: String,
+    pub key_fingerprint: String,
+    pub public_key: String,
+    pub storage: String,
+}
+
+const SIGNING_KEYRING_SERVICE: &str = "com.speccompanion.evidence-signing.v1";
 
 #[tauri::command]
 pub fn generate_alignment_report(
@@ -211,6 +238,66 @@ pub fn verify_evidence_bundle(bundle_json: String) -> EvidenceBundleVerification
     verify_evidence_bundle_at(&bundle_json, Utc::now())
 }
 
+#[tauri::command]
+pub fn create_signing_identity(signer_identity: String) -> Result<SigningIdentityInfo, AppError> {
+    let identity = signer_identity.trim();
+    if identity.is_empty() || identity.len() > 120 {
+        return Err(AppError::InvalidInput(
+            "Signer identity must be between 1 and 120 characters".into(),
+        ));
+    }
+    let key = SigningKey::generate(&mut OsRng);
+    let entry = keyring::Entry::new(SIGNING_KEYRING_SERVICE, identity)
+        .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?;
+    match entry.get_secret() {
+        Ok(_) => {
+            return Err(AppError::InvalidInput(
+                "Signing identity already exists; implicit key rotation is refused".into(),
+            ));
+        }
+        Err(keyring::Error::NoEntry) => {}
+        Err(error) => {
+            return Err(AppError::General(format!(
+                "Could not inspect signing identity: {error}"
+            )));
+        }
+    }
+    entry
+        .set_secret(&key.to_bytes())
+        .map_err(|error| AppError::General(format!("Could not store signing key: {error}")))?;
+    Ok(signing_identity_info(identity, &key))
+}
+
+#[tauri::command]
+pub fn export_signed_evidence_bundle(
+    state: State<'_, Database>,
+    report_id: String,
+    signer_identity: String,
+) -> Result<String, AppError> {
+    let identity = signer_identity.trim();
+    if report_id.trim().is_empty() || identity.is_empty() {
+        return Err(AppError::InvalidInput(
+            "Report ID and signer identity are required".into(),
+        ));
+    }
+    let entry = keyring::Entry::new(SIGNING_KEYRING_SERVICE, identity)
+        .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?;
+    let secret = entry
+        .get_secret()
+        .map_err(|error| AppError::General(format!("Signing identity unavailable: {error}")))?;
+    let seed: [u8; 32] = secret
+        .as_slice()
+        .try_into()
+        .map_err(|_| AppError::General("Stored signing key is malformed".into()))?;
+    let key = SigningKey::from_bytes(&seed);
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    let report = queries::get_alignment_report(&conn, &report_id)?;
+    export_signed_bundle(&report, Utc::now(), identity, &key)
+}
+
 fn export_evidence_bundle(
     report: &AlignmentReportWithEvidence,
     exported_at: DateTime<Utc>,
@@ -240,6 +327,10 @@ fn export_evidence_bundle(
         payload_sha256: sha256_hex(&payload),
         signature_status: "unsigned".into(),
         trust_scope: "self_hash_integrity_only_no_authorship_or_external_attestation".into(),
+        signature_algorithm: None,
+        signer_identity: None,
+        public_key: None,
+        key_fingerprint: None,
     };
     let unsigned = serde_json::to_vec(&UnsignedEvidenceBundle {
         manifest: &manifest,
@@ -249,6 +340,48 @@ fn export_evidence_bundle(
         manifest: &manifest,
         report,
         bundle_sha256: sha256_hex(&unsigned),
+        signature: None,
+    })
+    .map_err(AppError::Serde)
+}
+
+fn signing_identity_info(identity: &str, key: &SigningKey) -> SigningIdentityInfo {
+    let public = key.verifying_key().to_bytes();
+    SigningIdentityInfo {
+        signer_identity: identity.into(),
+        key_fingerprint: sha256_hex(&public),
+        public_key: BASE64.encode(public),
+        storage: "os_keychain".into(),
+    }
+}
+
+fn export_signed_bundle(
+    report: &AlignmentReportWithEvidence,
+    exported_at: DateTime<Utc>,
+    identity: &str,
+    key: &SigningKey,
+) -> Result<String, AppError> {
+    let unsigned_json = export_evidence_bundle(report, exported_at)?;
+    let unsigned: ImportedEvidenceBundle = serde_json::from_str(&unsigned_json)?;
+    let public = key.verifying_key().to_bytes();
+    let mut manifest = unsigned.manifest;
+    manifest.signature_status = "signed_untrusted_identity".into();
+    manifest.trust_scope = "signature_proves_key_possession_identity_requires_trust".into();
+    manifest.signature_algorithm = Some("ed25519".into());
+    manifest.signer_identity = Some(identity.into());
+    manifest.public_key = Some(BASE64.encode(public));
+    manifest.key_fingerprint = Some(sha256_hex(&public));
+    let bytes = serde_json::to_vec(&UnsignedEvidenceBundle {
+        manifest: &manifest,
+        report,
+    })?;
+    let digest = sha256_hex(&bytes);
+    let signature = key.sign(digest.as_bytes());
+    serde_json::to_string_pretty(&EvidenceBundle {
+        manifest: &manifest,
+        report,
+        bundle_sha256: digest,
+        signature: Some(BASE64.encode(signature.to_bytes())),
     })
     .map_err(AppError::Serde)
 }
@@ -268,6 +401,8 @@ fn verify_evidence_bundle_at(
         freshness_status: "unknown".into(),
         age_seconds: None,
         diagnostics: Vec::new(),
+        key_fingerprint: None,
+        signer_identity: None,
     };
     let bundle: ImportedEvidenceBundle = match serde_json::from_str(bundle_json) {
         Ok(bundle) => bundle,
@@ -289,10 +424,14 @@ fn verify_evidence_bundle_at(
         ));
         return result;
     }
-    if bundle.manifest.signature_status != "unsigned"
-        || bundle.manifest.trust_scope
-            != "self_hash_integrity_only_no_authorship_or_external_attestation"
-    {
+    let unsigned_contract = bundle.manifest.signature_status == "unsigned"
+        && bundle.manifest.trust_scope
+            == "self_hash_integrity_only_no_authorship_or_external_attestation"
+        && bundle.signature.is_none();
+    let signed_contract = bundle.manifest.signature_status == "signed_untrusted_identity"
+        && bundle.manifest.trust_scope == "signature_proves_key_possession_identity_requires_trust"
+        && bundle.manifest.signature_algorithm.as_deref() == Some("ed25519");
+    if !unsigned_contract && !signed_contract {
         result.status = "unsupported".into();
         result
             .diagnostics
@@ -322,6 +461,33 @@ fn verify_evidence_bundle_at(
         result
             .diagnostics
             .push("Whole-bundle digest does not match".into());
+    }
+    if signed_contract {
+        result.key_fingerprint = bundle.manifest.key_fingerprint.clone();
+        result.signer_identity = bundle.manifest.signer_identity.clone();
+        let signature_valid = (|| {
+            let public_bytes = BASE64.decode(bundle.manifest.public_key.as_ref()?).ok()?;
+            let public_array: [u8; 32] = public_bytes.try_into().ok()?;
+            let verifying_key = VerifyingKey::from_bytes(&public_array).ok()?;
+            if sha256_hex(&public_array) != *bundle.manifest.key_fingerprint.as_ref()? {
+                return None;
+            }
+            let signature_bytes = BASE64.decode(bundle.signature.as_ref()?).ok()?;
+            let signature = Signature::from_slice(&signature_bytes).ok()?;
+            verifying_key
+                .verify(bundle.bundle_sha256.as_bytes(), &signature)
+                .ok()?;
+            Some(())
+        })()
+        .is_some();
+        if !signature_valid {
+            result
+                .diagnostics
+                .push("Ed25519 signature or key fingerprint is invalid".into());
+            result.signature_status = "invalid".into();
+        } else {
+            result.signature_status = "valid_untrusted_identity".into();
+        }
     }
     if bundle.manifest.report_id != bundle.report.report.id
         || bundle.manifest.project_id != bundle.report.report.project_id
@@ -376,9 +542,14 @@ fn verify_evidence_bundle_at(
         && result.bundle_integrity == "verified"
         && result.report_integrity == "verified"
         && identity_matches
+        && (unsigned_contract || result.signature_status == "valid_untrusted_identity")
     {
         result.status = if result.freshness_status == "fresh" {
-            "verified"
+            if signed_contract {
+                "signed_untrusted"
+            } else {
+                "verified"
+            }
         } else if result.freshness_status == "stale" {
             "stale"
         } else {
@@ -525,5 +696,30 @@ mod tests {
         assert_eq!(stale.status, "stale");
         assert_eq!(stale.payload_integrity, "verified");
         assert_eq!(stale.bundle_integrity, "verified");
+    }
+
+    #[test]
+    fn signed_bundle_proves_key_possession_but_not_identity_trust() {
+        let now = DateTime::parse_from_rfc3339("2026-07-11T01:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut source = report();
+        source.report.evidence_digest = alignment::digest_alignments(&source.alignments).unwrap();
+        let key = SigningKey::from_bytes(&[7_u8; 32]);
+        let bundle = export_signed_bundle(&source, now, "Release Engineering", &key).unwrap();
+        let verified = verify_evidence_bundle_at(&bundle, now);
+        assert_eq!(verified.status, "signed_untrusted");
+        assert_eq!(verified.signature_status, "valid_untrusted_identity");
+        assert_eq!(
+            verified.signer_identity.as_deref(),
+            Some("Release Engineering")
+        );
+        assert_eq!(verified.key_fingerprint.as_deref().unwrap().len(), 64);
+
+        let tampered = bundle.replace("Release Engineering", "Security Team");
+        let invalid = verify_evidence_bundle_at(&tampered, now);
+        assert_eq!(invalid.status, "invalid");
+        assert_eq!(invalid.bundle_integrity, "invalid");
+        assert_eq!(invalid.signature_status, "valid_untrusted_identity");
     }
 }

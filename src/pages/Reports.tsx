@@ -7,6 +7,8 @@ import {
   useGenerateAlignmentReport,
   useExportReport,
   useVerifyEvidenceBundle,
+  useCreateSigningIdentity,
+  useExportSignedEvidenceBundle,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -19,6 +21,9 @@ export function Reports() {
   const generateReport = useGenerateAlignmentReport(projectId ?? "");
   const exportReport = useExportReport();
   const verifyBundle = useVerifyEvidenceBundle();
+  const createSigner = useCreateSigningIdentity();
+  const exportSigned = useExportSignedEvidenceBundle();
+  const [signerIdentity, setSignerIdentity] = useState("");
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
   const {
@@ -277,6 +282,73 @@ export function Reports() {
             Evidence bundles are self-hashed and include export-time freshness. They are unsigned
             and do not prove authorship or external attestation.
           </p>
+          <section
+            aria-labelledby="signed-export-heading"
+            className="border-border rounded-lg border p-4"
+          >
+            <h3 id="signed-export-heading" className="text-sm font-semibold">
+              Optional signed bundle
+            </h3>
+            <p className="text-text-muted mt-1 text-xs">
+              The private Ed25519 key stays in the OS Keychain. A valid signature proves key
+              possession; the identity label remains untrusted until its fingerprint is verified
+              separately.
+            </p>
+            <label className="text-text-muted mt-3 block text-xs" htmlFor="signer-identity">
+              Signer identity label
+            </label>
+            <input
+              id="signer-identity"
+              value={signerIdentity}
+              onChange={(event) => setSignerIdentity(event.target.value)}
+              maxLength={120}
+              className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+            />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!signerIdentity.trim() || createSigner.isPending}
+                onClick={() => createSigner.mutate(signerIdentity)}
+                className="text-primary-light text-sm hover:underline disabled:opacity-50"
+              >
+                Create Keychain identity
+              </button>
+              <button
+                type="button"
+                disabled={!selectedReportId || !signerIdentity.trim() || exportSigned.isPending}
+                onClick={() =>
+                  exportSigned.mutate(
+                    { reportId: selectedReportId!, identity: signerIdentity },
+                    {
+                      onSuccess: (content) => {
+                        const url = URL.createObjectURL(
+                          new Blob([content], { type: "application/json" }),
+                        );
+                        const anchor = document.createElement("a");
+                        anchor.href = url;
+                        anchor.download = "signed-alignment-evidence-bundle.json";
+                        anchor.click();
+                        URL.revokeObjectURL(url);
+                      },
+                    },
+                  )
+                }
+                className="text-primary-light text-sm hover:underline disabled:opacity-50"
+              >
+                Export signed bundle
+              </button>
+            </div>
+            {createSigner.data && (
+              <p role="status" className="text-success mt-3 text-xs break-all">
+                Keychain identity created. Fingerprint: {createSigner.data.key_fingerprint}
+              </p>
+            )}
+            {(createSigner.isError || exportSigned.isError) && (
+              <p role="alert" className="text-danger mt-3 text-xs">
+                The signing operation failed. No unsigned fallback was substituted.
+              </p>
+            )}
+          </section>
 
           {/* Evidence */}
           <div>

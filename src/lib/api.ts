@@ -12,6 +12,7 @@ import type {
   AlignmentReport,
   AlignmentReportWithEvidence,
   EvidenceBundleVerification,
+  SigningIdentityInfo,
   AppSettings,
   EvidenceRecord,
   LinkRepositoryTestRequest,
@@ -652,3 +653,12 @@ export const exportReport = (reportId: string, format: "json" | "html" | "csv" |
 
 export const verifyEvidenceBundle = (bundleJson: string) =>
   invoke<EvidenceBundleVerification>("verify_evidence_bundle", { bundle_json: bundleJson });
+
+export const createSigningIdentity = (signerIdentity: string) =>
+  invoke<SigningIdentityInfo>("create_signing_identity", { signer_identity: signerIdentity });
+
+export const exportSignedEvidenceBundle = (reportId: string, signerIdentity: string) =>
+  invoke<string>("export_signed_evidence_bundle", {
+    report_id: reportId,
+    signer_identity: signerIdentity,
+  });

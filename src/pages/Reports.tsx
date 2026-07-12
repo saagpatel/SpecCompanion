@@ -32,7 +32,7 @@ export function Reports() {
     }
   }, [reports, selectedReportId]);
 
-  const handleExport = (format: "json" | "html" | "csv") => {
+  const handleExport = (format: "json" | "html" | "csv" | "bundle") => {
     if (!selectedReportId) return;
     exportReport.mutate(
       { reportId: selectedReportId, format },
@@ -40,12 +40,17 @@ export function Reports() {
         onSuccess: (content) => {
           const blob = new Blob([content], {
             type:
-              format === "json" ? "application/json" : format === "html" ? "text/html" : "text/csv",
+              format === "json" || format === "bundle"
+                ? "application/json"
+                : format === "html"
+                  ? "text/html"
+                  : "text/csv",
           });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = `alignment-report.${format}`;
+          a.download =
+            format === "bundle" ? "alignment-evidence-bundle.json" : `alignment-report.${format}`;
           a.click();
           URL.revokeObjectURL(url);
         },
@@ -182,6 +187,12 @@ export function Reports() {
           <div className="flex gap-2">
             <span className="text-text-muted pt-1 text-sm">Export:</span>
             <button
+              onClick={() => handleExport("bundle")}
+              className="text-primary-light text-sm hover:underline"
+            >
+              Evidence bundle
+            </button>
+            <button
               onClick={() => handleExport("json")}
               className="text-primary-light text-sm hover:underline"
             >
@@ -200,6 +211,10 @@ export function Reports() {
               CSV
             </button>
           </div>
+          <p className="text-text-muted text-xs">
+            Evidence bundles are self-hashed and include export-time freshness. They are unsigned
+            and do not prove authorship or external attestation.
+          </p>
 
           {/* Evidence */}
           <div>

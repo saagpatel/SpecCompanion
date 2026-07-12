@@ -635,5 +635,5 @@ export const getAlignmentReport = (id: string) =>
 export const listReports = (projectId: string) =>
   invoke<AlignmentReport[]>("list_reports", { project_id: projectId });
 
-export const exportReport = (reportId: string, format: "json" | "html" | "csv") =>
+export const exportReport = (reportId: string, format: "json" | "html" | "csv" | "bundle") =>
   invoke<string>("export_report", { report_id: reportId, format });

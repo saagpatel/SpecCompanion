@@ -30,7 +30,12 @@ export function useGenerateAlignmentReport(projectId: string) {
 
 export function useExportReport() {
   return useMutation({
-    mutationFn: ({ reportId, format }: { reportId: string; format: "json" | "html" | "csv" }) =>
-      api.exportReport(reportId, format),
+    mutationFn: ({
+      reportId,
+      format,
+    }: {
+      reportId: string;
+      format: "json" | "html" | "csv" | "bundle";
+    }) => api.exportReport(reportId, format),
   });
 }

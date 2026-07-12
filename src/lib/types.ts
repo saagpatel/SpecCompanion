@@ -163,6 +163,7 @@ export interface TrustedPythonEnvironment {
   root: string;
   fingerprint: string;
   interpreter: string;
+  capability_profile: "bounded" | "macos_isolated";
 }
 
 export interface PythonRuntimeStatus {

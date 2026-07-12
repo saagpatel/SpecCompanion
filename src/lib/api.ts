@@ -322,6 +322,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         root,
         interpreter: `${root}/bin/python3`,
         fingerprint: "sha256:mock-attestation",
+        capability_profile: (args.capability_profile as "bounded" | "macos_isolated") ?? "bounded",
       };
       mockState.settings.python_environments[projectId] = runtime;
       return {
@@ -571,10 +572,15 @@ export const loadSettings = () => invoke<AppSettings>("load_settings");
 export const executeTests = (projectId: string, testIds: string[]) =>
   invoke<TestResult[]>("execute_tests", { project_id: projectId, test_ids: testIds });
 
-export const configureProjectPythonRuntime = (projectId: string, environmentRoot: string) =>
+export const configureProjectPythonRuntime = (
+  projectId: string,
+  environmentRoot: string,
+  capabilityProfile: "bounded" | "macos_isolated",
+) =>
   invoke<PythonRuntimeStatus>("configure_project_python_runtime", {
     project_id: projectId,
     environment_root: environmentRoot,
+    capability_profile: capabilityProfile,
   });
 
 export const getProjectPythonRuntimeStatus = (projectId: string) =>

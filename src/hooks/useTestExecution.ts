@@ -41,7 +41,8 @@ export function usePythonRuntime(projectId: string) {
 export function useConfigurePythonRuntime(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (root: string) => api.configureProjectPythonRuntime(projectId, root),
+    mutationFn: ({ root, profile }: { root: string; profile: "bounded" | "macos_isolated" }) =>
+      api.configureProjectPythonRuntime(projectId, root, profile),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["python-runtime", projectId] }),
   });
 }

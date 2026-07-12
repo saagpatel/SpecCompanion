@@ -13,6 +13,9 @@ import {
   useSignerTrust,
   useSignerTrustHistory,
   useRotateSignerTrust,
+  useExportSignerTrustPolicy,
+  useVerifySignerTrustPolicy,
+  useImportSignerTrustPolicy,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -34,6 +37,13 @@ export function Reports() {
   const trustHistory = useSignerTrustHistory(projectId);
   const rotateTrust = useRotateSignerTrust(projectId ?? "");
   const [previousFingerprint, setPreviousFingerprint] = useState("");
+  const [policySignerIdentity, setPolicySignerIdentity] = useState("");
+  const [recoveryBundle, setRecoveryBundle] = useState("");
+  const [recoveryFingerprint, setRecoveryFingerprint] = useState("");
+  const [recoveryProvenance, setRecoveryProvenance] = useState("");
+  const exportTrustPolicy = useExportSignerTrustPolicy();
+  const verifyTrustPolicy = useVerifySignerTrustPolicy();
+  const importTrustPolicy = useImportSignerTrustPolicy(projectId ?? "");
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
   const {
@@ -313,6 +323,145 @@ export function Reports() {
             Rotation recorded. Re-verify the bundle to apply the new policy.
           </p>
         )}
+        <div className="border-border mt-4 border-t pt-4">
+          <h4 className="text-sm font-medium">Portable recovery policy</h4>
+          <p className="text-text-muted mt-1 text-xs">
+            Exports are signed. Imports verify integrity first, but recovery authority still
+            requires an out-of-band fingerprint match and recorded provenance.
+          </p>
+          <label htmlFor="policy-signer-identity" className="mt-2 block text-xs">
+            Keychain signing identity
+          </label>
+          <input
+            id="policy-signer-identity"
+            value={policySignerIdentity}
+            onChange={(event) => setPolicySignerIdentity(event.target.value)}
+            className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            disabled={
+              !policySignerIdentity.trim() ||
+              !trustPolicies.data?.length ||
+              exportTrustPolicy.isPending
+            }
+            onClick={() =>
+              exportTrustPolicy.mutate(
+                { projectId: projectId!, identity: policySignerIdentity },
+                {
+                  onSuccess: (content) => {
+                    const url = URL.createObjectURL(
+                      new Blob([content], { type: "application/json" }),
+                    );
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    anchor.download = "speccompanion-signer-trust-policy.json";
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                  },
+                },
+              )
+            }
+            className="text-primary-light mt-2 text-sm hover:underline disabled:opacity-50"
+          >
+            Export signed trust policy
+          </button>
+          {exportTrustPolicy.isError && (
+            <p role="alert" className="text-danger mt-2 text-xs">
+              Signed policy export failed. No recovery package was created.
+            </p>
+          )}
+
+          <label className="text-primary-light mt-4 block cursor-pointer text-sm hover:underline">
+            Verify recovery policy JSON
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                const content = await file.text();
+                setRecoveryBundle(content);
+                setRecoveryFingerprint("");
+                verifyTrustPolicy.mutate(content);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          {verifyTrustPolicy.data && (
+            <div role="status" className="border-border mt-2 rounded border p-3 text-xs">
+              <p>
+                <strong>Recovery policy: {verifyTrustPolicy.data.status}</strong>
+              </p>
+              <p>
+                Source: {verifyTrustPolicy.data.source_project_name ?? "unknown"}. Policies:{" "}
+                {verifyTrustPolicy.data.policy_count}.
+              </p>
+              {verifyTrustPolicy.data.key_fingerprint && (
+                <p className="break-all">
+                  Package signer: {verifyTrustPolicy.data.key_fingerprint}
+                </p>
+              )}
+              {verifyTrustPolicy.data.diagnostics.map((diagnostic) => (
+                <p key={diagnostic}>{diagnostic}</p>
+              ))}
+            </div>
+          )}
+          {verifyTrustPolicy.data?.status === "valid_untrusted" &&
+            verifyTrustPolicy.data.key_fingerprint && (
+              <div className="mt-3">
+                <label htmlFor="recovery-fingerprint" className="block text-xs">
+                  Confirm package signer fingerprint
+                </label>
+                <input
+                  id="recovery-fingerprint"
+                  value={recoveryFingerprint}
+                  onChange={(event) => setRecoveryFingerprint(event.target.value)}
+                  className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 font-mono text-xs"
+                />
+                <label htmlFor="recovery-provenance" className="mt-2 block text-xs">
+                  Recovery verification provenance
+                </label>
+                <input
+                  id="recovery-provenance"
+                  value={recoveryProvenance}
+                  onChange={(event) => setRecoveryProvenance(event.target.value)}
+                  placeholder="Where was the expected fingerprint obtained?"
+                  className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  disabled={
+                    recoveryFingerprint.trim().toLowerCase() !==
+                      verifyTrustPolicy.data.key_fingerprint.toLowerCase() ||
+                    !recoveryProvenance.trim() ||
+                    importTrustPolicy.isPending
+                  }
+                  onClick={() =>
+                    importTrustPolicy.mutate({
+                      bundleJson: recoveryBundle,
+                      fingerprint: recoveryFingerprint,
+                      provenance: recoveryProvenance,
+                    })
+                  }
+                  className="text-primary-light mt-2 text-sm hover:underline disabled:opacity-50"
+                >
+                  Recover verified policy
+                </button>
+              </div>
+            )}
+          {importTrustPolicy.isError && (
+            <p role="alert" className="text-danger mt-2 text-xs">
+              Recovery failed. Existing project trust remains unchanged.
+            </p>
+          )}
+          {importTrustPolicy.isSuccess && (
+            <p role="status" className="mt-2 text-xs">
+              Recovered {importTrustPolicy.data.length} signer policies with immutable history.
+            </p>
+          )}
+        </div>
         <details className="mt-4">
           <summary className="text-primary-light cursor-pointer text-sm">
             Decision history ({trustHistory.data?.length ?? 0})

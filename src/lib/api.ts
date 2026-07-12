@@ -15,6 +15,7 @@ import type {
   SigningIdentityInfo,
   SignerTrustRecord,
   SignerTrustHistoryRecord,
+  TrustPolicyVerification,
   AppSettings,
   EvidenceRecord,
   LinkRepositoryTestRequest,
@@ -637,6 +638,48 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       }
       return updates as T;
     }
+    case "export_signer_trust_policy":
+      return JSON.stringify({ schema: "preview-signed-trust-policy" }, null, 2) as T;
+    case "verify_signer_trust_policy":
+      if (String(args.bundle_json).includes("preview-signed-trust-policy")) {
+        return {
+          status: "valid_untrusted",
+          schema: "speccompanion.signer-trust-policy.v1",
+          signer_identity: "Preview recovery signer",
+          key_fingerprint: "c".repeat(64),
+          source_project_name: "Preview source project",
+          policy_count: 1,
+          diagnostics: [
+            "Signature proves package integrity and key possession, not recovery authority",
+          ],
+        } as T;
+      }
+      return {
+        status: "invalid",
+        schema: "unknown",
+        policy_count: 0,
+        diagnostics: ["Malformed trust policy"],
+      } as T;
+    case "import_signer_trust_policy": {
+      if (args.expected_signer_fingerprint !== "c".repeat(64)) {
+        throw new Error("Recovery confirmation does not match the verified signer fingerprint");
+      }
+      const recovered: SignerTrustRecord = {
+        project_id: String(args.project_id),
+        key_fingerprint: "d".repeat(64),
+        signer_identity: "Recovered signer",
+        status: "trusted",
+        provenance: `recovered: ${String(args.recovery_provenance)}`,
+        updated_at: now(),
+      };
+      mockState.signerTrust.push(recovered);
+      mockState.signerTrustHistory.unshift({
+        ...recovered,
+        id: nextId("trust"),
+        recorded_at: recovered.updated_at,
+      });
+      return [recovered] as T;
+    }
     default:
       throw new Error(`Unsupported browser preview command: ${command}`);
   }
@@ -776,6 +819,28 @@ export const rotateSignerTrust = (
     new_fingerprint: newFingerprint,
     new_signer_identity: newSignerIdentity,
     provenance,
+  });
+
+export const exportSignerTrustPolicy = (projectId: string, signerIdentity: string) =>
+  invoke<string>("export_signer_trust_policy", {
+    project_id: projectId,
+    signer_identity: signerIdentity,
+  });
+
+export const verifySignerTrustPolicy = (bundleJson: string) =>
+  invoke<TrustPolicyVerification>("verify_signer_trust_policy", { bundle_json: bundleJson });
+
+export const importSignerTrustPolicy = (
+  projectId: string,
+  bundleJson: string,
+  expectedSignerFingerprint: string,
+  recoveryProvenance: string,
+) =>
+  invoke<SignerTrustRecord[]>("import_signer_trust_policy", {
+    project_id: projectId,
+    bundle_json: bundleJson,
+    expected_signer_fingerprint: expectedSignerFingerprint,
+    recovery_provenance: recoveryProvenance,
   });
 
 export const createSigningIdentity = (signerIdentity: string) =>

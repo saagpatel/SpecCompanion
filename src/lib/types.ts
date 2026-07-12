@@ -225,6 +225,16 @@ export interface SignerTrustHistoryRecord {
   recorded_at: string;
 }
 
+export interface TrustPolicyVerification {
+  status: "valid_untrusted" | "invalid" | "unsupported";
+  schema: string;
+  signer_identity?: string;
+  key_fingerprint?: string;
+  source_project_name?: string;
+  policy_count: number;
+  diagnostics: string[];
+}
+
 export interface SigningIdentityInfo {
   signer_identity: string;
   key_fingerprint: string;

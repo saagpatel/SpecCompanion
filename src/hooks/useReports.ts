@@ -40,8 +40,26 @@ export function useExportReport() {
   });
 }
 
-export function useVerifyEvidenceBundle() {
-  return useMutation({ mutationFn: (bundleJson: string) => api.verifyEvidenceBundle(bundleJson) });
+export function useVerifyEvidenceBundle(projectId?: string) {
+  return useMutation({
+    mutationFn: (bundleJson: string) => api.verifyEvidenceBundle(bundleJson, projectId),
+  });
+}
+
+export function useSetSignerTrust(projectId: string) {
+  return useMutation({
+    mutationFn: ({
+      fingerprint,
+      identity,
+      status,
+      provenance,
+    }: {
+      fingerprint: string;
+      identity: string;
+      status: "trusted" | "revoked";
+      provenance: string;
+    }) => api.setSignerTrust(projectId, fingerprint, identity, status, provenance),
+  });
 }
 
 export function useCreateSigningIdentity() {

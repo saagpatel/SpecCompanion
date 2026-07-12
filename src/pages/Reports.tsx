@@ -9,6 +9,7 @@ import {
   useVerifyEvidenceBundle,
   useCreateSigningIdentity,
   useExportSignedEvidenceBundle,
+  useSetSignerTrust,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -20,10 +21,12 @@ export function Reports() {
   const { data: reports, isError: reportsError } = useReports(projectId);
   const generateReport = useGenerateAlignmentReport(projectId ?? "");
   const exportReport = useExportReport();
-  const verifyBundle = useVerifyEvidenceBundle();
+  const verifyBundle = useVerifyEvidenceBundle(projectId);
   const createSigner = useCreateSigningIdentity();
   const exportSigned = useExportSignedEvidenceBundle();
   const [signerIdentity, setSignerIdentity] = useState("");
+  const [trustProvenance, setTrustProvenance] = useState("");
+  const signerTrust = useSetSignerTrust(projectId ?? "");
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
   const {
@@ -145,6 +148,7 @@ export function Reports() {
               Freshness: {verifyBundle.data.freshness_status}. Signature:{" "}
               {verifyBundle.data.signature_status}.
             </p>
+            <p>Signer trust: {verifyBundle.data.trust_status}.</p>
             {verifyBundle.data.signature_status === "unsigned" && (
               <p>Integrity is not proof of authorship or trusted time.</p>
             )}
@@ -154,6 +158,49 @@ export function Reports() {
                   <li key={diagnostic}>{diagnostic}</li>
                 ))}
               </ul>
+            )}
+            {verifyBundle.data.key_fingerprint && verifyBundle.data.signer_identity && (
+              <div className="border-border mt-3 border-t pt-3">
+                <p className="text-xs break-all">
+                  Fingerprint: {verifyBundle.data.key_fingerprint}
+                </p>
+                <label htmlFor="trust-provenance" className="mt-2 block text-xs">
+                  Trust decision provenance
+                </label>
+                <input
+                  id="trust-provenance"
+                  value={trustProvenance}
+                  onChange={(event) => setTrustProvenance(event.target.value)}
+                  placeholder="How was this fingerprint verified?"
+                  className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+                />
+                <div className="mt-2 flex gap-3">
+                  {(["trusted", "revoked"] as const).map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      disabled={!trustProvenance.trim() || signerTrust.isPending}
+                      onClick={() =>
+                        signerTrust.mutate({
+                          fingerprint: verifyBundle.data!.key_fingerprint!,
+                          identity: verifyBundle.data!.signer_identity!,
+                          status,
+                          provenance: trustProvenance,
+                        })
+                      }
+                      className="text-primary-light text-sm capitalize hover:underline disabled:opacity-50"
+                    >
+                      Mark {status}
+                    </button>
+                  ))}
+                </div>
+                {signerTrust.data && (
+                  <p role="status" className="mt-2 text-xs">
+                    Project trust policy updated: {signerTrust.data.status}. Re-verify the bundle to
+                    apply it.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}

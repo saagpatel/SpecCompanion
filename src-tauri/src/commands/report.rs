@@ -10,6 +10,7 @@ use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
+use uuid::Uuid;
 
 const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
 const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
@@ -77,6 +78,18 @@ pub struct EvidenceBundleVerification {
     pub diagnostics: Vec<String>,
     pub key_fingerprint: Option<String>,
     pub signer_identity: Option<String>,
+    pub trust_status: String,
+    pub trust_provenance: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SignerTrustRecord {
+    pub project_id: String,
+    pub key_fingerprint: String,
+    pub signer_identity: String,
+    pub status: String,
+    pub provenance: String,
+    pub updated_at: String,
 }
 
 #[derive(Serialize)]
@@ -234,8 +247,126 @@ th { background: #252538; }
 }
 
 #[tauri::command]
-pub fn verify_evidence_bundle(bundle_json: String) -> EvidenceBundleVerification {
-    verify_evidence_bundle_at(&bundle_json, Utc::now())
+pub fn verify_evidence_bundle(
+    state: State<'_, Database>,
+    bundle_json: String,
+    project_id: Option<String>,
+) -> EvidenceBundleVerification {
+    let mut result = verify_evidence_bundle_at(&bundle_json, Utc::now());
+    let Some(project_id) = project_id.filter(|value| !value.trim().is_empty()) else {
+        return result;
+    };
+    let Some(fingerprint) = result.key_fingerprint.as_deref() else {
+        return result;
+    };
+    if let Ok(conn) = state.conn.lock() {
+        let policy = conn.query_row(
+            "SELECT status, provenance FROM signer_trust WHERE project_id = ?1 AND key_fingerprint = ?2",
+            rusqlite::params![project_id, fingerprint],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        );
+        if let Ok((status, provenance)) = policy {
+            result.trust_status = status.clone();
+            result.trust_provenance = Some(provenance);
+            if status == "revoked" {
+                result.status = "revoked".into();
+                result
+                    .diagnostics
+                    .push("Signer fingerprint is revoked for this project".into());
+            } else if status == "trusted" && result.status == "signed_untrusted" {
+                result.status = "trusted_signer".into();
+            }
+        }
+    }
+    result
+}
+
+#[tauri::command]
+pub fn set_signer_trust(
+    state: State<'_, Database>,
+    project_id: String,
+    key_fingerprint: String,
+    signer_identity: String,
+    status: String,
+    provenance: String,
+) -> Result<SignerTrustRecord, AppError> {
+    if !matches!(status.as_str(), "trusted" | "revoked")
+        || key_fingerprint.len() != 64
+        || !key_fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || signer_identity.trim().is_empty()
+        || provenance.trim().is_empty()
+    {
+        return Err(AppError::InvalidInput("Invalid signer trust policy".into()));
+    }
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    upsert_signer_trust(
+        &conn,
+        &project_id,
+        &key_fingerprint,
+        &signer_identity,
+        &status,
+        &provenance,
+    )
+}
+
+fn upsert_signer_trust(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    key_fingerprint: &str,
+    signer_identity: &str,
+    status: &str,
+    provenance: &str,
+) -> Result<SignerTrustRecord, AppError> {
+    let now = Utc::now().to_rfc3339();
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "INSERT INTO signer_trust (project_id, key_fingerprint, signer_identity, status, provenance, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+         ON CONFLICT(project_id, key_fingerprint) DO UPDATE SET signer_identity = excluded.signer_identity, status = excluded.status, provenance = excluded.provenance, updated_at = excluded.updated_at",
+        rusqlite::params![project_id, key_fingerprint.to_lowercase(), signer_identity.trim(), status, provenance.trim(), now],
+    )?;
+    tx.execute(
+        "INSERT INTO signer_trust_history (id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![Uuid::new_v4().to_string(), project_id, key_fingerprint.to_lowercase(), signer_identity.trim(), status, provenance.trim(), now],
+    )?;
+    tx.commit()?;
+    Ok(SignerTrustRecord {
+        project_id: project_id.into(),
+        key_fingerprint: key_fingerprint.to_lowercase(),
+        signer_identity: signer_identity.trim().into(),
+        status: status.into(),
+        provenance: provenance.trim().into(),
+        updated_at: now,
+    })
+}
+
+#[tauri::command]
+pub fn list_signer_trust(
+    state: State<'_, Database>,
+    project_id: String,
+) -> Result<Vec<SignerTrustRecord>, AppError> {
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    let mut stmt = conn.prepare("SELECT project_id, key_fingerprint, signer_identity, status, provenance, updated_at FROM signer_trust WHERE project_id = ?1 ORDER BY updated_at DESC")?;
+    let rows = stmt.query_map([project_id], |row| {
+        Ok(SignerTrustRecord {
+            project_id: row.get(0)?,
+            key_fingerprint: row.get(1)?,
+            signer_identity: row.get(2)?,
+            status: row.get(3)?,
+            provenance: row.get(4)?,
+            updated_at: row.get(5)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::Database)
 }
 
 #[tauri::command]
@@ -403,6 +534,8 @@ fn verify_evidence_bundle_at(
         diagnostics: Vec::new(),
         key_fingerprint: None,
         signer_identity: None,
+        trust_status: "unknown".into(),
+        trust_provenance: None,
     };
     let bundle: ImportedEvidenceBundle = match serde_json::from_str(bundle_json) {
         Ok(bundle) => bundle,
@@ -582,6 +715,8 @@ fn html_escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::{queries, schema};
+    use crate::models::project::CreateProjectRequest;
     use crate::models::report::AlignmentReport;
 
     fn report() -> AlignmentReportWithEvidence {
@@ -721,5 +856,71 @@ mod tests {
         assert_eq!(invalid.status, "invalid");
         assert_eq!(invalid.bundle_integrity, "invalid");
         assert_eq!(invalid.signature_status, "valid_untrusted_identity");
+    }
+
+    #[test]
+    fn signer_trust_is_project_scoped_and_history_is_append_only() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        schema::run_migrations(&conn).unwrap();
+        let first = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "First".into(),
+                codebase_path: "/tmp/first".into(),
+            },
+        )
+        .unwrap();
+        let second = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Second".into(),
+                codebase_path: "/tmp/second".into(),
+            },
+        )
+        .unwrap();
+        let fingerprint = "a".repeat(64);
+        upsert_signer_trust(
+            &conn,
+            &first.id,
+            &fingerprint,
+            "Release",
+            "trusted",
+            "verified out of band",
+        )
+        .unwrap();
+        upsert_signer_trust(
+            &conn,
+            &first.id,
+            &fingerprint,
+            "Release",
+            "revoked",
+            "key retired",
+        )
+        .unwrap();
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM signer_trust WHERE project_id = ?1 AND key_fingerprint = ?2",
+                rusqlite::params![first.id, fingerprint],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "revoked");
+        let history: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM signer_trust_history WHERE project_id = ?1",
+                [first.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(history, 2);
+        let other: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM signer_trust WHERE project_id = ?1",
+                [second.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(other, 0);
     }
 }

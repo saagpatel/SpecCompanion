@@ -183,7 +183,14 @@ export interface AlignmentReportWithEvidence extends AlignmentReport {
 }
 
 export interface EvidenceBundleVerification {
-  status: "verified" | "signed_untrusted" | "stale" | "invalid" | "unsupported";
+  status:
+    | "verified"
+    | "signed_untrusted"
+    | "trusted_signer"
+    | "revoked"
+    | "stale"
+    | "invalid"
+    | "unsupported";
   schema: string;
   report_id?: string;
   payload_integrity: "verified" | "invalid";
@@ -195,6 +202,17 @@ export interface EvidenceBundleVerification {
   diagnostics: string[];
   key_fingerprint?: string;
   signer_identity?: string;
+  trust_status: "trusted" | "revoked" | "unknown";
+  trust_provenance?: string;
+}
+
+export interface SignerTrustRecord {
+  project_id: string;
+  key_fingerprint: string;
+  signer_identity: string;
+  status: "trusted" | "revoked";
+  provenance: string;
+  updated_at: string;
 }
 
 export interface SigningIdentityInfo {

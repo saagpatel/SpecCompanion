@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i32 = 4;
+const CURRENT_VERSION: i32 = 5;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -31,6 +31,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 4 {
             migrate_v4(&tx)?;
         }
+        if version < 5 {
+            migrate_v5(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -40,6 +43,34 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+fn migrate_v5(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE signer_trust (
+            project_id TEXT NOT NULL,
+            key_fingerprint TEXT NOT NULL,
+            signer_identity TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('trusted', 'revoked')),
+            provenance TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (project_id, key_fingerprint),
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+        CREATE TABLE signer_trust_history (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL,
+            key_fingerprint TEXT NOT NULL,
+            signer_identity TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('trusted', 'revoked')),
+            provenance TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_signer_trust_history_project
+            ON signer_trust_history(project_id, recorded_at);",
+    )
 }
 
 fn migrate_v4(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -198,6 +229,10 @@ mod tests {
             .expect("typed execution controls");
         conn.prepare("SELECT provenance_digest FROM test_results")
             .expect("execution provenance digest");
+        conn.prepare("SELECT status, provenance FROM signer_trust")
+            .expect("signer trust policy");
+        conn.prepare("SELECT recorded_at FROM signer_trust_history")
+            .expect("signer trust history");
     }
 
     #[test]

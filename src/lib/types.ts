@@ -215,6 +215,15 @@ export interface SignerTrustRecord {
   updated_at: string;
 }
 
+export interface RecoveryAuthorityRecord {
+  project_id: string;
+  key_fingerprint: string;
+  signer_identity: string;
+  status: "authorized" | "revoked";
+  provenance: string;
+  updated_at: string;
+}
+
 export interface SignerTrustHistoryRecord {
   id: string;
   project_id: string;
@@ -246,6 +255,9 @@ export interface TrustPolicyVerification {
   source_history_event_count: number;
   proof_base_head_digest?: string;
   proof_base_event_count: number;
+  recovery_authority_status: "authorized" | "revoked" | "unknown" | "not_checked";
+  destination_revision?: string;
+  replay_status: "new" | "already_imported" | "not_checked";
   anchor_status:
     | "not_checked"
     | "first_seen"

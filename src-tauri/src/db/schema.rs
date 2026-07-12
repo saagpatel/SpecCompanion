@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-const CURRENT_VERSION: i32 = 9;
+const CURRENT_VERSION: i32 = 10;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -17,6 +17,10 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
             |row| row.get(0),
         )
         .unwrap_or(0);
+
+    if version > CURRENT_VERSION {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
 
     if version < CURRENT_VERSION {
         let tx = conn.unchecked_transaction()?;
@@ -47,6 +51,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 9 {
             migrate_v9(&tx)?;
         }
+        if version < 10 {
+            migrate_v10(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -56,6 +63,34 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+fn migrate_v10(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE recovery_authorities (
+            project_id TEXT NOT NULL,
+            key_fingerprint TEXT NOT NULL,
+            signer_identity TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('authorized', 'revoked')),
+            provenance TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (project_id, key_fingerprint),
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+        CREATE TABLE trust_policy_imports (
+            project_id TEXT NOT NULL,
+            payload_sha256 TEXT NOT NULL,
+            package_signer_fingerprint TEXT NOT NULL,
+            destination_revision_before TEXT NOT NULL,
+            destination_revision_after TEXT NOT NULL,
+            imported_at TEXT NOT NULL,
+            PRIMARY KEY (project_id, payload_sha256),
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_trust_policy_import_authority
+            ON trust_policy_imports(project_id, package_signer_fingerprint, imported_at);",
+    )
 }
 
 fn advancement_receipt_digest(fields: &[&str]) -> String {
@@ -448,6 +483,10 @@ mod tests {
             .expect("trust anchor witness ledger");
         conn.prepare("SELECT previous_head_digest, advanced_head_digest, provenance, previous_receipt_digest, receipt_digest FROM trust_anchor_advancements")
             .expect("trust anchor advancement receipts");
+        conn.prepare("SELECT status, provenance FROM recovery_authorities")
+            .expect("destination recovery authorities");
+        conn.prepare("SELECT destination_revision_before, destination_revision_after FROM trust_policy_imports")
+            .expect("replay and destination revision ledger");
     }
 
     #[test]
@@ -510,5 +549,50 @@ mod tests {
             |row| Ok((row.get(0)?, row.get(1)?)),
         ).expect("legacy evidence defaults");
         assert_eq!(row, (String::new(), 0));
+    }
+
+    #[test]
+    fn future_schema_and_interrupted_migration_fail_closed() {
+        let future = Connection::open_in_memory().expect("future database");
+        future
+            .execute_batch(
+                "CREATE TABLE schema_version (version INTEGER NOT NULL);
+                 INSERT INTO schema_version VALUES (11);",
+            )
+            .expect("future version");
+        assert!(run_migrations(&future).is_err());
+        let version: i32 = future
+            .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 11);
+
+        let interrupted = Connection::open_in_memory().expect("interrupted database");
+        interrupted
+            .execute_batch(
+                "CREATE TABLE schema_version (version INTEGER NOT NULL);
+                 INSERT INTO schema_version VALUES (9);",
+            )
+            .expect("version nine");
+        for migration in [
+            migrate_v1, migrate_v2, migrate_v3, migrate_v4, migrate_v5, migrate_v6, migrate_v7,
+            migrate_v8, migrate_v9,
+        ] {
+            migration(&interrupted).expect("legacy migration");
+        }
+        interrupted
+            .execute_batch("CREATE TABLE recovery_authorities (sentinel TEXT NOT NULL);")
+            .expect("injected partial target");
+        assert!(run_migrations(&interrupted).is_err());
+        let version: i32 = interrupted
+            .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 9);
+        assert!(interrupted
+            .prepare("SELECT * FROM trust_policy_imports")
+            .is_err());
     }
 }

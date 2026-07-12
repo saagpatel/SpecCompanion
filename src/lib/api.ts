@@ -14,6 +14,7 @@ import type {
   EvidenceBundleVerification,
   SigningIdentityInfo,
   SignerTrustRecord,
+  RecoveryAuthorityRecord,
   SignerTrustHistoryRecord,
   SignerTrustHistoryIntegrity,
   TrustPolicyVerification,
@@ -37,6 +38,7 @@ interface MockState {
   reports: AlignmentReportWithEvidence[];
   signerTrust: SignerTrustRecord[];
   signerTrustHistory: SignerTrustHistoryRecord[];
+  recoveryAuthorities: RecoveryAuthorityRecord[];
   trustAnchorAdvancements: TrustAnchorAdvancement[];
   settings: AppSettings;
 }
@@ -50,6 +52,7 @@ const mockState: MockState = {
   reports: [],
   signerTrust: [],
   signerTrustHistory: [],
+  recoveryAuthorities: [],
   trustAnchorAdvancements: [],
   settings: {
     api_key: "",
@@ -583,6 +586,26 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       } as T;
     case "list_signer_trust":
       return mockState.signerTrust.filter((item) => item.project_id === args.project_id) as T;
+    case "list_recovery_authorities":
+      return mockState.recoveryAuthorities.filter(
+        (item) => item.project_id === args.project_id,
+      ) as T;
+    case "set_recovery_authority": {
+      const record: RecoveryAuthorityRecord = {
+        project_id: String(args.project_id),
+        key_fingerprint: String(args.key_fingerprint).toLowerCase(),
+        signer_identity: String(args.signer_identity),
+        status: args.status as "authorized" | "revoked",
+        provenance: String(args.provenance),
+        updated_at: now(),
+      };
+      mockState.recoveryAuthorities = mockState.recoveryAuthorities.filter(
+        (item) =>
+          item.project_id !== record.project_id || item.key_fingerprint !== record.key_fingerprint,
+      );
+      mockState.recoveryAuthorities.push(record);
+      return record as T;
+    }
     case "list_signer_trust_history":
       return mockState.signerTrustHistory.filter(
         (item) => item.project_id === args.project_id,
@@ -676,6 +699,13 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           source_history_head_digest: "f".repeat(64),
           source_history_event_count: 3,
           proof_base_event_count: 0,
+          recovery_authority_status:
+            mockState.recoveryAuthorities.find(
+              (item) =>
+                item.project_id === args.project_id && item.key_fingerprint === "c".repeat(64),
+            )?.status ?? "unknown",
+          destination_revision: "preview-destination-revision",
+          replay_status: "new",
           anchor_status: existing ? "forward_proven" : "first_seen",
           conflicts: [
             {
@@ -697,6 +727,8 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         policy_count: 0,
         source_history_event_count: 0,
         proof_base_event_count: 0,
+        recovery_authority_status: "not_checked",
+        replay_status: "not_checked",
         anchor_status: "not_checked",
         conflicts: [],
         diagnostics: ["Malformed trust policy"],
@@ -707,6 +739,17 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       }
       if (args.expected_payload_sha256 !== "e".repeat(64)) {
         throw new Error("Recovery confirmation does not match the verified payload digest");
+      }
+      const authority = mockState.recoveryAuthorities.find(
+        (item) =>
+          item.project_id === args.project_id &&
+          item.key_fingerprint === args.expected_signer_fingerprint,
+      );
+      if (authority?.status !== "authorized") {
+        throw new Error("Package signer is not an authorized recovery authority");
+      }
+      if (args.expected_destination_revision !== "preview-destination-revision") {
+        throw new Error("Destination trust policy changed after preview");
       }
       const recovered: SignerTrustRecord = {
         project_id: String(args.project_id),
@@ -908,6 +951,24 @@ export const setSignerTrust = (
 export const listSignerTrust = (projectId: string) =>
   invoke<SignerTrustRecord[]>("list_signer_trust", { project_id: projectId });
 
+export const listRecoveryAuthorities = (projectId: string) =>
+  invoke<RecoveryAuthorityRecord[]>("list_recovery_authorities", { project_id: projectId });
+
+export const setRecoveryAuthority = (
+  projectId: string,
+  keyFingerprint: string,
+  signerIdentity: string,
+  status: "authorized" | "revoked",
+  provenance: string,
+) =>
+  invoke<RecoveryAuthorityRecord>("set_recovery_authority", {
+    project_id: projectId,
+    key_fingerprint: keyFingerprint,
+    signer_identity: signerIdentity,
+    status,
+    provenance,
+  });
+
 export const listSignerTrustHistory = (projectId: string) =>
   invoke<SignerTrustHistoryRecord[]>("list_signer_trust_history", { project_id: projectId });
 
@@ -948,6 +1009,8 @@ export const importSignerTrustPolicy = (
   bundleJson: string,
   expectedSignerFingerprint: string,
   expectedPayloadSha256: string,
+  expectedDestinationRevision: string,
+  confirmedPolicyFingerprints: string[],
   recoveryProvenance: string,
 ) =>
   invoke<SignerTrustRecord[]>("import_signer_trust_policy", {
@@ -955,6 +1018,8 @@ export const importSignerTrustPolicy = (
     bundle_json: bundleJson,
     expected_signer_fingerprint: expectedSignerFingerprint,
     expected_payload_sha256: expectedPayloadSha256,
+    expected_destination_revision: expectedDestinationRevision,
+    confirmed_policy_fingerprints: confirmedPolicyFingerprints,
     recovery_provenance: recoveryProvenance,
   });
 

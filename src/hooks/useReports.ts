@@ -118,9 +118,9 @@ export function useExportSignerTrustPolicy() {
   });
 }
 
-export function useVerifySignerTrustPolicy() {
+export function useVerifySignerTrustPolicy(projectId: string) {
   return useMutation({
-    mutationFn: (bundleJson: string) => api.verifySignerTrustPolicy(bundleJson),
+    mutationFn: (bundleJson: string) => api.verifySignerTrustPolicy(projectId, bundleJson),
   });
 }
 
@@ -130,12 +130,15 @@ export function useImportSignerTrustPolicy(projectId: string) {
     mutationFn: ({
       bundleJson,
       fingerprint,
+      payloadSha256,
       provenance,
     }: {
       bundleJson: string;
       fingerprint: string;
+      payloadSha256: string;
       provenance: string;
-    }) => api.importSignerTrustPolicy(projectId, bundleJson, fingerprint, provenance),
+    }) =>
+      api.importSignerTrustPolicy(projectId, bundleJson, fingerprint, payloadSha256, provenance),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });

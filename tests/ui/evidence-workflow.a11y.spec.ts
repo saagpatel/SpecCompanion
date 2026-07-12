@@ -88,6 +88,10 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   });
   await expect(page.getByText(/Recovery policy: valid_untrusted/i)).toBeVisible();
   await expect(page.getByText(/not recovery authority/i)).toBeVisible();
+  await expect(page.getByText(/Payload digest:/i)).toBeVisible();
+  await expect(page.getByRole("list", { name: "Recovery policy changes" })).toContainText(
+    "add Recovered signer: absent → trusted",
+  );
   await expect(page.getByRole("button", { name: "Recover verified policy" })).toBeDisabled();
   await page.getByLabel("Confirm package signer fingerprint").fill("c".repeat(64));
   await page
@@ -95,6 +99,14 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
     .fill("Matched printed disaster recovery record");
   await page.getByRole("button", { name: "Recover verified policy" }).click();
   await expect(page.getByText(/Recovered 1 signer policies/i)).toBeVisible();
+  await page.getByLabel("Verify recovery policy JSON").setInputFiles({
+    name: "signer-trust-policy-repeat.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("preview-signed-trust-policy"),
+  });
+  await expect(page.getByRole("list", { name: "Recovery policy changes" })).toContainText(
+    "replace Recovered signer: trusted → trusted",
+  );
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Evidence bundle" })).toBeVisible();

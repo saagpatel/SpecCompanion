@@ -41,8 +41,9 @@ export function Reports() {
   const [recoveryBundle, setRecoveryBundle] = useState("");
   const [recoveryFingerprint, setRecoveryFingerprint] = useState("");
   const [recoveryProvenance, setRecoveryProvenance] = useState("");
+  const [recoveryFileError, setRecoveryFileError] = useState("");
   const exportTrustPolicy = useExportSignerTrustPolicy();
-  const verifyTrustPolicy = useVerifySignerTrustPolicy();
+  const verifyTrustPolicy = useVerifySignerTrustPolicy(projectId ?? "");
   const importTrustPolicy = useImportSignerTrustPolicy(projectId ?? "");
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
@@ -381,6 +382,13 @@ export function Reports() {
               onChange={async (event) => {
                 const file = event.target.files?.[0];
                 if (!file) return;
+                if (file.size > 1_048_576) {
+                  setRecoveryFileError("Recovery policy exceeds the 1 MiB size limit.");
+                  setRecoveryBundle("");
+                  event.target.value = "";
+                  return;
+                }
+                setRecoveryFileError("");
                 const content = await file.text();
                 setRecoveryBundle(content);
                 setRecoveryFingerprint("");
@@ -389,6 +397,11 @@ export function Reports() {
               }}
             />
           </label>
+          {recoveryFileError && (
+            <p role="alert" className="text-danger mt-2 text-xs">
+              {recoveryFileError}
+            </p>
+          )}
           {verifyTrustPolicy.data && (
             <div role="status" className="border-border mt-2 rounded border p-3 text-xs">
               <p>
@@ -403,9 +416,22 @@ export function Reports() {
                   Package signer: {verifyTrustPolicy.data.key_fingerprint}
                 </p>
               )}
+              {verifyTrustPolicy.data.payload_sha256 && (
+                <p className="break-all">Payload digest: {verifyTrustPolicy.data.payload_sha256}</p>
+              )}
               {verifyTrustPolicy.data.diagnostics.map((diagnostic) => (
                 <p key={diagnostic}>{diagnostic}</p>
               ))}
+              {verifyTrustPolicy.data.conflicts.length > 0 && (
+                <ul aria-label="Recovery policy changes" className="mt-2 space-y-1">
+                  {verifyTrustPolicy.data.conflicts.map((conflict) => (
+                    <li key={conflict.key_fingerprint}>
+                      <strong>{conflict.action}</strong> {conflict.signer_identity}:{" "}
+                      {conflict.current_status ?? "absent"} → {conflict.incoming_status}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {verifyTrustPolicy.data?.status === "valid_untrusted" &&
@@ -442,6 +468,7 @@ export function Reports() {
                     importTrustPolicy.mutate({
                       bundleJson: recoveryBundle,
                       fingerprint: recoveryFingerprint,
+                      payloadSha256: verifyTrustPolicy.data!.payload_sha256!,
                       provenance: recoveryProvenance,
                     })
                   }

@@ -642,6 +642,9 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       return JSON.stringify({ schema: "preview-signed-trust-policy" }, null, 2) as T;
     case "verify_signer_trust_policy":
       if (String(args.bundle_json).includes("preview-signed-trust-policy")) {
+        const existing = mockState.signerTrust.find(
+          (item) => item.project_id === args.project_id && item.key_fingerprint === "d".repeat(64),
+        );
         return {
           status: "valid_untrusted",
           schema: "speccompanion.signer-trust-policy.v1",
@@ -649,6 +652,16 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           key_fingerprint: "c".repeat(64),
           source_project_name: "Preview source project",
           policy_count: 1,
+          payload_sha256: "e".repeat(64),
+          conflicts: [
+            {
+              key_fingerprint: "d".repeat(64),
+              signer_identity: "Recovered signer",
+              incoming_status: "trusted",
+              current_status: existing?.status,
+              action: existing ? "replace" : "add",
+            },
+          ],
           diagnostics: [
             "Signature proves package integrity and key possession, not recovery authority",
           ],
@@ -658,11 +671,15 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         status: "invalid",
         schema: "unknown",
         policy_count: 0,
+        conflicts: [],
         diagnostics: ["Malformed trust policy"],
       } as T;
     case "import_signer_trust_policy": {
       if (args.expected_signer_fingerprint !== "c".repeat(64)) {
         throw new Error("Recovery confirmation does not match the verified signer fingerprint");
+      }
+      if (args.expected_payload_sha256 !== "e".repeat(64)) {
+        throw new Error("Recovery confirmation does not match the verified payload digest");
       }
       const recovered: SignerTrustRecord = {
         project_id: String(args.project_id),
@@ -827,19 +844,24 @@ export const exportSignerTrustPolicy = (projectId: string, signerIdentity: strin
     signer_identity: signerIdentity,
   });
 
-export const verifySignerTrustPolicy = (bundleJson: string) =>
-  invoke<TrustPolicyVerification>("verify_signer_trust_policy", { bundle_json: bundleJson });
+export const verifySignerTrustPolicy = (projectId: string, bundleJson: string) =>
+  invoke<TrustPolicyVerification>("verify_signer_trust_policy", {
+    project_id: projectId,
+    bundle_json: bundleJson,
+  });
 
 export const importSignerTrustPolicy = (
   projectId: string,
   bundleJson: string,
   expectedSignerFingerprint: string,
+  expectedPayloadSha256: string,
   recoveryProvenance: string,
 ) =>
   invoke<SignerTrustRecord[]>("import_signer_trust_policy", {
     project_id: projectId,
     bundle_json: bundleJson,
     expected_signer_fingerprint: expectedSignerFingerprint,
+    expected_payload_sha256: expectedPayloadSha256,
     recovery_provenance: recoveryProvenance,
   });
 

@@ -39,3 +39,7 @@ export function useExportReport() {
     }) => api.exportReport(reportId, format),
   });
 }
+
+export function useVerifyEvidenceBundle() {
+  return useMutation({ mutationFn: (bundleJson: string) => api.verifyEvidenceBundle(bundleJson) });
+}

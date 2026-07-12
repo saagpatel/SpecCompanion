@@ -11,6 +11,7 @@ import type {
   TestResult,
   AlignmentReport,
   AlignmentReportWithEvidence,
+  EvidenceBundleVerification,
   AppSettings,
   EvidenceRecord,
   LinkRepositoryTestRequest,
@@ -539,6 +540,17 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         null,
         2,
       ) as T;
+    case "verify_evidence_bundle":
+      return {
+        status: "unsupported",
+        schema: "unknown",
+        payload_integrity: "invalid",
+        bundle_integrity: "invalid",
+        report_integrity: "invalid",
+        signature_status: "unknown",
+        freshness_status: "unknown",
+        diagnostics: ["Browser preview cannot run the native offline bundle verifier."],
+      } as T;
     default:
       throw new Error(`Unsupported browser preview command: ${command}`);
   }
@@ -637,3 +649,6 @@ export const listReports = (projectId: string) =>
 
 export const exportReport = (reportId: string, format: "json" | "html" | "csv" | "bundle") =>
   invoke<string>("export_report", { report_id: reportId, format });
+
+export const verifyEvidenceBundle = (bundleJson: string) =>
+  invoke<EvidenceBundleVerification>("verify_evidence_bundle", { bundle_json: bundleJson });

@@ -4,26 +4,27 @@ use crate::errors::AppError;
 use crate::models::report::{AlignmentReport, AlignmentReportWithEvidence};
 use crate::services::alignment;
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
 
 const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
 const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct EvidenceBundleManifest {
-    schema: &'static str,
+    schema: String,
     report_id: String,
     project_id: String,
     report_generated_at: String,
     exported_at: String,
     age_seconds_at_export: Option<i64>,
-    freshness_status: &'static str,
+    freshness_status: String,
     report_integrity_status: String,
     payload_sha256: String,
-    signature_status: &'static str,
-    trust_scope: &'static str,
+    signature_status: String,
+    trust_scope: String,
 }
 
 #[derive(Serialize)]
@@ -37,6 +38,28 @@ struct EvidenceBundle<'a> {
     manifest: &'a EvidenceBundleManifest,
     report: &'a AlignmentReportWithEvidence,
     bundle_sha256: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImportedEvidenceBundle {
+    manifest: EvidenceBundleManifest,
+    report: AlignmentReportWithEvidence,
+    bundle_sha256: String,
+}
+
+#[derive(Serialize)]
+pub struct EvidenceBundleVerification {
+    pub status: String,
+    pub schema: String,
+    pub report_id: Option<String>,
+    pub payload_integrity: String,
+    pub bundle_integrity: String,
+    pub report_integrity: String,
+    pub signature_status: String,
+    pub freshness_status: String,
+    pub age_seconds: Option<i64>,
+    pub diagnostics: Vec<String>,
 }
 
 #[tauri::command]
@@ -183,6 +206,11 @@ th { background: #252538; }
     }
 }
 
+#[tauri::command]
+pub fn verify_evidence_bundle(bundle_json: String) -> EvidenceBundleVerification {
+    verify_evidence_bundle_at(&bundle_json, Utc::now())
+}
+
 fn export_evidence_bundle(
     report: &AlignmentReportWithEvidence,
     exported_at: DateTime<Utc>,
@@ -201,17 +229,17 @@ fn export_evidence_bundle(
         None => "unknown",
     };
     let manifest = EvidenceBundleManifest {
-        schema: BUNDLE_SCHEMA,
+        schema: BUNDLE_SCHEMA.into(),
         report_id: report.report.id.clone(),
         project_id: report.report.project_id.clone(),
         report_generated_at: report.report.generated_at.clone(),
         exported_at: exported_at.to_rfc3339(),
         age_seconds_at_export: age_seconds,
-        freshness_status,
+        freshness_status: freshness_status.into(),
         report_integrity_status: report.report.integrity_status.clone(),
         payload_sha256: sha256_hex(&payload),
-        signature_status: "unsigned",
-        trust_scope: "self_hash_integrity_only_no_authorship_or_external_attestation",
+        signature_status: "unsigned".into(),
+        trust_scope: "self_hash_integrity_only_no_authorship_or_external_attestation".into(),
     };
     let unsigned = serde_json::to_vec(&UnsignedEvidenceBundle {
         manifest: &manifest,
@@ -223,6 +251,142 @@ fn export_evidence_bundle(
         bundle_sha256: sha256_hex(&unsigned),
     })
     .map_err(AppError::Serde)
+}
+
+fn verify_evidence_bundle_at(
+    bundle_json: &str,
+    verified_at: DateTime<Utc>,
+) -> EvidenceBundleVerification {
+    let mut result = EvidenceBundleVerification {
+        status: "invalid".into(),
+        schema: "unknown".into(),
+        report_id: None,
+        payload_integrity: "invalid".into(),
+        bundle_integrity: "invalid".into(),
+        report_integrity: "invalid".into(),
+        signature_status: "unknown".into(),
+        freshness_status: "unknown".into(),
+        age_seconds: None,
+        diagnostics: Vec::new(),
+    };
+    let bundle: ImportedEvidenceBundle = match serde_json::from_str(bundle_json) {
+        Ok(bundle) => bundle,
+        Err(error) => {
+            result
+                .diagnostics
+                .push(format!("Malformed evidence bundle: {error}"));
+            return result;
+        }
+    };
+    result.schema = bundle.manifest.schema.clone();
+    result.report_id = Some(bundle.report.report.id.clone());
+    result.signature_status = bundle.manifest.signature_status.clone();
+    if bundle.manifest.schema != BUNDLE_SCHEMA {
+        result.status = "unsupported".into();
+        result.diagnostics.push(format!(
+            "Unsupported bundle schema: {}",
+            bundle.manifest.schema
+        ));
+        return result;
+    }
+    if bundle.manifest.signature_status != "unsigned"
+        || bundle.manifest.trust_scope
+            != "self_hash_integrity_only_no_authorship_or_external_attestation"
+    {
+        result.status = "unsupported".into();
+        result
+            .diagnostics
+            .push("Unsupported or misleading signature metadata".into());
+        return result;
+    }
+
+    let payload_digest = serde_json::to_vec(&bundle.report)
+        .map(|bytes| sha256_hex(&bytes))
+        .unwrap_or_default();
+    if payload_digest == bundle.manifest.payload_sha256 {
+        result.payload_integrity = "verified".into();
+    } else {
+        result
+            .diagnostics
+            .push("Embedded report payload digest does not match".into());
+    }
+    let unsigned_digest = serde_json::to_vec(&UnsignedEvidenceBundle {
+        manifest: &bundle.manifest,
+        report: &bundle.report,
+    })
+    .map(|bytes| sha256_hex(&bytes))
+    .unwrap_or_default();
+    if unsigned_digest == bundle.bundle_sha256 {
+        result.bundle_integrity = "verified".into();
+    } else {
+        result
+            .diagnostics
+            .push("Whole-bundle digest does not match".into());
+    }
+    if bundle.manifest.report_id != bundle.report.report.id
+        || bundle.manifest.project_id != bundle.report.report.project_id
+        || bundle.manifest.report_generated_at != bundle.report.report.generated_at
+        || bundle.manifest.report_integrity_status != bundle.report.report.integrity_status
+    {
+        result
+            .diagnostics
+            .push("Manifest identity does not match the embedded report".into());
+    }
+    match alignment::digest_alignments(&bundle.report.alignments) {
+        Ok(digest)
+            if digest == bundle.report.report.evidence_digest
+                && bundle.report.report.integrity_status == "verified" =>
+        {
+            result.report_integrity = "verified".into();
+        }
+        _ => result
+            .diagnostics
+            .push("Embedded report evidence integrity is not verified".into()),
+    }
+
+    match DateTime::parse_from_rfc3339(&bundle.report.report.generated_at) {
+        Ok(generated) => {
+            let age = verified_at
+                .signed_duration_since(generated.with_timezone(&Utc))
+                .num_seconds();
+            if age < 0 {
+                result
+                    .diagnostics
+                    .push("Report generation time is in the future".into());
+            } else {
+                result.age_seconds = Some(age);
+                result.freshness_status = if age <= FRESHNESS_WINDOW_SECONDS {
+                    "fresh"
+                } else {
+                    "stale"
+                }
+                .into();
+            }
+        }
+        Err(_) => result
+            .diagnostics
+            .push("Report generation time is malformed".into()),
+    }
+
+    let identity_matches = bundle.manifest.report_id == bundle.report.report.id
+        && bundle.manifest.project_id == bundle.report.report.project_id
+        && bundle.manifest.report_generated_at == bundle.report.report.generated_at
+        && bundle.manifest.report_integrity_status == bundle.report.report.integrity_status;
+    if result.payload_integrity == "verified"
+        && result.bundle_integrity == "verified"
+        && result.report_integrity == "verified"
+        && identity_matches
+    {
+        result.status = if result.freshness_status == "fresh" {
+            "verified"
+        } else if result.freshness_status == "stale" {
+            "stale"
+        } else {
+            "invalid"
+        }
+        .into();
+    }
+    result
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -310,5 +474,56 @@ mod tests {
             serde_json::from_str(&export_evidence_bundle(&malformed, now).unwrap()).unwrap();
         assert_eq!(unknown["manifest"]["freshness_status"], "unknown");
         assert!(unknown["manifest"]["age_seconds_at_export"].is_null());
+    }
+
+    #[test]
+    fn verifier_accepts_intact_bundle_but_never_claims_a_signature() {
+        let now = DateTime::parse_from_rfc3339("2026-07-11T01:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut source = report();
+        source.report.evidence_digest = alignment::digest_alignments(&source.alignments).unwrap();
+        let bundle = export_evidence_bundle(&source, now).unwrap();
+        let verified = verify_evidence_bundle_at(&bundle, now);
+        assert_eq!(verified.status, "verified");
+        assert_eq!(verified.payload_integrity, "verified");
+        assert_eq!(verified.bundle_integrity, "verified");
+        assert_eq!(verified.report_integrity, "verified");
+        assert_eq!(verified.signature_status, "unsigned");
+        assert_eq!(verified.freshness_status, "fresh");
+    }
+
+    #[test]
+    fn verifier_rejects_tampering_and_unsupported_contracts() {
+        let now = DateTime::parse_from_rfc3339("2026-07-11T01:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut source = report();
+        source.report.evidence_digest = alignment::digest_alignments(&source.alignments).unwrap();
+        let bundle = export_evidence_bundle(&source, now).unwrap();
+
+        let tampered = bundle.replace("project-1", "project-2");
+        let invalid = verify_evidence_bundle_at(&tampered, now);
+        assert_eq!(invalid.status, "invalid");
+        assert_eq!(invalid.payload_integrity, "invalid");
+        assert_eq!(invalid.bundle_integrity, "invalid");
+
+        let unsupported = bundle.replace(BUNDLE_SCHEMA, "speccompanion.evidence-bundle.v2");
+        let unsupported = verify_evidence_bundle_at(&unsupported, now);
+        assert_eq!(unsupported.status, "unsupported");
+        assert!(unsupported.diagnostics[0].contains("Unsupported bundle schema"));
+
+        let forged_signature = bundle.replace("\"unsigned\"", "\"verified\"");
+        let unsupported = verify_evidence_bundle_at(&forged_signature, now);
+        assert_eq!(unsupported.status, "unsupported");
+        assert!(unsupported.diagnostics[0].contains("signature metadata"));
+
+        let stale_at = DateTime::parse_from_rfc3339("2026-07-13T00:00:01Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let stale = verify_evidence_bundle_at(&bundle, stale_at);
+        assert_eq!(stale.status, "stale");
+        assert_eq!(stale.payload_integrity, "verified");
+        assert_eq!(stale.bundle_integrity, "verified");
     }
 }

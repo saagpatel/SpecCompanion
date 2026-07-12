@@ -3,7 +3,41 @@ use crate::db::Database;
 use crate::errors::AppError;
 use crate::models::report::{AlignmentReport, AlignmentReportWithEvidence};
 use crate::services::alignment;
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, State};
+
+const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
+const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
+
+#[derive(Serialize)]
+struct EvidenceBundleManifest {
+    schema: &'static str,
+    report_id: String,
+    project_id: String,
+    report_generated_at: String,
+    exported_at: String,
+    age_seconds_at_export: Option<i64>,
+    freshness_status: &'static str,
+    report_integrity_status: String,
+    payload_sha256: String,
+    signature_status: &'static str,
+    trust_scope: &'static str,
+}
+
+#[derive(Serialize)]
+struct UnsignedEvidenceBundle<'a> {
+    manifest: &'a EvidenceBundleManifest,
+    report: &'a AlignmentReportWithEvidence,
+}
+
+#[derive(Serialize)]
+struct EvidenceBundle<'a> {
+    manifest: &'a EvidenceBundleManifest,
+    report: &'a AlignmentReportWithEvidence,
+    bundle_sha256: String,
+}
 
 #[tauri::command]
 pub fn generate_alignment_report(
@@ -62,7 +96,7 @@ pub fn export_report(
     if report_id.trim().is_empty() {
         return Err(AppError::InvalidInput("Report ID cannot be empty".into()));
     }
-    if !matches!(format.as_str(), "json" | "html" | "csv") {
+    if !matches!(format.as_str(), "json" | "html" | "csv" | "bundle") {
         return Err(AppError::InvalidInput(format!(
             "Unsupported format: {}",
             format
@@ -75,6 +109,7 @@ pub fn export_report(
     let report = queries::get_alignment_report(&conn, &report_id)?;
 
     match format.as_str() {
+        "bundle" => export_evidence_bundle(&report, Utc::now()),
         "json" => serde_json::to_string_pretty(&report).map_err(AppError::Serde),
         "csv" => {
             let mut csv = String::from(
@@ -148,6 +183,52 @@ th { background: #252538; }
     }
 }
 
+fn export_evidence_bundle(
+    report: &AlignmentReportWithEvidence,
+    exported_at: DateTime<Utc>,
+) -> Result<String, AppError> {
+    let payload = serde_json::to_vec(report)?;
+    let generated_at = DateTime::parse_from_rfc3339(&report.report.generated_at).ok();
+    let age_seconds = generated_at.map(|generated| {
+        exported_at
+            .signed_duration_since(generated.with_timezone(&Utc))
+            .num_seconds()
+            .max(0)
+    });
+    let freshness_status = match age_seconds {
+        Some(age) if age <= FRESHNESS_WINDOW_SECONDS => "fresh",
+        Some(_) => "stale",
+        None => "unknown",
+    };
+    let manifest = EvidenceBundleManifest {
+        schema: BUNDLE_SCHEMA,
+        report_id: report.report.id.clone(),
+        project_id: report.report.project_id.clone(),
+        report_generated_at: report.report.generated_at.clone(),
+        exported_at: exported_at.to_rfc3339(),
+        age_seconds_at_export: age_seconds,
+        freshness_status,
+        report_integrity_status: report.report.integrity_status.clone(),
+        payload_sha256: sha256_hex(&payload),
+        signature_status: "unsigned",
+        trust_scope: "self_hash_integrity_only_no_authorship_or_external_attestation",
+    };
+    let unsigned = serde_json::to_vec(&UnsignedEvidenceBundle {
+        manifest: &manifest,
+        report,
+    })?;
+    serde_json::to_string_pretty(&EvidenceBundle {
+        manifest: &manifest,
+        report,
+        bundle_sha256: sha256_hex(&unsigned),
+    })
+    .map_err(AppError::Serde)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
 fn escape_csv(s: &str) -> String {
     if s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r') {
         format!("\"{}\"", s.replace('"', "\"\""))
@@ -161,4 +242,73 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::report::AlignmentReport;
+
+    fn report() -> AlignmentReportWithEvidence {
+        AlignmentReportWithEvidence {
+            report: AlignmentReport {
+                id: "report-1".into(),
+                project_id: "project-1".into(),
+                coverage_percent: 0.0,
+                total_requirements: 0,
+                covered_requirements: 0,
+                verified_requirements: 0,
+                partial_requirements: 0,
+                failed_requirements: 0,
+                unknown_requirements: 0,
+                evidence_digest: "evidence".into(),
+                integrity_status: "verified".into(),
+                checked_languages: vec!["typescript".into()],
+                skipped_languages: vec![],
+                diagnostics: vec![],
+                generated_at: "2026-07-11T00:00:00Z".into(),
+            },
+            alignments: vec![],
+        }
+    }
+
+    #[test]
+    fn evidence_bundle_is_deterministic_and_explicitly_unsigned() {
+        let now = DateTime::parse_from_rfc3339("2026-07-11T01:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let first = export_evidence_bundle(&report(), now).expect("bundle");
+        let second = export_evidence_bundle(&report(), now).expect("bundle");
+        assert_eq!(first, second);
+        let value: serde_json::Value = serde_json::from_str(&first).unwrap();
+        assert_eq!(value["manifest"]["schema"], BUNDLE_SCHEMA);
+        assert_eq!(value["manifest"]["freshness_status"], "fresh");
+        assert_eq!(value["manifest"]["signature_status"], "unsigned");
+        assert_eq!(
+            value["manifest"]["trust_scope"],
+            "self_hash_integrity_only_no_authorship_or_external_attestation"
+        );
+        assert_eq!(
+            value["manifest"]["payload_sha256"].as_str().unwrap().len(),
+            64
+        );
+        assert_eq!(value["bundle_sha256"].as_str().unwrap().len(), 64);
+    }
+
+    #[test]
+    fn malformed_or_old_report_dates_never_claim_freshness() {
+        let now = DateTime::parse_from_rfc3339("2026-07-13T00:00:01Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let stale: serde_json::Value =
+            serde_json::from_str(&export_evidence_bundle(&report(), now).unwrap()).unwrap();
+        assert_eq!(stale["manifest"]["freshness_status"], "stale");
+
+        let mut malformed = report();
+        malformed.report.generated_at = "not-a-date".into();
+        let unknown: serde_json::Value =
+            serde_json::from_str(&export_evidence_bundle(&malformed, now).unwrap()).unwrap();
+        assert_eq!(unknown["manifest"]["freshness_status"], "unknown");
+        assert!(unknown["manifest"]["age_seconds_at_export"].is_null());
+    }
 }

@@ -40,6 +40,8 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await page.getByRole("button", { name: "Generate Report" }).click();
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Evidence bundle" })).toBeVisible();
+  await expect(page.getByText(/unsigned and do not prove authorship/i)).toBeVisible();
   await expect(page.getByText("0/4 requirements verified")).toBeVisible();
   await expect(page.getByText("UNKNOWN").first()).toBeVisible();
   await expect(page.getByText(/placeholder assertion is not evidence/i).first()).toBeVisible();

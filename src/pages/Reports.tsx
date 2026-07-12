@@ -428,6 +428,22 @@ export function Reports() {
                   {verifyTrustPolicy.data.source_history_event_count} decisions.
                 </p>
               )}
+              <p>
+                Witnessed-anchor assessment:{" "}
+                <strong>{verifyTrustPolicy.data.anchor_status.replace(/_/g, " ")}</strong>.
+              </p>
+              {verifyTrustPolicy.data.anchor_status === "advanced_unproven" && (
+                <p>
+                  A higher event count is not proof that this head descends from the witnessed head.
+                </p>
+              )}
+              {(verifyTrustPolicy.data.anchor_status === "rollback" ||
+                verifyTrustPolicy.data.anchor_status === "conflict") && (
+                <p>
+                  Recovery is blocked because this package contradicts a previously witnessed
+                  anchor.
+                </p>
+              )}
               {verifyTrustPolicy.data.diagnostics.map((diagnostic) => (
                 <p key={diagnostic}>{diagnostic}</p>
               ))}
@@ -470,6 +486,9 @@ export function Reports() {
                   disabled={
                     recoveryFingerprint.trim().toLowerCase() !==
                       verifyTrustPolicy.data.key_fingerprint.toLowerCase() ||
+                    ["rollback", "conflict", "unknown"].includes(
+                      verifyTrustPolicy.data.anchor_status,
+                    ) ||
                     !recoveryProvenance.trim() ||
                     importTrustPolicy.isPending
                   }

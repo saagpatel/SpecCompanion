@@ -671,6 +671,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           payload_sha256: "e".repeat(64),
           source_history_head_digest: "f".repeat(64),
           source_history_event_count: 3,
+          anchor_status: existing ? "advanced_unproven" : "first_seen",
           conflicts: [
             {
               key_fingerprint: "d".repeat(64),
@@ -690,6 +691,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         schema: "unknown",
         policy_count: 0,
         source_history_event_count: 0,
+        anchor_status: "not_checked",
         conflicts: [],
         diagnostics: ["Malformed trust policy"],
       } as T;

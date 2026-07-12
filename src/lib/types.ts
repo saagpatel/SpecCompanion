@@ -244,6 +244,16 @@ export interface TrustPolicyVerification {
   payload_sha256?: string;
   source_history_head_digest?: string;
   source_history_event_count: number;
+  anchor_status:
+    | "not_checked"
+    | "first_seen"
+    | "repeated"
+    | "rollback"
+    | "conflict"
+    | "advanced_unproven"
+    | "unknown";
+  witnessed_history_head_digest?: string;
+  witnessed_history_event_count?: number;
   conflicts: Array<{
     key_fingerprint: string;
     signer_identity: string;

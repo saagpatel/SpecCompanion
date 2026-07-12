@@ -244,6 +244,8 @@ export interface TrustPolicyVerification {
   payload_sha256?: string;
   source_history_head_digest?: string;
   source_history_event_count: number;
+  proof_base_head_digest?: string;
+  proof_base_event_count: number;
   anchor_status:
     | "not_checked"
     | "first_seen"
@@ -251,6 +253,7 @@ export interface TrustPolicyVerification {
     | "rollback"
     | "conflict"
     | "forward_proven"
+    | "checkpoint_gap"
     | "fork"
     | "unknown";
   witnessed_history_head_digest?: string;

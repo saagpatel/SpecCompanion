@@ -89,6 +89,7 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await expect(page.getByText(/Recovery policy: valid_untrusted/i)).toBeVisible();
   await expect(page.getByText(/not recovery authority/i)).toBeVisible();
   await expect(page.getByText(/Payload digest:/i)).toBeVisible();
+  await expect(page.getByText(/Proof checkpoint: genesis/i)).toBeVisible();
   await expect(page.getByRole("list", { name: "Recovery policy changes" })).toContainText(
     "add Recovered signer: absent → trusted",
   );
@@ -104,6 +105,8 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
     mimeType: "application/json",
     buffer: Buffer.from("preview-signed-trust-policy"),
   });
+  await expect(page.getByText(/Witnessed-anchor assessment: forward proven/i)).toBeVisible();
+  await expect(page.getByText(/contains the witnessed head/i)).toBeVisible();
   await expect(page.getByRole("list", { name: "Recovery policy changes" })).toContainText(
     "replace Recovered signer: trusted → trusted",
   );

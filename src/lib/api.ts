@@ -36,6 +36,7 @@ interface MockState {
   reports: AlignmentReportWithEvidence[];
   signerTrust: SignerTrustRecord[];
   signerTrustHistory: SignerTrustHistoryRecord[];
+  trustAnchorAdvancements: TrustAnchorAdvancement[];
   settings: AppSettings;
 }
 
@@ -48,6 +49,7 @@ const mockState: MockState = {
   reports: [],
   signerTrust: [],
   signerTrustHistory: [],
+  trustAnchorAdvancements: [],
   settings: {
     api_key: "",
     default_framework: "jest",
@@ -723,12 +725,15 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       });
       return [recovered] as T;
     }
-    case "advance_trust_anchor_witness":
+    case "advance_trust_anchor_witness": {
       if (args.expected_signer_fingerprint !== "c".repeat(64)) {
         throw new Error("Checkpoint confirmation does not match the verified package");
       }
-      return {
+      const advancement: TrustAnchorAdvancement = {
         id: nextId("anchor-advance"),
+        project_id: String(args.project_id),
+        source_project_id: "preview-source-project",
+        package_signer_fingerprint: "c".repeat(64),
         previous_head_digest: "a".repeat(64),
         previous_event_count: 2,
         advanced_head_digest: "f".repeat(64),
@@ -736,7 +741,30 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         payload_sha256: "e".repeat(64),
         provenance: String(args.provenance),
         advanced_at: now(),
-      } as T;
+      };
+      mockState.trustAnchorAdvancements.push(advancement);
+      return advancement as T;
+    }
+    case "list_trust_anchor_advancements":
+      return mockState.trustAnchorAdvancements.filter(
+        (receipt) => receipt.project_id === args.project_id,
+      ) as T;
+    case "export_trust_anchor_advancements": {
+      const receipts = mockState.trustAnchorAdvancements.filter(
+        (receipt) => receipt.project_id === args.project_id,
+      );
+      return JSON.stringify(
+        {
+          schema: "speccompanion.trust-anchor-advancements.v1",
+          project_id: String(args.project_id),
+          receipt_count: receipts.length,
+          signature_status: "unsigned_local_receipts",
+          receipts,
+        },
+        null,
+        2,
+      ) as T;
+    }
     default:
       throw new Error(`Unsupported browser preview command: ${command}`);
   }
@@ -924,6 +952,14 @@ export const advanceTrustAnchorWitness = (
     expected_payload_sha256: expectedPayloadSha256,
     provenance,
   });
+
+export const listTrustAnchorAdvancements = (projectId: string) =>
+  invoke<TrustAnchorAdvancement[]>("list_trust_anchor_advancements", {
+    project_id: projectId,
+  });
+
+export const exportTrustAnchorAdvancements = (projectId: string) =>
+  invoke<string>("export_trust_anchor_advancements", { project_id: projectId });
 
 export const createSigningIdentity = (signerIdentity: string) =>
   invoke<SigningIdentityInfo>("create_signing_identity", { signer_identity: signerIdentity });

@@ -114,6 +114,11 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await page.getByLabel("Recovery verification provenance").fill("Bridge package SEC-43");
   await page.getByRole("button", { name: "Record as bridge checkpoint" }).click();
   await expect(page.getByText(/no signer policy was imported/i)).toBeVisible();
+  await expect(page.getByRole("list", { name: "Checkpoint advancement receipts" })).toContainText(
+    "2 → 3 decisions",
+  );
+  await expect(page.getByText(/deterministic and unsigned/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export unsigned receipts" })).toBeEnabled();
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Evidence bundle" })).toBeVisible();

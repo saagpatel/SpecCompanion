@@ -18,6 +18,8 @@ import {
   useVerifySignerTrustPolicy,
   useImportSignerTrustPolicy,
   useAdvanceTrustAnchorWitness,
+  useTrustAnchorAdvancements,
+  useExportTrustAnchorAdvancements,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -49,6 +51,8 @@ export function Reports() {
   const verifyTrustPolicy = useVerifySignerTrustPolicy(projectId ?? "");
   const importTrustPolicy = useImportSignerTrustPolicy(projectId ?? "");
   const advanceTrustAnchor = useAdvanceTrustAnchorWitness(projectId ?? "");
+  const trustAnchorAdvancements = useTrustAnchorAdvancements(projectId);
+  const exportTrustAnchorAdvancements = useExportTrustAnchorAdvancements();
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
   const {
@@ -579,6 +583,78 @@ export function Reports() {
               Recovered {importTrustPolicy.data.length} signer policies with immutable history.
             </p>
           )}
+          <div className="border-border mt-4 border-t pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-medium">Checkpoint advancement receipts</h4>
+                <p className="text-text-muted mt-1 text-xs">
+                  Local sequencing evidence only. These receipts are deterministic and unsigned;
+                  they do not prove package-signer authority.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={
+                  !trustAnchorAdvancements.data?.length || exportTrustAnchorAdvancements.isPending
+                }
+                onClick={() =>
+                  exportTrustAnchorAdvancements.mutate(projectId!, {
+                    onSuccess: (content) => {
+                      const url = URL.createObjectURL(
+                        new Blob([content], { type: "application/json" }),
+                      );
+                      const anchor = document.createElement("a");
+                      anchor.href = url;
+                      anchor.download = "speccompanion-trust-anchor-advancements.json";
+                      anchor.click();
+                      URL.revokeObjectURL(url);
+                    },
+                  })
+                }
+                className="text-primary-light text-xs hover:underline disabled:opacity-50"
+              >
+                Export unsigned receipts
+              </button>
+            </div>
+            {trustAnchorAdvancements.isLoading && (
+              <p role="status" className="text-text-muted mt-2 text-xs">
+                Loading checkpoint receipts…
+              </p>
+            )}
+            {trustAnchorAdvancements.isError && (
+              <p role="alert" className="text-danger mt-2 text-xs">
+                Checkpoint receipts are unavailable. No sequencing evidence is shown.
+              </p>
+            )}
+            {trustAnchorAdvancements.data?.length === 0 && (
+              <p className="text-text-muted mt-2 text-xs">
+                No checkpoint advancement receipts have been recorded for this project.
+              </p>
+            )}
+            {trustAnchorAdvancements.data && trustAnchorAdvancements.data.length > 0 && (
+              <ol aria-label="Checkpoint advancement receipts" className="mt-3 space-y-2">
+                {trustAnchorAdvancements.data.map((receipt) => (
+                  <li key={receipt.id} className="border-border rounded border p-2 text-xs">
+                    <p>
+                      <strong>
+                        {receipt.previous_event_count} → {receipt.advanced_event_count} decisions
+                      </strong>{" "}
+                      · {new Date(receipt.advanced_at).toLocaleString()}
+                    </p>
+                    <p className="break-all">
+                      Source {receipt.source_project_id} · signer{" "}
+                      {receipt.package_signer_fingerprint}
+                    </p>
+                    <p className="break-all">
+                      Heads {receipt.previous_head_digest} → {receipt.advanced_head_digest}
+                    </p>
+                    <p className="break-all">Payload {receipt.payload_sha256}</p>
+                    <p>Provenance: {receipt.provenance}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         </div>
         {trustHistoryIntegrity.data && (
           <div

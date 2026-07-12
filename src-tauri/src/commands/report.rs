@@ -14,7 +14,7 @@ use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
-const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v1";
+const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v2";
 const MAX_TRUST_POLICY_BYTES: usize = 1_048_576;
 const MAX_TRUST_POLICY_RECORDS: usize = 100;
 const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
@@ -141,6 +141,10 @@ struct TrustPolicyPayload {
     source_project_id: String,
     source_project_name: String,
     exported_at: String,
+    #[serde(default)]
+    source_history_head_digest: String,
+    #[serde(default)]
+    source_history_event_count: usize,
     policies: Vec<PortableSignerPolicy>,
 }
 
@@ -165,6 +169,8 @@ pub struct TrustPolicyVerification {
     pub source_project_name: Option<String>,
     pub policy_count: usize,
     pub payload_sha256: Option<String>,
+    pub source_history_head_digest: Option<String>,
+    pub source_history_event_count: usize,
     pub conflicts: Vec<TrustPolicyConflict>,
     pub diagnostics: Vec<String>,
 }
@@ -696,6 +702,16 @@ pub fn export_signer_trust_policy(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     let project = queries::get_project(&conn, &project_id)?;
+    let history = verify_trust_history_integrity(&conn, &project_id);
+    if history.status != "verified" {
+        return Err(AppError::InvalidInput(format!(
+            "Trust policy export refused because history integrity is {}",
+            history.status
+        )));
+    }
+    let history_head = history.head_digest.ok_or_else(|| {
+        AppError::InvalidInput("Trust policy export requires at least one history event".into())
+    })?;
     let mut stmt = conn.prepare(
         "SELECT key_fingerprint, signer_identity, status, provenance FROM signer_trust
          WHERE project_id = ?1 ORDER BY key_fingerprint",
@@ -721,6 +737,8 @@ pub fn export_signer_trust_policy(
             source_project_id: project_id,
             source_project_name: project.project.name,
             exported_at: Utc::now().to_rfc3339(),
+            source_history_head_digest: history_head,
+            source_history_event_count: history.event_count,
             policies,
         },
         identity,
@@ -866,6 +884,8 @@ pub fn import_signer_trust_policy(
         &project_id,
         &bundle.payload.policies,
         &fingerprint,
+        &bundle.payload.source_history_head_digest,
+        bundle.payload.source_history_event_count,
         recovery_provenance.trim(),
     )
 }
@@ -913,6 +933,8 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         source_project_name: None,
         policy_count: 0,
         payload_sha256: None,
+        source_history_head_digest: None,
+        source_history_event_count: 0,
         conflicts: Vec::new(),
         diagnostics: Vec::new(),
     };
@@ -937,6 +959,8 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
     result.source_project_name = Some(bundle.payload.source_project_name.clone());
     result.policy_count = bundle.payload.policies.len();
     result.payload_sha256 = Some(bundle.payload_sha256.clone());
+    result.source_history_head_digest = Some(bundle.payload.source_history_head_digest.clone());
+    result.source_history_event_count = bundle.payload.source_history_event_count;
     if bundle.payload.schema != TRUST_POLICY_SCHEMA || bundle.signature_algorithm != "ed25519" {
         result.status = "unsupported".into();
         result
@@ -945,7 +969,14 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         return result;
     }
     let mut fingerprints = HashSet::new();
-    if bundle.payload.policies.is_empty()
+    if bundle.payload.source_history_head_digest.len() != 64
+        || !bundle
+            .payload
+            .source_history_head_digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        || bundle.payload.source_history_event_count == 0
+        || bundle.payload.policies.is_empty()
         || bundle.payload.policies.len() > MAX_TRUST_POLICY_RECORDS
         || bundle.payload.policies.iter().any(|policy| {
             policy.key_fingerprint.len() != 64
@@ -961,7 +992,7 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
     {
         result
             .diagnostics
-            .push("Trust policy contains invalid records".into());
+            .push("Trust policy contains an invalid history anchor or policy record".into());
         return result;
     }
     let payload_digest = match serde_json::to_vec(&bundle.payload) {
@@ -1046,6 +1077,8 @@ fn import_verified_trust_policy(
     project_id: &str,
     policies: &[PortableSignerPolicy],
     package_fingerprint: &str,
+    source_history_head_digest: &str,
+    source_history_event_count: usize,
     recovery_provenance: &str,
 ) -> Result<Vec<SignerTrustRecord>, AppError> {
     let now = Utc::now().to_rfc3339();
@@ -1053,8 +1086,12 @@ fn import_verified_trust_policy(
     let mut imported = Vec::with_capacity(policies.len());
     for policy in policies {
         let provenance = format!(
-            "{}; recovered from signed policy {}: {}",
-            policy.provenance, package_fingerprint, recovery_provenance
+            "{}; recovered from signed policy {} anchored at {} after {} events: {}",
+            policy.provenance,
+            package_fingerprint,
+            source_history_head_digest,
+            source_history_event_count,
+            recovery_provenance
         );
         tx.execute(
             "INSERT INTO signer_trust (project_id, key_fingerprint, signer_identity, status, provenance, created_at, updated_at)
@@ -1797,11 +1834,15 @@ mod tests {
             .unwrap();
         assert_eq!(history_after_rotation, 5);
 
+        let export_integrity = verify_trust_history_integrity(&conn, &first.id);
+        assert_eq!(export_integrity.status, "verified");
         let payload = TrustPolicyPayload {
             schema: TRUST_POLICY_SCHEMA.into(),
             source_project_id: first.id.clone(),
             source_project_name: first.name.clone(),
             exported_at: "2026-07-12T00:00:00Z".into(),
+            source_history_head_digest: export_integrity.head_digest.clone().unwrap(),
+            source_history_event_count: export_integrity.event_count,
             policies: vec![PortableSignerPolicy {
                 key_fingerprint: replacement.clone(),
                 signer_identity: "Release 2027".into(),
@@ -1815,6 +1856,11 @@ mod tests {
         let recovery_fingerprint = sha256_hex(&key.verifying_key().to_bytes());
         assert_eq!(verified.status, "valid_untrusted");
         assert_eq!(verified.policy_count, 1);
+        assert_eq!(verified.source_history_event_count, 5);
+        assert_eq!(
+            verified.source_history_head_digest,
+            export_integrity.head_digest
+        );
         assert_eq!(
             verified.key_fingerprint.as_deref(),
             Some(recovery_fingerprint.as_str())
@@ -1822,6 +1868,15 @@ mod tests {
 
         let tampered = portable.replace("Release 2027", "Attacker");
         assert_eq!(verify_trust_policy(&tampered).status, "invalid");
+        let mut tampered_anchor: serde_json::Value = serde_json::from_str(&portable).unwrap();
+        tampered_anchor["payload"]["source_history_head_digest"] =
+            serde_json::Value::String("0".repeat(64));
+        assert_eq!(
+            verify_trust_policy(&serde_json::to_string(&tampered_anchor).unwrap()).status,
+            "invalid"
+        );
+        let legacy = portable.replace(TRUST_POLICY_SCHEMA, "speccompanion.signer-trust-policy.v1");
+        assert_eq!(verify_trust_policy(&legacy).status, "unsupported");
 
         let recovery_policy = PortableSignerPolicy {
             key_fingerprint: replacement.clone(),
@@ -1838,6 +1893,8 @@ mod tests {
             &second.id,
             &[recovery_policy.clone()],
             &recovery_fingerprint,
+            verified.source_history_head_digest.as_deref().unwrap(),
+            verified.source_history_event_count,
             "fingerprint matched printed recovery record",
         )
         .unwrap();

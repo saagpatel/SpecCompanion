@@ -422,6 +422,12 @@ export function Reports() {
               {verifyTrustPolicy.data.payload_sha256 && (
                 <p className="break-all">Payload digest: {verifyTrustPolicy.data.payload_sha256}</p>
               )}
+              {verifyTrustPolicy.data.source_history_head_digest && (
+                <p className="break-all">
+                  Signed history anchor: {verifyTrustPolicy.data.source_history_head_digest} after{" "}
+                  {verifyTrustPolicy.data.source_history_event_count} decisions.
+                </p>
+              )}
               {verifyTrustPolicy.data.diagnostics.map((diagnostic) => (
                 <p key={diagnostic}>{diagnostic}</p>
               ))}

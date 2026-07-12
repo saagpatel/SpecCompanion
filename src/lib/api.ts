@@ -663,12 +663,14 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         );
         return {
           status: "valid_untrusted",
-          schema: "speccompanion.signer-trust-policy.v1",
+          schema: "speccompanion.signer-trust-policy.v2",
           signer_identity: "Preview recovery signer",
           key_fingerprint: "c".repeat(64),
           source_project_name: "Preview source project",
           policy_count: 1,
           payload_sha256: "e".repeat(64),
+          source_history_head_digest: "f".repeat(64),
+          source_history_event_count: 3,
           conflicts: [
             {
               key_fingerprint: "d".repeat(64),
@@ -687,6 +689,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         status: "invalid",
         schema: "unknown",
         policy_count: 0,
+        source_history_event_count: 0,
         conflicts: [],
         diagnostics: ["Malformed trust policy"],
       } as T;

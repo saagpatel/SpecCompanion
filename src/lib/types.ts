@@ -242,6 +242,8 @@ export interface TrustPolicyVerification {
   source_project_name?: string;
   policy_count: number;
   payload_sha256?: string;
+  source_history_head_digest?: string;
+  source_history_event_count: number;
   conflicts: Array<{
     key_fingerprint: string;
     signer_identity: string;

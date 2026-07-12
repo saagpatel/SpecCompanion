@@ -9,10 +9,12 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
+const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v1";
 const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
 
 #[derive(Serialize, Deserialize)]
@@ -109,6 +111,48 @@ pub struct SigningIdentityInfo {
     pub key_fingerprint: String,
     pub public_key: String,
     pub storage: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PortableSignerPolicy {
+    key_fingerprint: String,
+    signer_identity: String,
+    status: String,
+    provenance: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrustPolicyPayload {
+    schema: String,
+    source_project_id: String,
+    source_project_name: String,
+    exported_at: String,
+    policies: Vec<PortableSignerPolicy>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SignedTrustPolicyBundle {
+    payload: TrustPolicyPayload,
+    signer_identity: String,
+    public_key: String,
+    key_fingerprint: String,
+    signature_algorithm: String,
+    payload_sha256: String,
+    signature: String,
+}
+
+#[derive(Serialize)]
+pub struct TrustPolicyVerification {
+    pub status: String,
+    pub schema: String,
+    pub signer_identity: Option<String>,
+    pub key_fingerprint: Option<String>,
+    pub source_project_name: Option<String>,
+    pub policy_count: usize,
+    pub diagnostics: Vec<String>,
 }
 
 const SIGNING_KEYRING_SERVICE: &str = "com.speccompanion.evidence-signing.v1";
@@ -571,6 +615,300 @@ pub fn export_signed_evidence_bundle(
         .map_err(|error| AppError::General(error.to_string()))?;
     let report = queries::get_alignment_report(&conn, &report_id)?;
     export_signed_bundle(&report, Utc::now(), identity, &key)
+}
+
+#[tauri::command]
+pub fn export_signer_trust_policy(
+    state: State<'_, Database>,
+    project_id: String,
+    signer_identity: String,
+) -> Result<String, AppError> {
+    let identity = signer_identity.trim();
+    if project_id.trim().is_empty() || identity.is_empty() {
+        return Err(AppError::InvalidInput(
+            "Project ID and signer identity are required".into(),
+        ));
+    }
+    let key = load_signing_key(identity)?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    let project = queries::get_project(&conn, &project_id)?;
+    let mut stmt = conn.prepare(
+        "SELECT key_fingerprint, signer_identity, status, provenance FROM signer_trust
+         WHERE project_id = ?1 ORDER BY key_fingerprint",
+    )?;
+    let policies = stmt
+        .query_map([&project_id], |row| {
+            Ok(PortableSignerPolicy {
+                key_fingerprint: row.get(0)?,
+                signer_identity: row.get(1)?,
+                status: row.get(2)?,
+                provenance: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    if policies.is_empty() {
+        return Err(AppError::InvalidInput(
+            "No signer trust policy exists to export".into(),
+        ));
+    }
+    export_signed_trust_policy(
+        TrustPolicyPayload {
+            schema: TRUST_POLICY_SCHEMA.into(),
+            source_project_id: project_id,
+            source_project_name: project.project.name,
+            exported_at: Utc::now().to_rfc3339(),
+            policies,
+        },
+        identity,
+        &key,
+    )
+}
+
+#[tauri::command]
+pub fn verify_signer_trust_policy(bundle_json: String) -> TrustPolicyVerification {
+    verify_trust_policy(&bundle_json)
+}
+
+#[tauri::command]
+pub fn import_signer_trust_policy(
+    state: State<'_, Database>,
+    project_id: String,
+    bundle_json: String,
+    expected_signer_fingerprint: String,
+    recovery_provenance: String,
+) -> Result<Vec<SignerTrustRecord>, AppError> {
+    let verification = verify_trust_policy(&bundle_json);
+    if verification.status != "valid_untrusted" {
+        return Err(AppError::InvalidInput(
+            "Trust policy signature or payload is invalid".into(),
+        ));
+    }
+    let fingerprint = verification.key_fingerprint.ok_or_else(|| {
+        AppError::InvalidInput("Trust policy signer fingerprint is unavailable".into())
+    })?;
+    if !fingerprint.eq_ignore_ascii_case(expected_signer_fingerprint.trim())
+        || recovery_provenance.trim().is_empty()
+    {
+        return Err(AppError::InvalidInput(
+            "Recovery confirmation does not match the verified signer fingerprint".into(),
+        ));
+    }
+    let bundle: SignedTrustPolicyBundle = serde_json::from_str(&bundle_json)?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    import_verified_trust_policy(
+        &conn,
+        &project_id,
+        &bundle.payload.policies,
+        &fingerprint,
+        recovery_provenance.trim(),
+    )
+}
+
+fn load_signing_key(identity: &str) -> Result<SigningKey, AppError> {
+    let entry = keyring::Entry::new(SIGNING_KEYRING_SERVICE, identity)
+        .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?;
+    let secret = entry
+        .get_secret()
+        .map_err(|error| AppError::General(format!("Signing identity unavailable: {error}")))?;
+    let seed: [u8; 32] = secret
+        .as_slice()
+        .try_into()
+        .map_err(|_| AppError::General("Stored signing key is malformed".into()))?;
+    Ok(SigningKey::from_bytes(&seed))
+}
+
+fn export_signed_trust_policy(
+    payload: TrustPolicyPayload,
+    identity: &str,
+    key: &SigningKey,
+) -> Result<String, AppError> {
+    let payload_bytes = serde_json::to_vec(&payload)?;
+    let payload_sha256 = sha256_hex(&payload_bytes);
+    let public = key.verifying_key().to_bytes();
+    let signature = key.sign(payload_sha256.as_bytes());
+    serde_json::to_string_pretty(&SignedTrustPolicyBundle {
+        payload,
+        signer_identity: identity.into(),
+        public_key: BASE64.encode(public),
+        key_fingerprint: sha256_hex(&public),
+        signature_algorithm: "ed25519".into(),
+        payload_sha256,
+        signature: BASE64.encode(signature.to_bytes()),
+    })
+    .map_err(AppError::Serde)
+}
+
+fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
+    let mut result = TrustPolicyVerification {
+        status: "invalid".into(),
+        schema: "unknown".into(),
+        signer_identity: None,
+        key_fingerprint: None,
+        source_project_name: None,
+        policy_count: 0,
+        diagnostics: Vec::new(),
+    };
+    let bundle: SignedTrustPolicyBundle = match serde_json::from_str(bundle_json) {
+        Ok(bundle) => bundle,
+        Err(error) => {
+            result
+                .diagnostics
+                .push(format!("Malformed trust policy: {error}"));
+            return result;
+        }
+    };
+    result.schema = bundle.payload.schema.clone();
+    result.signer_identity = Some(bundle.signer_identity.clone());
+    result.key_fingerprint = Some(bundle.key_fingerprint.clone());
+    result.source_project_name = Some(bundle.payload.source_project_name.clone());
+    result.policy_count = bundle.payload.policies.len();
+    if bundle.payload.schema != TRUST_POLICY_SCHEMA || bundle.signature_algorithm != "ed25519" {
+        result.status = "unsupported".into();
+        result
+            .diagnostics
+            .push("Unsupported trust policy contract".into());
+        return result;
+    }
+    let mut fingerprints = HashSet::new();
+    if bundle.payload.policies.is_empty()
+        || bundle.payload.policies.iter().any(|policy| {
+            policy.key_fingerprint.len() != 64
+                || !policy
+                    .key_fingerprint
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit())
+                || !fingerprints.insert(policy.key_fingerprint.to_lowercase())
+                || !matches!(policy.status.as_str(), "trusted" | "revoked")
+                || policy.signer_identity.trim().is_empty()
+                || policy.provenance.trim().is_empty()
+        })
+    {
+        result
+            .diagnostics
+            .push("Trust policy contains invalid records".into());
+        return result;
+    }
+    let payload_digest = match serde_json::to_vec(&bundle.payload) {
+        Ok(bytes) => sha256_hex(&bytes),
+        Err(error) => {
+            result
+                .diagnostics
+                .push(format!("Could not encode trust policy: {error}"));
+            return result;
+        }
+    };
+    if payload_digest != bundle.payload_sha256 {
+        result
+            .diagnostics
+            .push("Trust policy payload digest mismatch".into());
+        return result;
+    }
+    let public_bytes = match BASE64.decode(&bundle.public_key) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            result
+                .diagnostics
+                .push("Malformed trust policy public key".into());
+            return result;
+        }
+    };
+    if sha256_hex(&public_bytes) != bundle.key_fingerprint {
+        result
+            .diagnostics
+            .push("Trust policy fingerprint mismatch".into());
+        return result;
+    }
+    let public: [u8; 32] = match public_bytes.try_into() {
+        Ok(public) => public,
+        Err(_) => {
+            result
+                .diagnostics
+                .push("Malformed trust policy public key".into());
+            return result;
+        }
+    };
+    let signature = match BASE64
+        .decode(&bundle.signature)
+        .ok()
+        .and_then(|bytes| Signature::from_slice(&bytes).ok())
+    {
+        Some(signature) => signature,
+        None => {
+            result
+                .diagnostics
+                .push("Malformed trust policy signature".into());
+            return result;
+        }
+    };
+    let verifying_key = match VerifyingKey::from_bytes(&public) {
+        Ok(key) => key,
+        Err(_) => {
+            result
+                .diagnostics
+                .push("Malformed trust policy public key".into());
+            return result;
+        }
+    };
+    if verifying_key
+        .verify(bundle.payload_sha256.as_bytes(), &signature)
+        .is_err()
+    {
+        result
+            .diagnostics
+            .push("Trust policy signature is invalid".into());
+        return result;
+    }
+    result.status = "valid_untrusted".into();
+    result.diagnostics.push(
+        "Signature proves package integrity and key possession, not recovery authority".into(),
+    );
+    result
+}
+
+fn import_verified_trust_policy(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    policies: &[PortableSignerPolicy],
+    package_fingerprint: &str,
+    recovery_provenance: &str,
+) -> Result<Vec<SignerTrustRecord>, AppError> {
+    let now = Utc::now().to_rfc3339();
+    let tx = conn.unchecked_transaction()?;
+    let mut imported = Vec::with_capacity(policies.len());
+    for policy in policies {
+        let provenance = format!(
+            "{}; recovered from signed policy {}: {}",
+            policy.provenance, package_fingerprint, recovery_provenance
+        );
+        tx.execute(
+            "INSERT INTO signer_trust (project_id, key_fingerprint, signer_identity, status, provenance, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+             ON CONFLICT(project_id, key_fingerprint) DO UPDATE SET signer_identity = excluded.signer_identity, status = excluded.status, provenance = excluded.provenance, updated_at = excluded.updated_at",
+            rusqlite::params![project_id, policy.key_fingerprint.to_lowercase(), policy.signer_identity, policy.status, provenance, now],
+        )?;
+        tx.execute(
+            "INSERT INTO signer_trust_history (id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![Uuid::new_v4().to_string(), project_id, policy.key_fingerprint.to_lowercase(), policy.signer_identity, policy.status, provenance, now],
+        )?;
+        imported.push(SignerTrustRecord {
+            project_id: project_id.into(),
+            key_fingerprint: policy.key_fingerprint.to_lowercase(),
+            signer_identity: policy.signer_identity.clone(),
+            status: policy.status.clone(),
+            provenance,
+            updated_at: now.clone(),
+        });
+    }
+    tx.commit()?;
+    Ok(imported)
 }
 
 fn export_evidence_bundle(
@@ -1103,7 +1441,7 @@ mod tests {
             current,
             vec![
                 (fingerprint, "revoked".into()),
-                (replacement, "trusted".into())
+                (replacement.clone(), "trusted".into())
             ]
         );
         let history_after_rotation: i64 = conn
@@ -1114,5 +1452,49 @@ mod tests {
             )
             .unwrap();
         assert_eq!(history_after_rotation, 5);
+
+        let payload = TrustPolicyPayload {
+            schema: TRUST_POLICY_SCHEMA.into(),
+            source_project_id: first.id.clone(),
+            source_project_name: first.name.clone(),
+            exported_at: "2026-07-12T00:00:00Z".into(),
+            policies: vec![PortableSignerPolicy {
+                key_fingerprint: replacement.clone(),
+                signer_identity: "Release 2027".into(),
+                status: "trusted".into(),
+                provenance: "rotation ceremony ticket SEC-42".into(),
+            }],
+        };
+        let key = SigningKey::from_bytes(&[11_u8; 32]);
+        let portable = export_signed_trust_policy(payload, "Recovery signer", &key).unwrap();
+        let verified = verify_trust_policy(&portable);
+        let recovery_fingerprint = sha256_hex(&key.verifying_key().to_bytes());
+        assert_eq!(verified.status, "valid_untrusted");
+        assert_eq!(verified.policy_count, 1);
+        assert_eq!(
+            verified.key_fingerprint.as_deref(),
+            Some(recovery_fingerprint.as_str())
+        );
+
+        let tampered = portable.replace("Release 2027", "Attacker");
+        assert_eq!(verify_trust_policy(&tampered).status, "invalid");
+
+        let imported = import_verified_trust_policy(
+            &conn,
+            &second.id,
+            &[PortableSignerPolicy {
+                key_fingerprint: replacement.clone(),
+                signer_identity: "Release 2027".into(),
+                status: "trusted".into(),
+                provenance: "rotation ceremony ticket SEC-42".into(),
+            }],
+            &recovery_fingerprint,
+            "fingerprint matched printed recovery record",
+        )
+        .unwrap();
+        assert_eq!(imported.len(), 1);
+        assert!(imported[0]
+            .provenance
+            .contains("fingerprint matched printed recovery record"));
     }
 }

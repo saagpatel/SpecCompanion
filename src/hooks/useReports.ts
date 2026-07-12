@@ -111,6 +111,38 @@ export function useRotateSignerTrust(projectId: string) {
   });
 }
 
+export function useExportSignerTrustPolicy() {
+  return useMutation({
+    mutationFn: ({ projectId, identity }: { projectId: string; identity: string }) =>
+      api.exportSignerTrustPolicy(projectId, identity),
+  });
+}
+
+export function useVerifySignerTrustPolicy() {
+  return useMutation({
+    mutationFn: (bundleJson: string) => api.verifySignerTrustPolicy(bundleJson),
+  });
+}
+
+export function useImportSignerTrustPolicy(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bundleJson,
+      fingerprint,
+      provenance,
+    }: {
+      bundleJson: string;
+      fingerprint: string;
+      provenance: string;
+    }) => api.importSignerTrustPolicy(projectId, bundleJson, fingerprint, provenance),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
+    },
+  });
+}
+
 export function useCreateSigningIdentity() {
   return useMutation({ mutationFn: (identity: string) => api.createSigningIdentity(identity) });
 }

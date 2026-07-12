@@ -78,6 +78,23 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await expect(page.getByRole("list", { name: "Current signer trust policies" })).toContainText(
     "Preview replacement signer",
   );
+  await expect(page.getByRole("button", { name: "Export signed trust policy" })).toBeDisabled();
+  await page.getByLabel("Keychain signing identity").fill("Preview recovery signer");
+  await expect(page.getByRole("button", { name: "Export signed trust policy" })).toBeEnabled();
+  await page.getByLabel("Verify recovery policy JSON").setInputFiles({
+    name: "signer-trust-policy.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("preview-signed-trust-policy"),
+  });
+  await expect(page.getByText(/Recovery policy: valid_untrusted/i)).toBeVisible();
+  await expect(page.getByText(/not recovery authority/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Recover verified policy" })).toBeDisabled();
+  await page.getByLabel("Confirm package signer fingerprint").fill("c".repeat(64));
+  await page
+    .getByLabel("Recovery verification provenance")
+    .fill("Matched printed disaster recovery record");
+  await page.getByRole("button", { name: "Recover verified policy" }).click();
+  await expect(page.getByText(/Recovered 1 signer policies/i)).toBeVisible();
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Evidence bundle" })).toBeVisible();

@@ -65,6 +65,9 @@ pub fn run() {
             commands::report::list_signer_trust,
             commands::report::list_signer_trust_history,
             commands::report::rotate_signer_trust,
+            commands::report::export_signer_trust_policy,
+            commands::report::verify_signer_trust_policy,
+            commands::report::import_signer_trust_policy,
             // Git
             commands::git::get_repo_info,
             commands::git::get_changed_files,

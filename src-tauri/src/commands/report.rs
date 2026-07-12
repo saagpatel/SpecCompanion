@@ -14,9 +14,10 @@ use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
-const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v2";
+const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v3";
 const MAX_TRUST_POLICY_BYTES: usize = 1_048_576;
 const MAX_TRUST_POLICY_RECORDS: usize = 100;
+const MAX_TRUST_HISTORY_PROOF_EVENTS: usize = 100;
 const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
 
 #[derive(Serialize, Deserialize)]
@@ -134,6 +135,19 @@ struct PortableSignerPolicy {
     provenance: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PortableTrustHistoryEvent {
+    id: String,
+    key_fingerprint: String,
+    signer_identity: String,
+    status: String,
+    provenance: String,
+    recorded_at: String,
+    previous_digest: String,
+    event_digest: String,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TrustPolicyPayload {
@@ -145,6 +159,8 @@ struct TrustPolicyPayload {
     source_history_head_digest: String,
     #[serde(default)]
     source_history_event_count: usize,
+    #[serde(default)]
+    history_proof: Vec<PortableTrustHistoryEvent>,
     policies: Vec<PortableSignerPolicy>,
 }
 
@@ -721,6 +737,30 @@ pub fn export_signer_trust_policy(
     let history_head = history.head_digest.ok_or_else(|| {
         AppError::InvalidInput("Trust policy export requires at least one history event".into())
     })?;
+    if history.event_count > MAX_TRUST_HISTORY_PROOF_EVENTS {
+        return Err(AppError::InvalidInput(format!(
+            "Trust policy export requires a bounded ancestry proof; {} events exceed the {} event limit",
+            history.event_count, MAX_TRUST_HISTORY_PROOF_EVENTS
+        )));
+    }
+    let mut history_stmt = conn.prepare(
+        "SELECT id, key_fingerprint, signer_identity, status, provenance, recorded_at, previous_digest, event_digest
+         FROM signer_trust_history WHERE project_id = ?1 ORDER BY rowid",
+    )?;
+    let history_proof = history_stmt
+        .query_map([&project_id], |row| {
+            Ok(PortableTrustHistoryEvent {
+                id: row.get(0)?,
+                key_fingerprint: row.get(1)?,
+                signer_identity: row.get(2)?,
+                status: row.get(3)?,
+                provenance: row.get(4)?,
+                recorded_at: row.get(5)?,
+                previous_digest: row.get(6)?,
+                event_digest: row.get(7)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
     let mut stmt = conn.prepare(
         "SELECT key_fingerprint, signer_identity, status, provenance FROM signer_trust
          WHERE project_id = ?1 ORDER BY key_fingerprint",
@@ -748,6 +788,7 @@ pub fn export_signer_trust_policy(
             exported_at: Utc::now().to_rfc3339(),
             source_history_head_digest: history_head,
             source_history_event_count: history.event_count,
+            history_proof,
             policies,
         },
         identity,
@@ -896,8 +937,17 @@ fn assess_trust_anchor(
         "rollback"
     } else if bundle.payload.source_history_event_count == witnessed_count {
         "conflict"
+    } else if witnessed_count > 0
+        && bundle
+            .payload
+            .history_proof
+            .get(witnessed_count - 1)
+            .map(|event| event.event_digest.as_str())
+            == Some(head.as_str())
+    {
+        "forward_proven"
     } else {
-        "advanced_unproven"
+        "fork"
     };
     Ok(AnchorAssessment {
         status: status.into(),
@@ -949,7 +999,7 @@ pub fn import_signer_trust_policy(
         )));
     }
     let anchor = assess_trust_anchor(&conn, &project_id, &bundle)?;
-    if matches!(anchor.status.as_str(), "rollback" | "conflict") {
+    if matches!(anchor.status.as_str(), "rollback" | "conflict" | "fork") {
         return Err(AppError::InvalidInput(format!(
             "Trust policy recovery refused because the signed anchor is classified as {}",
             anchor.status
@@ -1047,6 +1097,12 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         result
             .diagnostics
             .push("Unsupported trust policy contract".into());
+        return result;
+    }
+    if !validate_portable_history_proof(&bundle.payload) {
+        result
+            .diagnostics
+            .push("Trust policy ancestry proof is incomplete or invalid".into());
         return result;
     }
     let mut fingerprints = HashSet::new();
@@ -1151,6 +1207,43 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         "Signature proves package integrity and key possession, not recovery authority".into(),
     );
     result
+}
+
+fn validate_portable_history_proof(payload: &TrustPolicyPayload) -> bool {
+    if payload.history_proof.is_empty()
+        || payload.history_proof.len() > MAX_TRUST_HISTORY_PROOF_EVENTS
+        || payload.history_proof.len() != payload.source_history_event_count
+        || payload
+            .history_proof
+            .last()
+            .map(|event| event.event_digest.as_str())
+            != Some(payload.source_history_head_digest.as_str())
+    {
+        return false;
+    }
+    let mut previous = String::new();
+    for event in &payload.history_proof {
+        if event.previous_digest != previous
+            || !matches!(event.status.as_str(), "trusted" | "revoked")
+        {
+            return false;
+        }
+        let expected = trust_history_digest(&[
+            &previous,
+            &event.id,
+            &payload.source_project_id,
+            &event.key_fingerprint,
+            &event.signer_identity,
+            &event.status,
+            &event.provenance,
+            &event.recorded_at,
+        ]);
+        if event.event_digest != expected {
+            return false;
+        }
+        previous.clone_from(&event.event_digest);
+    }
+    true
 }
 
 fn import_verified_trust_policy(
@@ -1937,6 +2030,27 @@ mod tests {
 
         let export_integrity = verify_trust_history_integrity(&conn, &first.id);
         assert_eq!(export_integrity.status, "verified");
+        let history_proof = {
+            let mut stmt = conn.prepare(
+                "SELECT id, key_fingerprint, signer_identity, status, provenance, recorded_at, previous_digest, event_digest
+                 FROM signer_trust_history WHERE project_id = ?1 ORDER BY rowid",
+            ).unwrap();
+            stmt.query_map([&first.id], |row| {
+                Ok(PortableTrustHistoryEvent {
+                    id: row.get(0)?,
+                    key_fingerprint: row.get(1)?,
+                    signer_identity: row.get(2)?,
+                    status: row.get(3)?,
+                    provenance: row.get(4)?,
+                    recorded_at: row.get(5)?,
+                    previous_digest: row.get(6)?,
+                    event_digest: row.get(7)?,
+                })
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+        };
         let payload = TrustPolicyPayload {
             schema: TRUST_POLICY_SCHEMA.into(),
             source_project_id: first.id.clone(),
@@ -1944,6 +2058,7 @@ mod tests {
             exported_at: "2026-07-12T00:00:00Z".into(),
             source_history_head_digest: export_integrity.head_digest.clone().unwrap(),
             source_history_event_count: export_integrity.event_count,
+            history_proof,
             policies: vec![PortableSignerPolicy {
                 key_fingerprint: replacement.clone(),
                 signer_identity: "Release 2027".into(),
@@ -2024,12 +2139,53 @@ mod tests {
                 .status,
             "conflict"
         );
+        let previous_head = rollback
+            .payload
+            .history_proof
+            .last()
+            .unwrap()
+            .event_digest
+            .clone();
+        let next_id = "next-event".to_string();
+        let next_recorded_at = "2026-07-12T01:00:00Z".to_string();
+        let next_digest = trust_history_digest(&[
+            &previous_head,
+            &next_id,
+            &first.id,
+            &replacement,
+            "Release 2027",
+            "trusted",
+            "continued policy",
+            &next_recorded_at,
+        ]);
+        rollback
+            .payload
+            .history_proof
+            .push(PortableTrustHistoryEvent {
+                id: next_id,
+                key_fingerprint: replacement.clone(),
+                signer_identity: "Release 2027".into(),
+                status: "trusted".into(),
+                provenance: "continued policy".into(),
+                recorded_at: next_recorded_at,
+                previous_digest: previous_head,
+                event_digest: next_digest.clone(),
+            });
         rollback.payload.source_history_event_count += 1;
+        rollback.payload.source_history_head_digest = next_digest;
         assert_eq!(
             assess_trust_anchor(&conn, &second.id, &rollback)
                 .unwrap()
                 .status,
-            "advanced_unproven"
+            "forward_proven"
+        );
+        rollback.payload.history_proof[verified.source_history_event_count - 1].event_digest =
+            "1".repeat(64);
+        assert_eq!(
+            assess_trust_anchor(&conn, &second.id, &rollback)
+                .unwrap()
+                .status,
+            "fork"
         );
         let replacement_preview =
             preview_trust_policy(&conn, &second.id, &[recovery_policy]).unwrap();

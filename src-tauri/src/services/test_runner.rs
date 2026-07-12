@@ -57,6 +57,7 @@ pub fn run_pytest_test_with_environment(
         working_dir,
         environment_root,
         None,
+        None,
         RunnerConfig::default(),
     )
 }
@@ -66,12 +67,14 @@ pub fn run_pytest_test_with_attested_environment(
     working_dir: &str,
     environment_root: Option<&str>,
     expected_fingerprint: Option<&str>,
+    capability_profile: Option<&str>,
 ) -> Result<ExecutionResult, AppError> {
     run_pytest_test_with_runtime_config(
         test_file,
         working_dir,
         environment_root,
         expected_fingerprint,
+        capability_profile,
         RunnerConfig::default(),
     )
 }
@@ -94,6 +97,7 @@ pub fn run_unittest_test_with_environment(
         working_dir,
         environment_root,
         None,
+        None,
         RunnerConfig::default(),
     )
 }
@@ -103,12 +107,14 @@ pub fn run_unittest_test_with_attested_environment(
     working_dir: &str,
     environment_root: Option<&str>,
     expected_fingerprint: Option<&str>,
+    capability_profile: Option<&str>,
 ) -> Result<ExecutionResult, AppError> {
     run_unittest_test_with_runtime_config(
         test_file,
         working_dir,
         environment_root,
         expected_fingerprint,
+        capability_profile,
         RunnerConfig::default(),
     )
 }
@@ -158,7 +164,7 @@ pub fn run_pytest_test_with_config(
     working_dir: &str,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
-    run_pytest_test_with_runtime_config(test_file, working_dir, None, None, config)
+    run_pytest_test_with_runtime_config(test_file, working_dir, None, None, None, config)
 }
 
 fn run_pytest_test_with_runtime_config(
@@ -166,6 +172,7 @@ fn run_pytest_test_with_runtime_config(
     working_dir: &str,
     environment_root: Option<&str>,
     expected_fingerprint: Option<&str>,
+    capability_profile: Option<&str>,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
     let paths = validate_execution_paths(test_file, working_dir)?;
@@ -181,20 +188,23 @@ fn run_pytest_test_with_runtime_config(
             "Python 3 was not found on the allowlisted PATH",
         ));
     };
-    let mut command = Command::new(&python);
+    let args = vec![
+        "-m".into(),
+        "pytest".into(),
+        "-v".into(),
+        "--".into(),
+        paths.test.to_string_lossy().into_owned(),
+    ];
+    let (mut command, controls) = python_command(&python, &args, &paths.root, capability_profile)?;
     command
-        .args([
-            "-m",
-            "pytest",
-            "-v",
-            "--",
-            paths.test.to_string_lossy().as_ref(),
-        ])
         .env("PATH", safe_path(&paths.root, None))
         .env("PYTHONNOUSERSITE", "1")
         .env("PYTHONDONTWRITEBYTECODE", "1")
         .env("NO_COLOR", "1");
-    spawn_bounded(command, &paths.root, config, "PyTest")
+    with_control_receipt(
+        spawn_bounded(command, &paths.root, config, "PyTest")?,
+        &controls,
+    )
 }
 
 pub fn run_vitest_test_with_config(
@@ -244,7 +254,7 @@ pub fn run_unittest_test_with_config(
     working_dir: &str,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
-    run_unittest_test_with_runtime_config(test_file, working_dir, None, None, config)
+    run_unittest_test_with_runtime_config(test_file, working_dir, None, None, None, config)
 }
 
 fn run_unittest_test_with_runtime_config(
@@ -252,6 +262,7 @@ fn run_unittest_test_with_runtime_config(
     working_dir: &str,
     environment_root: Option<&str>,
     expected_fingerprint: Option<&str>,
+    capability_profile: Option<&str>,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
     let paths = validate_execution_paths(test_file, working_dir)?;
@@ -269,20 +280,64 @@ fn run_unittest_test_with_runtime_config(
     };
     let python_path =
         std::env::join_paths([paths.root.join("src"), paths.root.clone()]).unwrap_or_default();
-    let mut command = Command::new(&python);
+    let args = vec![
+        "-m".into(),
+        "unittest".into(),
+        "-v".into(),
+        paths.test.to_string_lossy().into_owned(),
+    ];
+    let (mut command, controls) = python_command(&python, &args, &paths.root, capability_profile)?;
     command
-        .args([
-            "-m",
-            "unittest",
-            "-v",
-            paths.test.to_string_lossy().as_ref(),
-        ])
         .env("PATH", safe_path(&paths.root, None))
         .env("PYTHONPATH", python_path)
         .env("PYTHONNOUSERSITE", "1")
         .env("PYTHONDONTWRITEBYTECODE", "1")
         .env("NO_COLOR", "1");
-    spawn_bounded(command, &paths.root, config, "unittest")
+    with_control_receipt(
+        spawn_bounded(command, &paths.root, config, "unittest")?,
+        &controls,
+    )
+}
+
+fn python_command(
+    python: &Path,
+    args: &[String],
+    project_root: &Path,
+    profile: Option<&str>,
+) -> Result<(Command, String), AppError> {
+    if profile != Some("macos_isolated") {
+        let mut command = Command::new(python);
+        command.args(args);
+        return Ok((command, "profile=bounded;timeout=applied;output_limit=applied;process_tree_kill=applied;network=not_enforced;filesystem_write=not_enforced".into()));
+    }
+    #[cfg(not(target_os = "macos"))]
+    return Err(AppError::InvalidInput(
+        "macOS isolated execution is unavailable on this platform".into(),
+    ));
+    #[cfg(target_os = "macos")]
+    {
+        let temp = std::env::temp_dir();
+        let escape = |path: &Path| {
+            path.to_string_lossy()
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+        };
+        let policy = format!("(version 1)(allow default)(deny network*)(deny file-write*)(allow file-write* (subpath \"{}\"))", escape(&temp));
+        let mut command = Command::new("/usr/bin/sandbox-exec");
+        command
+            .args(["-p", &policy, python.to_string_lossy().as_ref()])
+            .args(args);
+        let controls = format!("profile=macos_isolated;timeout=applied;output_limit=applied;process_tree_kill=applied;network=denied;filesystem_write=denied_except:{};child_process=not_enforced;project={}", escape(&temp), escape(project_root));
+        Ok((command, controls))
+    }
+}
+
+fn with_control_receipt(
+    mut result: ExecutionResult,
+    controls: &str,
+) -> Result<ExecutionResult, AppError> {
+    result.stdout = format!("[speccompanion-controls] {controls}\n{}", result.stdout);
+    Ok(result)
 }
 
 #[derive(Debug)]
@@ -839,6 +894,29 @@ mod tests {
         .expect_err("changed inventory must expire trust");
         assert!(drift.contains("drifted after approval"));
         let _ = fs::remove_dir_all(environment);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_isolated_profile_denies_network_and_project_writes() {
+        let fixture = Fixture::new();
+        let test = fixture.root.join("isolated_test.py");
+        fs::write(
+            &test,
+            "import socket, unittest\nfrom pathlib import Path\n\nclass IsolationTest(unittest.TestCase):\n    def test_denials(self):\n        with self.assertRaises(PermissionError): socket.create_connection(('127.0.0.1', 9), timeout=0.1)\n        with self.assertRaises(PermissionError): Path('escape.txt').write_text('bad')\n",
+        )
+        .expect("test");
+        let result = run_unittest_test_with_attested_environment(
+            test.to_string_lossy().as_ref(),
+            fixture.root.to_string_lossy().as_ref(),
+            None,
+            None,
+            Some("macos_isolated"),
+        )
+        .expect("isolated execution");
+        assert_eq!(result.status, "passed", "{}", result.stderr);
+        assert!(result.stdout.contains("network=denied"));
+        assert!(!fixture.root.join("escape.txt").exists());
     }
 
     #[test]

@@ -28,6 +28,12 @@ pub struct TrustedPythonEnvironment {
     pub root: String,
     pub fingerprint: String,
     pub interpreter: String,
+    #[serde(default = "default_capability_profile")]
+    pub capability_profile: String,
+}
+
+fn default_capability_profile() -> String {
+    "bounded".into()
 }
 
 impl Default for AppSettings {

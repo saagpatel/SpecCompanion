@@ -113,6 +113,7 @@ pub async fn execute_tests(
                     &codebase_path,
                     python_environment.map(|runtime| runtime.root.as_str()),
                     python_environment.map(|runtime| runtime.fingerprint.as_str()),
+                    python_environment.map(|runtime| runtime.capability_profile.as_str()),
                 ),
                 "jest" => test_runner::run_jest_test(&test_file_path, &codebase_path),
                 "vitest" => test_runner::run_vitest_test(&test_file_path, &codebase_path),
@@ -121,6 +122,7 @@ pub async fn execute_tests(
                     &codebase_path,
                     python_environment.map(|runtime| runtime.root.as_str()),
                     python_environment.map(|runtime| runtime.fingerprint.as_str()),
+                    python_environment.map(|runtime| runtime.capability_profile.as_str()),
                 ),
                 unsupported => Ok(test_runner::ExecutionResult {
                     status: "unsupported".into(),
@@ -213,7 +215,18 @@ pub fn configure_project_python_runtime(
     app_handle: AppHandle,
     project_id: String,
     environment_root: String,
+    capability_profile: String,
 ) -> Result<PythonRuntimeStatus, AppError> {
+    if !matches!(capability_profile.as_str(), "bounded" | "macos_isolated") {
+        return Err(AppError::InvalidInput(
+            "Unsupported execution capability profile".into(),
+        ));
+    }
+    if capability_profile == "macos_isolated" && !cfg!(target_os = "macos") {
+        return Err(AppError::InvalidInput(
+            "macOS isolated execution is unavailable on this platform".into(),
+        ));
+    }
     let codebase_path = {
         let conn = state
             .conn
@@ -232,6 +245,7 @@ pub fn configure_project_python_runtime(
             root: attestation.root.clone(),
             fingerprint: attestation.fingerprint.clone(),
             interpreter: attestation.interpreter.clone(),
+            capability_profile,
         },
     );
     crate::commands::test_gen::save_settings_internal(&app_handle, &settings)?;

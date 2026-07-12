@@ -22,6 +22,9 @@ export function TestExecution() {
   const configureRuntime = useConfigurePythonRuntime(projectId ?? "");
   const clearRuntime = useClearPythonRuntime(projectId ?? "");
   const [runtimeRoot, setRuntimeRoot] = useState("");
+  const [capabilityProfile, setCapabilityProfile] = useState<"bounded" | "macos_isolated">(
+    "bounded",
+  );
 
   const {
     data: allTests,
@@ -111,8 +114,21 @@ export function TestExecution() {
             spellCheck={false}
             className="bg-surface border-border text-text focus:border-primary min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-sm focus:outline-none"
           />
+          <select
+            aria-label="Execution capability profile"
+            value={capabilityProfile}
+            onChange={(event) =>
+              setCapabilityProfile(event.target.value as "bounded" | "macos_isolated")
+            }
+            className="bg-surface border-border rounded-lg border px-3 py-2 text-sm"
+          >
+            <option value="bounded">Bounded (no OS isolation)</option>
+            <option value="macos_isolated">macOS isolated (fail closed)</option>
+          </select>
           <button
-            onClick={() => configureRuntime.mutate(runtimeRoot)}
+            onClick={() =>
+              configureRuntime.mutate({ root: runtimeRoot, profile: capabilityProfile })
+            }
             disabled={!runtimeRoot.trim() || configureRuntime.isPending}
             className="bg-primary hover:bg-primary-dark rounded-lg px-4 py-2 text-sm text-white disabled:opacity-50"
           >

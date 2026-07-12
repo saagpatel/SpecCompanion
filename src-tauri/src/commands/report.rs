@@ -15,6 +15,8 @@ use uuid::Uuid;
 
 const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
 const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v1";
+const MAX_TRUST_POLICY_BYTES: usize = 1_048_576;
+const MAX_TRUST_POLICY_RECORDS: usize = 100;
 const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
 
 #[derive(Serialize, Deserialize)]
@@ -152,7 +154,18 @@ pub struct TrustPolicyVerification {
     pub key_fingerprint: Option<String>,
     pub source_project_name: Option<String>,
     pub policy_count: usize,
+    pub payload_sha256: Option<String>,
+    pub conflicts: Vec<TrustPolicyConflict>,
     pub diagnostics: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct TrustPolicyConflict {
+    pub key_fingerprint: String,
+    pub signer_identity: String,
+    pub incoming_status: String,
+    pub current_status: Option<String>,
+    pub action: String,
 }
 
 const SIGNING_KEYRING_SERVICE: &str = "com.speccompanion.evidence-signing.v1";
@@ -668,8 +681,84 @@ pub fn export_signer_trust_policy(
 }
 
 #[tauri::command]
-pub fn verify_signer_trust_policy(bundle_json: String) -> TrustPolicyVerification {
-    verify_trust_policy(&bundle_json)
+pub fn verify_signer_trust_policy(
+    state: State<'_, Database>,
+    project_id: String,
+    bundle_json: String,
+) -> TrustPolicyVerification {
+    let mut result = verify_trust_policy(&bundle_json);
+    if result.status != "valid_untrusted" || project_id.trim().is_empty() {
+        return result;
+    }
+    let bundle: SignedTrustPolicyBundle = match serde_json::from_str(&bundle_json) {
+        Ok(bundle) => bundle,
+        Err(_) => return result,
+    };
+    let conn = match state.conn.lock() {
+        Ok(conn) => conn,
+        Err(error) => {
+            result.status = "unknown".into();
+            result
+                .diagnostics
+                .push(format!("Current trust policy is unavailable: {error}"));
+            return result;
+        }
+    };
+    if queries::get_project(&conn, &project_id).is_err() {
+        result.status = "unknown".into();
+        result
+            .diagnostics
+            .push("Destination project is unavailable".into());
+        return result;
+    }
+    match preview_trust_policy(&conn, &project_id, &bundle.payload.policies) {
+        Ok(conflicts) => result.conflicts = conflicts,
+        Err(error) => {
+            result.status = "unknown".into();
+            result
+                .diagnostics
+                .push(format!("Could not compare current trust policy: {error}"));
+        }
+    }
+    result
+}
+
+fn preview_trust_policy(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    policies: &[PortableSignerPolicy],
+) -> Result<Vec<TrustPolicyConflict>, rusqlite::Error> {
+    let mut conflicts = Vec::with_capacity(policies.len());
+    for policy in policies {
+        let current = match conn.query_row(
+                "SELECT status, signer_identity, provenance FROM signer_trust WHERE project_id = ?1 AND key_fingerprint = ?2",
+                rusqlite::params![project_id, policy.key_fingerprint.to_lowercase()],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
+            ) {
+                Ok(current) => Some(current),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(error) => return Err(error),
+            };
+        let action = match current.as_ref() {
+            None => "add",
+            Some((status, identity, provenance))
+                if status == &policy.status
+                    && identity == &policy.signer_identity
+                    && provenance == &policy.provenance =>
+            {
+                "preserve"
+            }
+            Some(_) => "replace",
+        };
+        conflicts.push(TrustPolicyConflict {
+            key_fingerprint: policy.key_fingerprint.clone(),
+            signer_identity: policy.signer_identity.clone(),
+            incoming_status: policy.status.clone(),
+            current_status: current.map(|value| value.0),
+            action: action.into(),
+        });
+    }
+    Ok(conflicts)
 }
 
 #[tauri::command]
@@ -678,6 +767,7 @@ pub fn import_signer_trust_policy(
     project_id: String,
     bundle_json: String,
     expected_signer_fingerprint: String,
+    expected_payload_sha256: String,
     recovery_provenance: String,
 ) -> Result<Vec<SignerTrustRecord>, AppError> {
     let verification = verify_trust_policy(&bundle_json);
@@ -689,7 +779,11 @@ pub fn import_signer_trust_policy(
     let fingerprint = verification.key_fingerprint.ok_or_else(|| {
         AppError::InvalidInput("Trust policy signer fingerprint is unavailable".into())
     })?;
+    let payload_sha256 = verification.payload_sha256.ok_or_else(|| {
+        AppError::InvalidInput("Trust policy payload digest is unavailable".into())
+    })?;
     if !fingerprint.eq_ignore_ascii_case(expected_signer_fingerprint.trim())
+        || payload_sha256 != expected_payload_sha256.trim()
         || recovery_provenance.trim().is_empty()
     {
         return Err(AppError::InvalidInput(
@@ -753,8 +847,16 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         key_fingerprint: None,
         source_project_name: None,
         policy_count: 0,
+        payload_sha256: None,
+        conflicts: Vec::new(),
         diagnostics: Vec::new(),
     };
+    if bundle_json.len() > MAX_TRUST_POLICY_BYTES {
+        result
+            .diagnostics
+            .push("Trust policy exceeds the 1 MiB size limit".into());
+        return result;
+    }
     let bundle: SignedTrustPolicyBundle = match serde_json::from_str(bundle_json) {
         Ok(bundle) => bundle,
         Err(error) => {
@@ -769,6 +871,7 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
     result.key_fingerprint = Some(bundle.key_fingerprint.clone());
     result.source_project_name = Some(bundle.payload.source_project_name.clone());
     result.policy_count = bundle.payload.policies.len();
+    result.payload_sha256 = Some(bundle.payload_sha256.clone());
     if bundle.payload.schema != TRUST_POLICY_SCHEMA || bundle.signature_algorithm != "ed25519" {
         result.status = "unsupported".into();
         result
@@ -778,6 +881,7 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
     }
     let mut fingerprints = HashSet::new();
     if bundle.payload.policies.is_empty()
+        || bundle.payload.policies.len() > MAX_TRUST_POLICY_RECORDS
         || bundle.payload.policies.iter().any(|policy| {
             policy.key_fingerprint.len() != 64
                 || !policy
@@ -1479,15 +1583,20 @@ mod tests {
         let tampered = portable.replace("Release 2027", "Attacker");
         assert_eq!(verify_trust_policy(&tampered).status, "invalid");
 
+        let recovery_policy = PortableSignerPolicy {
+            key_fingerprint: replacement.clone(),
+            signer_identity: "Release 2027".into(),
+            status: "trusted".into(),
+            provenance: "rotation ceremony ticket SEC-42".into(),
+        };
+        let preview = preview_trust_policy(&conn, &second.id, &[recovery_policy.clone()]).unwrap();
+        assert_eq!(preview[0].action, "add");
+        assert_eq!(preview[0].current_status, None);
+
         let imported = import_verified_trust_policy(
             &conn,
             &second.id,
-            &[PortableSignerPolicy {
-                key_fingerprint: replacement.clone(),
-                signer_identity: "Release 2027".into(),
-                status: "trusted".into(),
-                provenance: "rotation ceremony ticket SEC-42".into(),
-            }],
+            &[recovery_policy.clone()],
             &recovery_fingerprint,
             "fingerprint matched printed recovery record",
         )
@@ -1496,5 +1605,17 @@ mod tests {
         assert!(imported[0]
             .provenance
             .contains("fingerprint matched printed recovery record"));
+        let replacement_preview =
+            preview_trust_policy(&conn, &second.id, &[recovery_policy]).unwrap();
+        assert_eq!(replacement_preview[0].action, "replace");
+        assert_eq!(
+            replacement_preview[0].current_status.as_deref(),
+            Some("trusted")
+        );
+
+        let oversized = "x".repeat(MAX_TRUST_POLICY_BYTES + 1);
+        let oversized_result = verify_trust_policy(&oversized);
+        assert_eq!(oversized_result.status, "invalid");
+        assert!(oversized_result.diagnostics[0].contains("1 MiB"));
     }
 }

@@ -226,12 +226,20 @@ export interface SignerTrustHistoryRecord {
 }
 
 export interface TrustPolicyVerification {
-  status: "valid_untrusted" | "invalid" | "unsupported";
+  status: "valid_untrusted" | "invalid" | "unsupported" | "unknown";
   schema: string;
   signer_identity?: string;
   key_fingerprint?: string;
   source_project_name?: string;
   policy_count: number;
+  payload_sha256?: string;
+  conflicts: Array<{
+    key_fingerprint: string;
+    signer_identity: string;
+    incoming_status: "trusted" | "revoked";
+    current_status?: "trusted" | "revoked";
+    action: "add" | "preserve" | "replace";
+  }>;
   diagnostics: string[];
 }
 

@@ -21,10 +21,44 @@ import {
   useTrustAnchorAdvancements,
   useExportTrustAnchorAdvancements,
   useTrustAnchorAdvancementIntegrity,
+  useRecoveryAuthorities,
+  useSetRecoveryAuthority,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
 import { EvidenceTable } from "../components/report/MismatchTable";
+
+const recoveryStatusLabel = (status: string) =>
+  ({
+    valid_untrusted: "Signature valid; recovery authority not yet proven",
+    invalid: "Invalid package",
+    unsupported: "Unsupported package version",
+    unknown: "Verification unavailable; provenance remains unknown",
+  })[status] ?? status;
+
+const anchorStatusLabel = (status: string) =>
+  ({
+    not_checked: "Not checked",
+    first_seen: "First seen; no prior checkpoint",
+    repeated: "Already witnessed at this exact checkpoint",
+    rollback: "Rollback blocked",
+    conflict: "Conflicting checkpoint blocked",
+    forward_proven: "Forward ancestry proven",
+    checkpoint_gap: "Intermediate checkpoint required",
+    fork: "Forked history blocked",
+    unknown: "Checkpoint status unknown",
+  })[status] ?? status;
+
+const evidenceStatusLabel = (status: string) =>
+  ({
+    verified: "Integrity verified; unsigned",
+    signed_untrusted: "Signature valid; fingerprint not trusted",
+    trusted_signer: "Signature valid; exact project fingerprint trusted",
+    revoked: "Signature valid; exact project fingerprint revoked",
+    stale: "Integrity valid; evidence stale",
+    invalid: "Invalid evidence",
+    unsupported: "Unsupported evidence contract",
+  })[status] ?? status;
 
 export function Reports() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -48,6 +82,14 @@ export function Reports() {
   const [recoveryFingerprint, setRecoveryFingerprint] = useState("");
   const [recoveryProvenance, setRecoveryProvenance] = useState("");
   const [recoveryFileError, setRecoveryFileError] = useState("");
+  const [evidenceFileError, setEvidenceFileError] = useState("");
+  const [authorityFingerprint, setAuthorityFingerprint] = useState("");
+  const [authorityIdentity, setAuthorityIdentity] = useState("");
+  const [authorityProvenance, setAuthorityProvenance] = useState("");
+  const [confirmedPolicyFingerprints, setConfirmedPolicyFingerprints] = useState<string[]>([]);
+  const [copiedFingerprint, setCopiedFingerprint] = useState(false);
+  const recoveryAuthorities = useRecoveryAuthorities(projectId);
+  const setRecoveryAuthority = useSetRecoveryAuthority(projectId ?? "");
   const exportTrustPolicy = useExportSignerTrustPolicy();
   const verifyTrustPolicy = useVerifySignerTrustPolicy(projectId ?? "");
   const importTrustPolicy = useImportSignerTrustPolicy(projectId ?? "");
@@ -154,11 +196,23 @@ export function Reports() {
             onChange={async (event) => {
               const file = event.target.files?.[0];
               if (!file) return;
+              if (file.size > 1_048_576) {
+                setEvidenceFileError("Evidence bundle exceeds the 1 MiB size limit.");
+                verifyBundle.reset();
+                event.target.value = "";
+                return;
+              }
+              setEvidenceFileError("");
               verifyBundle.mutate(await file.text());
               event.target.value = "";
             }}
           />
         </label>
+        {evidenceFileError && (
+          <p role="alert" className="text-danger mt-3 text-sm">
+            {evidenceFileError}
+          </p>
+        )}
         {verifyBundle.isPending && (
           <p role="status" className="text-text-muted mt-3 text-sm">
             Verifying bundle...
@@ -169,7 +223,9 @@ export function Reports() {
             role="status"
             className={`mt-3 rounded-lg border p-3 text-sm ${verifyBundle.data.status === "verified" ? "border-success/30 bg-success/5 text-success" : "border-warning/30 bg-warning/5 text-warning"}`}
           >
-            <p className="font-medium">Bundle status: {verifyBundle.data.status}.</p>
+            <p className="font-medium">
+              Bundle status: {evidenceStatusLabel(verifyBundle.data.status)}.
+            </p>
             <p>
               Integrity: payload {verifyBundle.data.payload_integrity}, bundle{" "}
               {verifyBundle.data.bundle_integrity}, report {verifyBundle.data.report_integrity}.
@@ -248,7 +304,8 @@ export function Reports() {
         </h3>
         <p className="text-text-muted mt-1 text-sm">
           Trust applies only to this project and exact fingerprints. Every decision is linked by a
-          tamper-evident digest chain.
+          locally consistent digest chain. This detects accidental or unrecomputed changes, not a
+          database attacker who can rewrite the complete chain.
         </p>
         {(trustPolicies.isLoading || trustHistory.isLoading || trustHistoryIntegrity.isLoading) && (
           <p role="status" className="text-text-muted mt-3 text-sm">
@@ -336,10 +393,119 @@ export function Reports() {
           </p>
         )}
         <div className="border-border mt-4 border-t pt-4">
+          <h4 className="text-sm font-medium">Destination recovery authorities</h4>
+          <p className="text-text-muted mt-1 text-xs">
+            Enroll a recovery fingerprint from an independent operator record before opening a
+            package. A package signature proves key possession, not this authorization or
+            organizational authority.
+          </p>
+          <label htmlFor="authority-fingerprint" className="mt-2 block text-xs">
+            Independently verified recovery fingerprint
+          </label>
+          <input
+            id="authority-fingerprint"
+            value={authorityFingerprint}
+            onChange={(event) => setAuthorityFingerprint(event.target.value)}
+            maxLength={64}
+            className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 font-mono text-xs"
+          />
+          <label htmlFor="authority-identity" className="mt-2 block text-xs">
+            Operator label for this authority
+          </label>
+          <input
+            id="authority-identity"
+            value={authorityIdentity}
+            onChange={(event) => setAuthorityIdentity(event.target.value)}
+            maxLength={120}
+            className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+          />
+          <label htmlFor="authority-provenance" className="mt-2 block text-xs">
+            Independent authority provenance
+          </label>
+          <input
+            id="authority-provenance"
+            value={authorityProvenance}
+            onChange={(event) => setAuthorityProvenance(event.target.value)}
+            maxLength={500}
+            placeholder="Where was this recovery authority approved?"
+            className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            disabled={
+              !/^[0-9a-fA-F]{64}$/.test(authorityFingerprint) ||
+              !authorityIdentity.trim() ||
+              !authorityProvenance.trim() ||
+              setRecoveryAuthority.isPending
+            }
+            aria-describedby="authority-enrollment-help"
+            onClick={() =>
+              setRecoveryAuthority.mutate({
+                fingerprint: authorityFingerprint,
+                identity: authorityIdentity,
+                status: "authorized",
+                provenance: authorityProvenance,
+              })
+            }
+            className="text-primary-light mt-2 text-sm hover:underline disabled:opacity-50"
+          >
+            Enroll recovery authority
+          </button>
+          <p id="authority-enrollment-help" className="text-text-muted mt-1 text-xs">
+            Enrollment is blocked until a complete fingerprint, label, and independent provenance
+            are provided.
+          </p>
+          {setRecoveryAuthority.isError && (
+            <p role="alert" className="text-danger mt-2 text-xs">
+              Recovery authority enrollment failed. No authority was added.
+            </p>
+          )}
+          {setRecoveryAuthority.isSuccess && (
+            <p role="status" className="mt-2 text-xs">
+              Recovery authority enrolled for this destination project only.
+            </p>
+          )}
+          {recoveryAuthorities.data && recoveryAuthorities.data.length > 0 && (
+            <ul aria-label="Destination recovery authorities" className="mt-3 space-y-2">
+              {recoveryAuthorities.data.map((authority) => (
+                <li
+                  key={authority.key_fingerprint}
+                  className="border-border rounded border p-2 text-xs"
+                >
+                  <strong>{authority.signer_identity}</strong> — {authority.status}
+                  <p className="break-all">{authority.key_fingerprint}</p>
+                  <p>{authority.provenance}</p>
+                  {authority.status === "authorized" && (
+                    <button
+                      type="button"
+                      disabled={!authorityProvenance.trim() || setRecoveryAuthority.isPending}
+                      aria-describedby="authority-revocation-help"
+                      onClick={() =>
+                        setRecoveryAuthority.mutate({
+                          fingerprint: authority.key_fingerprint,
+                          identity: authority.signer_identity,
+                          status: "revoked",
+                          provenance: authorityProvenance,
+                        })
+                      }
+                      className="text-danger mt-1 hover:underline disabled:opacity-50"
+                    >
+                      Revoke recovery authority
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p id="authority-revocation-help" className="sr-only">
+            Revocation requires current independent authority provenance in the field above.
+          </p>
+        </div>
+        <div className="border-border mt-4 border-t pt-4">
           <h4 className="text-sm font-medium">Portable recovery policy</h4>
           <p className="text-text-muted mt-1 text-xs">
-            Exports are signed. Imports verify integrity first, but recovery authority still
-            requires an out-of-band fingerprint match and recorded provenance.
+            Exports are signed. A destination-enrolled recovery authority is required before a
+            package can change trust. Signature validity alone never grants that authority.
           </p>
           <label htmlFor="policy-signer-identity" className="mt-2 block text-xs">
             Keychain signing identity
@@ -404,6 +570,7 @@ export function Reports() {
                 setRecoveryBundle(content);
                 setRecoveryFingerprint("");
                 setRecoveryProvenance("");
+                setConfirmedPolicyFingerprints([]);
                 importTrustPolicy.reset();
                 advanceTrustAnchor.reset();
                 verifyTrustPolicy.mutate(content);
@@ -419,17 +586,45 @@ export function Reports() {
           {verifyTrustPolicy.data && (
             <div role="status" className="border-border mt-2 rounded border p-3 text-xs">
               <p>
-                <strong>Recovery policy: {verifyTrustPolicy.data.status}</strong>
+                <strong>
+                  Recovery policy: {recoveryStatusLabel(verifyTrustPolicy.data.status)}
+                </strong>
               </p>
               <p>
                 Source: {verifyTrustPolicy.data.source_project_name ?? "unknown"}. Policies:{" "}
                 {verifyTrustPolicy.data.policy_count}.
               </p>
               {verifyTrustPolicy.data.key_fingerprint && (
-                <p className="break-all">
-                  Package signer: {verifyTrustPolicy.data.key_fingerprint}
-                </p>
+                <div>
+                  <p className="break-all">
+                    Package signing fingerprint (untrusted package data):{" "}
+                    {verifyTrustPolicy.data.key_fingerprint}
+                  </p>
+                  <button
+                    type="button"
+                    aria-label="Copy package signing fingerprint"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(verifyTrustPolicy.data!.key_fingerprint!);
+                      setCopiedFingerprint(true);
+                    }}
+                    className="text-primary-light hover:underline"
+                  >
+                    Copy fingerprint
+                  </button>
+                  {copiedFingerprint && <span role="status"> Fingerprint copied.</span>}
+                </div>
               )}
+              <p>
+                Destination recovery authorization:{" "}
+                {verifyTrustPolicy.data.recovery_authority_status}.
+              </p>
+              <p>
+                Replay assessment:{" "}
+                {verifyTrustPolicy.data.replay_status === "already_imported"
+                  ? "already imported; replay will not mutate trust"
+                  : "new package"}
+                .
+              </p>
               {verifyTrustPolicy.data.payload_sha256 && (
                 <p className="break-all">Payload digest: {verifyTrustPolicy.data.payload_sha256}</p>
               )}
@@ -448,7 +643,7 @@ export function Reports() {
               </p>
               <p>
                 Witnessed-anchor assessment:{" "}
-                <strong>{verifyTrustPolicy.data.anchor_status.replace(/_/g, " ")}</strong>.
+                <strong>{anchorStatusLabel(verifyTrustPolicy.data.anchor_status)}</strong>.
               </p>
               {verifyTrustPolicy.data.anchor_status === "forward_proven" && (
                 <p>
@@ -476,8 +671,28 @@ export function Reports() {
                 <ul aria-label="Recovery policy changes" className="mt-2 space-y-1">
                   {verifyTrustPolicy.data.conflicts.map((conflict) => (
                     <li key={conflict.key_fingerprint}>
-                      <strong>{conflict.action}</strong> {conflict.signer_identity}:{" "}
-                      {conflict.current_status ?? "absent"} → {conflict.incoming_status}
+                      <label className="flex items-start gap-2">
+                        {conflict.action !== "preserve" && (
+                          <input
+                            type="checkbox"
+                            aria-label={`Confirm ${conflict.action} ${conflict.signer_identity} as ${conflict.incoming_status}`}
+                            checked={confirmedPolicyFingerprints.includes(conflict.key_fingerprint)}
+                            onChange={(event) =>
+                              setConfirmedPolicyFingerprints((current) =>
+                                event.target.checked
+                                  ? [...current, conflict.key_fingerprint]
+                                  : current.filter((value) => value !== conflict.key_fingerprint),
+                              )
+                            }
+                          />
+                        )}
+                        <span>
+                          <strong>{conflict.action}</strong> {conflict.signer_identity}:{" "}
+                          {conflict.current_status ?? "absent"} → {conflict.incoming_status}
+                          {conflict.incoming_status === "trusted" && " (expands trusted authority)"}
+                          {conflict.incoming_status === "revoked" && " (revokes this fingerprint)"}
+                        </span>
+                      </label>
                     </li>
                   ))}
                 </ul>
@@ -514,6 +729,14 @@ export function Reports() {
                     ["rollback", "conflict", "fork", "checkpoint_gap", "unknown"].includes(
                       verifyTrustPolicy.data.anchor_status,
                     ) ||
+                    verifyTrustPolicy.data.recovery_authority_status !== "authorized" ||
+                    !verifyTrustPolicy.data.destination_revision ||
+                    verifyTrustPolicy.data.replay_status === "already_imported" ||
+                    verifyTrustPolicy.data.conflicts.some(
+                      (conflict) =>
+                        conflict.action !== "preserve" &&
+                        !confirmedPolicyFingerprints.includes(conflict.key_fingerprint),
+                    ) ||
                     !recoveryProvenance.trim() ||
                     importTrustPolicy.isPending
                   }
@@ -522,12 +745,14 @@ export function Reports() {
                       bundleJson: recoveryBundle,
                       fingerprint: recoveryFingerprint,
                       payloadSha256: verifyTrustPolicy.data!.payload_sha256!,
+                      destinationRevision: verifyTrustPolicy.data!.destination_revision!,
+                      confirmedPolicyFingerprints,
                       provenance: recoveryProvenance,
                     })
                   }
                   className="text-primary-light mt-2 text-sm hover:underline disabled:opacity-50"
                 >
-                  Recover verified policy
+                  Apply authorized signed policy changes
                 </button>
                 {verifyTrustPolicy.data.anchor_status === "forward_proven" && (
                   <button
@@ -535,9 +760,11 @@ export function Reports() {
                     disabled={
                       recoveryFingerprint.trim().toLowerCase() !==
                         verifyTrustPolicy.data.key_fingerprint.toLowerCase() ||
+                      verifyTrustPolicy.data.recovery_authority_status !== "authorized" ||
                       !recoveryProvenance.trim() ||
                       advanceTrustAnchor.isPending
                     }
+                    aria-describedby="checkpoint-action-help"
                     onClick={() =>
                       advanceTrustAnchor.mutate(
                         {
@@ -561,6 +788,10 @@ export function Reports() {
                     Record as bridge checkpoint
                   </button>
                 )}
+                <p id="checkpoint-action-help" className="text-text-muted mt-1 text-xs">
+                  Checkpoint advancement requires an authorized destination recovery signer,
+                  matching fingerprint, forward-proven ancestry, and recorded provenance.
+                </p>
               </div>
             )}
           {advanceTrustAnchor.isError && (
@@ -582,7 +813,8 @@ export function Reports() {
           )}
           {importTrustPolicy.isSuccess && (
             <p role="status" className="mt-2 text-xs">
-              Recovered {importTrustPolicy.data.length} signer policies with immutable history.
+              Applied {importTrustPolicy.data.length} authorized signer-policy changes with local
+              consistency history.
             </p>
           )}
           <div className="border-border mt-4 border-t pt-4">
@@ -602,12 +834,13 @@ export function Reports() {
                         : "text-text-muted"
                     }`}
                   >
-                    Receipt-chain integrity: {trustAnchorAdvancementIntegrity.data.status}. Checked{" "}
-                    {trustAnchorAdvancementIntegrity.data.receipt_count} receipts across{" "}
+                    Receipt-chain local consistency: {trustAnchorAdvancementIntegrity.data.status}.
+                    Checked {trustAnchorAdvancementIntegrity.data.receipt_count} receipts across{" "}
                     {trustAnchorAdvancementIntegrity.data.scope_count} signer scopes. Chain
-                    integrity detects changed or broken retained receipts, but cannot detect
-                    deletion of an entire final chain without an external checkpoint and does not
-                    establish signer authority.
+                    consistency detects changed or broken retained receipts only when an attacker
+                    has not recomputed the local chain. It cannot detect deletion or replacement of
+                    an entire chain without an external checkpoint and does not establish signer
+                    authority.
                   </p>
                 )}
                 {trustAnchorAdvancementIntegrity.isError && (
@@ -689,7 +922,7 @@ export function Reports() {
             role="status"
             className={`mt-4 rounded border p-3 text-xs ${trustHistoryIntegrity.data.status === "verified" ? "border-success/30 bg-success/5 text-success" : "border-warning/30 bg-warning/5 text-warning"}`}
           >
-            Trust history integrity: <strong>{trustHistoryIntegrity.data.status}</strong> ·{" "}
+            Trust history local consistency: <strong>{trustHistoryIntegrity.data.status}</strong> ·{" "}
             {trustHistoryIntegrity.data.event_count} decisions checked.
             {trustHistoryIntegrity.data.status !== "verified" &&
               " Stored trust is ignored and recovery is blocked until integrity can be established."}

@@ -62,6 +62,8 @@ pub fn run() {
             commands::report::create_signing_identity,
             commands::report::export_signed_evidence_bundle,
             commands::report::set_signer_trust,
+            commands::report::set_recovery_authority,
+            commands::report::list_recovery_authorities,
             commands::report::list_signer_trust,
             commands::report::list_signer_trust_history,
             commands::report::get_signer_trust_history_integrity,

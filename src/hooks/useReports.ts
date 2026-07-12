@@ -76,6 +76,34 @@ export function useSignerTrust(projectId: string | undefined) {
   });
 }
 
+export function useRecoveryAuthorities(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["recovery-authorities", projectId],
+    queryFn: () => api.listRecoveryAuthorities(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useSetRecoveryAuthority(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      fingerprint,
+      identity,
+      status,
+      provenance,
+    }: {
+      fingerprint: string;
+      identity: string;
+      status: "authorized" | "revoked";
+      provenance: string;
+    }) => api.setRecoveryAuthority(projectId, fingerprint, identity, status, provenance),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["recovery-authorities", projectId] });
+    },
+  });
+}
+
 export function useSignerTrustHistory(projectId: string | undefined) {
   return useQuery({
     queryKey: ["signer-trust-history", projectId],
@@ -141,14 +169,26 @@ export function useImportSignerTrustPolicy(projectId: string) {
       bundleJson,
       fingerprint,
       payloadSha256,
+      destinationRevision,
+      confirmedPolicyFingerprints,
       provenance,
     }: {
       bundleJson: string;
       fingerprint: string;
       payloadSha256: string;
+      destinationRevision: string;
+      confirmedPolicyFingerprints: string[];
       provenance: string;
     }) =>
-      api.importSignerTrustPolicy(projectId, bundleJson, fingerprint, payloadSha256, provenance),
+      api.importSignerTrustPolicy(
+        projectId,
+        bundleJson,
+        fingerprint,
+        payloadSha256,
+        destinationRevision,
+        confirmedPolicyFingerprints,
+        provenance,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });

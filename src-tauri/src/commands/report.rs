@@ -16,8 +16,12 @@ use uuid::Uuid;
 const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
 const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v4";
 const MAX_TRUST_POLICY_BYTES: usize = 1_048_576;
+const MAX_EVIDENCE_BUNDLE_BYTES: usize = 1_048_576;
 const MAX_TRUST_POLICY_RECORDS: usize = 100;
 const MAX_TRUST_HISTORY_PROOF_EVENTS: usize = 100;
+const MAX_PACKAGE_TEXT_BYTES: usize = 16_384;
+const MAX_EVIDENCE_ALIGNMENTS: usize = 1_000;
+const MAX_EVIDENCE_ITEMS_PER_ALIGNMENT: usize = 1_000;
 const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
 
 #[derive(Serialize, Deserialize)]
@@ -89,6 +93,16 @@ pub struct EvidenceBundleVerification {
 
 #[derive(Debug, Serialize)]
 pub struct SignerTrustRecord {
+    pub project_id: String,
+    pub key_fingerprint: String,
+    pub signer_identity: String,
+    pub status: String,
+    pub provenance: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RecoveryAuthorityRecord {
     pub project_id: String,
     pub key_fingerprint: String,
     pub signer_identity: String,
@@ -193,6 +207,9 @@ pub struct TrustPolicyVerification {
     pub source_history_event_count: usize,
     pub proof_base_head_digest: Option<String>,
     pub proof_base_event_count: usize,
+    pub recovery_authority_status: String,
+    pub destination_revision: Option<String>,
+    pub replay_status: String,
     pub anchor_status: String,
     pub witnessed_history_head_digest: Option<String>,
     pub witnessed_history_event_count: Option<usize>,
@@ -523,6 +540,88 @@ pub fn list_signer_trust(
     let mut stmt = conn.prepare("SELECT project_id, key_fingerprint, signer_identity, status, provenance, updated_at FROM signer_trust WHERE project_id = ?1 ORDER BY updated_at DESC")?;
     let rows = stmt.query_map([project_id], |row| {
         Ok(SignerTrustRecord {
+            project_id: row.get(0)?,
+            key_fingerprint: row.get(1)?,
+            signer_identity: row.get(2)?,
+            status: row.get(3)?,
+            provenance: row.get(4)?,
+            updated_at: row.get(5)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::Database)
+}
+
+#[tauri::command]
+pub fn set_recovery_authority(
+    state: State<'_, Database>,
+    project_id: String,
+    key_fingerprint: String,
+    signer_identity: String,
+    status: String,
+    provenance: String,
+) -> Result<RecoveryAuthorityRecord, AppError> {
+    if !matches!(status.as_str(), "authorized" | "revoked")
+        || key_fingerprint.len() != 64
+        || !key_fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || signer_identity.trim().is_empty()
+        || signer_identity.len() > 120
+        || provenance.trim().is_empty()
+        || provenance.len() > 500
+    {
+        return Err(AppError::InvalidInput(
+            "Invalid destination recovery authority".into(),
+        ));
+    }
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    let now = Utc::now().to_rfc3339();
+    let fingerprint = key_fingerprint.to_lowercase();
+    conn.execute(
+        "INSERT INTO recovery_authorities
+         (project_id, key_fingerprint, signer_identity, status, provenance, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+         ON CONFLICT(project_id, key_fingerprint) DO UPDATE SET
+           signer_identity = excluded.signer_identity, status = excluded.status,
+           provenance = excluded.provenance, updated_at = excluded.updated_at",
+        rusqlite::params![
+            project_id,
+            fingerprint,
+            signer_identity.trim(),
+            status,
+            provenance.trim(),
+            now
+        ],
+    )?;
+    Ok(RecoveryAuthorityRecord {
+        project_id,
+        key_fingerprint: fingerprint,
+        signer_identity: signer_identity.trim().into(),
+        status,
+        provenance: provenance.trim().into(),
+        updated_at: now,
+    })
+}
+
+#[tauri::command]
+pub fn list_recovery_authorities(
+    state: State<'_, Database>,
+    project_id: String,
+) -> Result<Vec<RecoveryAuthorityRecord>, AppError> {
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    let mut stmt = conn.prepare(
+        "SELECT project_id, key_fingerprint, signer_identity, status, provenance, updated_at
+         FROM recovery_authorities WHERE project_id = ?1 ORDER BY updated_at DESC",
+    )?;
+    let rows = stmt.query_map([project_id], |row| {
+        Ok(RecoveryAuthorityRecord {
             project_id: row.get(0)?,
             key_fingerprint: row.get(1)?,
             signer_identity: row.get(2)?,
@@ -875,6 +974,37 @@ pub fn verify_signer_trust_policy(
             .push("Destination project is unavailable".into());
         return result;
     }
+    result.destination_revision = match destination_policy_revision(&conn, &project_id) {
+        Ok(revision) => Some(revision),
+        Err(error) => {
+            result.status = "unknown".into();
+            result.diagnostics.push(format!(
+                "Destination policy revision is unavailable: {error}"
+            ));
+            return result;
+        }
+    };
+    result.recovery_authority_status = conn
+        .query_row(
+            "SELECT status FROM recovery_authorities
+             WHERE project_id = ?1 AND key_fingerprint = ?2",
+            rusqlite::params![project_id, bundle.key_fingerprint.to_lowercase()],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| "unknown".into());
+    result.replay_status = if conn
+        .query_row(
+            "SELECT 1 FROM trust_policy_imports WHERE project_id = ?1 AND payload_sha256 = ?2",
+            rusqlite::params![project_id, bundle.payload_sha256],
+            |_| Ok(()),
+        )
+        .is_ok()
+    {
+        "already_imported"
+    } else {
+        "new"
+    }
+    .into();
     let integrity = verify_trust_history_integrity(&conn, &project_id);
     if integrity.status != "verified" {
         result.status = "unknown".into();
@@ -950,6 +1080,40 @@ fn preview_trust_policy(
     Ok(conflicts)
 }
 
+fn destination_policy_revision(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<String, rusqlite::Error> {
+    let integrity = verify_trust_history_integrity(conn, project_id);
+    if !matches!(integrity.status.as_str(), "verified") {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
+    let mut stmt = conn.prepare(
+        "SELECT key_fingerprint, signer_identity, status, provenance
+         FROM signer_trust WHERE project_id = ?1 ORDER BY key_fingerprint",
+    )?;
+    let rows = stmt
+        .query_map([project_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut fields = vec![
+        project_id.to_string(),
+        integrity.head_digest.unwrap_or_default(),
+    ];
+    for (fingerprint, identity, status, provenance) in rows {
+        fields.extend([fingerprint, identity, status, provenance]);
+    }
+    Ok(trust_history_digest(
+        &fields.iter().map(String::as_str).collect::<Vec<_>>(),
+    ))
+}
+
 fn assess_trust_anchor(
     conn: &rusqlite::Connection,
     project_id: &str,
@@ -1017,6 +1181,8 @@ pub fn import_signer_trust_policy(
     bundle_json: String,
     expected_signer_fingerprint: String,
     expected_payload_sha256: String,
+    expected_destination_revision: String,
+    confirmed_policy_fingerprints: Vec<String>,
     recovery_provenance: String,
 ) -> Result<Vec<SignerTrustRecord>, AppError> {
     let verification = verify_trust_policy(&bundle_json);
@@ -1045,14 +1211,66 @@ pub fn import_signer_trust_policy(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
-    let integrity = verify_trust_history_integrity(&conn, &project_id);
+    import_authorized_trust_policy(
+        &conn,
+        &project_id,
+        &bundle,
+        &fingerprint,
+        &payload_sha256,
+        &expected_destination_revision,
+        &confirmed_policy_fingerprints,
+        recovery_provenance.trim(),
+    )
+}
+
+fn import_authorized_trust_policy(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    bundle: &SignedTrustPolicyBundle,
+    fingerprint: &str,
+    payload_sha256: &str,
+    expected_destination_revision: &str,
+    confirmed_policy_fingerprints: &[String],
+    recovery_provenance: &str,
+) -> Result<Vec<SignerTrustRecord>, AppError> {
+    let authority_status = conn
+        .query_row(
+            "SELECT status FROM recovery_authorities
+             WHERE project_id = ?1 AND key_fingerprint = ?2",
+            rusqlite::params![project_id, fingerprint.to_lowercase()],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| "unknown".into());
+    if authority_status != "authorized" {
+        return Err(AppError::InvalidInput(
+            "Package signer is not an authorized recovery authority for this destination project"
+                .into(),
+        ));
+    }
+    if conn
+        .query_row(
+            "SELECT 1 FROM trust_policy_imports WHERE project_id = ?1 AND payload_sha256 = ?2",
+            rusqlite::params![project_id, payload_sha256],
+            |_| Ok(()),
+        )
+        .is_ok()
+    {
+        return Ok(Vec::new());
+    }
+    let destination_revision = destination_policy_revision(conn, project_id)?;
+    if destination_revision != expected_destination_revision.trim() {
+        return Err(AppError::InvalidInput(
+            "Destination trust policy changed after preview; verify the package again".into(),
+        ));
+    }
+    let integrity = verify_trust_history_integrity(conn, project_id);
     if integrity.status != "verified" {
         return Err(AppError::InvalidInput(format!(
             "Trust policy recovery refused because destination history integrity is {}",
             integrity.status
         )));
     }
-    let anchor = assess_trust_anchor(&conn, &project_id, &bundle)?;
+    let anchor = assess_trust_anchor(conn, project_id, bundle)?;
     if matches!(
         anchor.status.as_str(),
         "rollback" | "conflict" | "fork" | "checkpoint_gap"
@@ -1062,15 +1280,31 @@ pub fn import_signer_trust_policy(
             anchor.status
         )));
     }
+    let conflicts = preview_trust_policy(conn, project_id, &bundle.payload.policies)?;
+    let confirmed = confirmed_policy_fingerprints
+        .iter()
+        .map(|value| value.to_lowercase())
+        .collect::<HashSet<_>>();
+    let required = conflicts
+        .iter()
+        .filter(|conflict| conflict.action != "preserve")
+        .map(|conflict| conflict.key_fingerprint.to_lowercase())
+        .collect::<HashSet<_>>();
+    if confirmed != required {
+        return Err(AppError::InvalidInput(
+            "Every trust-changing recovery action must be explicitly confirmed".into(),
+        ));
+    }
     import_verified_trust_policy(
-        &conn,
-        &project_id,
+        conn,
+        project_id,
         &bundle.payload.policies,
         &bundle.payload.source_project_id,
         &fingerprint,
         &payload_sha256,
         &bundle.payload.source_history_head_digest,
         bundle.payload.source_history_event_count,
+        &destination_revision,
         recovery_provenance.trim(),
     )
 }
@@ -1110,6 +1344,20 @@ pub fn advance_trust_anchor_witness(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
+    let authority_status = conn
+        .query_row(
+            "SELECT status FROM recovery_authorities
+             WHERE project_id = ?1 AND key_fingerprint = ?2",
+            rusqlite::params![project_id, fingerprint.to_lowercase()],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| "unknown".into());
+    if authority_status != "authorized" {
+        return Err(AppError::InvalidInput(
+            "Checkpoint signer is not an authorized recovery authority for this destination project"
+                .into(),
+        ));
+    }
     let integrity = verify_trust_history_integrity(&conn, &project_id);
     if integrity.status != "verified" {
         return Err(AppError::InvalidInput(format!(
@@ -1437,6 +1685,9 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         source_history_event_count: 0,
         proof_base_head_digest: None,
         proof_base_event_count: 0,
+        recovery_authority_status: "not_checked".into(),
+        destination_revision: None,
+        replay_status: "not_checked".into(),
         anchor_status: "not_checked".into(),
         witnessed_history_head_digest: None,
         witnessed_history_event_count: None,
@@ -1486,7 +1737,10 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         return result;
     }
     let mut fingerprints = HashSet::new();
-    if bundle.payload.source_history_head_digest.len() != 64
+    if bundle.signer_identity.len() > MAX_PACKAGE_TEXT_BYTES
+        || bundle.payload.source_project_id.len() > MAX_PACKAGE_TEXT_BYTES
+        || bundle.payload.source_project_name.len() > MAX_PACKAGE_TEXT_BYTES
+        || bundle.payload.source_history_head_digest.len() != 64
         || !bundle
             .payload
             .source_history_head_digest
@@ -1505,6 +1759,8 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
                 || !matches!(policy.status.as_str(), "trusted" | "revoked")
                 || policy.signer_identity.trim().is_empty()
                 || policy.provenance.trim().is_empty()
+                || policy.signer_identity.len() > MAX_PACKAGE_TEXT_BYTES
+                || policy.provenance.len() > MAX_PACKAGE_TEXT_BYTES
         })
     {
         result
@@ -1615,6 +1871,10 @@ fn validate_portable_history_proof(payload: &TrustPolicyPayload) -> bool {
     for event in &payload.history_proof {
         if event.previous_digest != previous
             || !matches!(event.status.as_str(), "trusted" | "revoked")
+            || event.id.len() > MAX_PACKAGE_TEXT_BYTES
+            || event.signer_identity.len() > MAX_PACKAGE_TEXT_BYTES
+            || event.provenance.len() > MAX_PACKAGE_TEXT_BYTES
+            || event.recorded_at.len() > MAX_PACKAGE_TEXT_BYTES
         {
             return false;
         }
@@ -1645,6 +1905,7 @@ fn import_verified_trust_policy(
     package_payload_sha256: &str,
     source_history_head_digest: &str,
     source_history_event_count: usize,
+    destination_revision_before: &str,
     recovery_provenance: &str,
 ) -> Result<Vec<SignerTrustRecord>, AppError> {
     let now = Utc::now().to_rfc3339();
@@ -1699,6 +1960,21 @@ fn import_verified_trust_policy(
             source_history_event_count as i64,
             package_payload_sha256,
             now,
+        ],
+    )?;
+    let destination_revision_after = destination_policy_revision(&tx, project_id)?;
+    tx.execute(
+        "INSERT INTO trust_policy_imports
+         (project_id, payload_sha256, package_signer_fingerprint,
+          destination_revision_before, destination_revision_after, imported_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        rusqlite::params![
+            project_id,
+            package_payload_sha256,
+            package_fingerprint.to_lowercase(),
+            destination_revision_before,
+            destination_revision_after,
+            now
         ],
     )?;
     tx.commit()?;
@@ -1839,6 +2115,21 @@ fn verify_trust_history_integrity(
     } else {
         Some(previous)
     };
+    if rows.is_empty() {
+        let dependent_state: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM trust_policy_imports WHERE project_id = ?1",
+                [project_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if dependent_state > 0 {
+            result.status = "invalid".into();
+            result.diagnostics.push(
+                "Trust history is missing while recovery authority or import state remains".into(),
+            );
+        }
+    }
     if result.status == "verified" {
         let mut current = match conn.prepare("SELECT key_fingerprint, signer_identity, status, provenance FROM signer_trust WHERE project_id = ?1") {
             Ok(stmt) => stmt, Err(error) => { result.status = "unknown".into(); result.diagnostics.push(error.to_string()); return result; }
@@ -1980,6 +2271,12 @@ fn verify_evidence_bundle_at(
         trust_status: "unknown".into(),
         trust_provenance: None,
     };
+    if bundle_json.len() > MAX_EVIDENCE_BUNDLE_BYTES {
+        result
+            .diagnostics
+            .push("Evidence bundle exceeds the 1 MiB size limit".into());
+        return result;
+    }
     let bundle: ImportedEvidenceBundle = match serde_json::from_str(bundle_json) {
         Ok(bundle) => bundle,
         Err(error) => {
@@ -1989,6 +2286,32 @@ fn verify_evidence_bundle_at(
             return result;
         }
     };
+    if bundle.report.alignments.len() > MAX_EVIDENCE_ALIGNMENTS
+        || bundle.report.report.checked_languages.len() > MAX_EVIDENCE_ALIGNMENTS
+        || bundle.report.report.skipped_languages.len() > MAX_EVIDENCE_ALIGNMENTS
+        || bundle.report.report.diagnostics.len() > MAX_EVIDENCE_ALIGNMENTS
+        || bundle.report.alignments.iter().any(|alignment| {
+            alignment.evidence.len() > MAX_EVIDENCE_ITEMS_PER_ALIGNMENT
+                || alignment.description.len() > MAX_PACKAGE_TEXT_BYTES
+                || alignment.summary.len() > MAX_PACKAGE_TEXT_BYTES
+                || alignment.evidence.iter().any(|evidence| {
+                    evidence.summary.len() > MAX_PACKAGE_TEXT_BYTES
+                        || evidence
+                            .path
+                            .as_ref()
+                            .is_some_and(|value| value.len() > MAX_PACKAGE_TEXT_BYTES)
+                        || evidence
+                            .symbol
+                            .as_ref()
+                            .is_some_and(|value| value.len() > MAX_PACKAGE_TEXT_BYTES)
+                })
+        })
+    {
+        result
+            .diagnostics
+            .push("Evidence bundle exceeds collection or string bounds".into());
+        return result;
+    }
     result.schema = bundle.manifest.schema.clone();
     result.report_id = Some(bundle.report.report.id.clone());
     result.signature_status = bundle.manifest.signature_status.clone();
@@ -2496,15 +2819,112 @@ mod tests {
         assert_eq!(preview[0].action, "add");
         assert_eq!(preview[0].current_status, None);
 
-        let imported = import_verified_trust_policy(
+        let witnessed_bundle: SignedTrustPolicyBundle = serde_json::from_str(&portable).unwrap();
+        let destination_revision = destination_policy_revision(&conn, &second.id).unwrap();
+        let unauthorized = import_authorized_trust_policy(
             &conn,
             &second.id,
-            &[recovery_policy.clone()],
-            &first.id,
+            &witnessed_bundle,
             &recovery_fingerprint,
             verified.payload_sha256.as_deref().unwrap(),
-            verified.source_history_head_digest.as_deref().unwrap(),
-            verified.source_history_event_count,
+            &destination_revision,
+            std::slice::from_ref(&replacement),
+            "copied package fingerprint",
+        );
+        assert!(unauthorized
+            .unwrap_err()
+            .to_string()
+            .contains("not an authorized recovery authority"));
+        conn.execute(
+            "INSERT INTO recovery_authorities
+             (project_id, key_fingerprint, signer_identity, status, provenance, created_at, updated_at)
+             VALUES (?1, ?2, 'Recovery signer', 'authorized', 'printed recovery record', ?3, ?3)",
+            rusqlite::params![second.id, recovery_fingerprint, Utc::now().to_rfc3339()],
+        )
+        .unwrap();
+        let missing_confirmation = import_authorized_trust_policy(
+            &conn,
+            &second.id,
+            &witnessed_bundle,
+            &recovery_fingerprint,
+            verified.payload_sha256.as_deref().unwrap(),
+            &destination_revision,
+            &[],
+            "authorized but unconfirmed changes",
+        );
+        assert!(missing_confirmation
+            .unwrap_err()
+            .to_string()
+            .contains("explicitly confirmed"));
+        let stale_preview = import_authorized_trust_policy(
+            &conn,
+            &second.id,
+            &witnessed_bundle,
+            &recovery_fingerprint,
+            verified.payload_sha256.as_deref().unwrap(),
+            "stale-destination-revision",
+            std::slice::from_ref(&replacement),
+            "stale preview",
+        );
+        assert!(stale_preview
+            .unwrap_err()
+            .to_string()
+            .contains("changed after preview"));
+        for (trigger, table) in [
+            ("fail_policy", "signer_trust"),
+            ("fail_history", "signer_trust_history"),
+            ("fail_witness", "trust_anchor_witnesses"),
+            ("fail_import_receipt", "trust_policy_imports"),
+        ] {
+            conn.execute_batch(&format!(
+                "CREATE TRIGGER {trigger} BEFORE INSERT ON {table}
+                 BEGIN SELECT RAISE(ABORT, 'injected import failure'); END;"
+            ))
+            .unwrap();
+            assert!(import_authorized_trust_policy(
+                &conn,
+                &second.id,
+                &witnessed_bundle,
+                &recovery_fingerprint,
+                verified.payload_sha256.as_deref().unwrap(),
+                &destination_revision,
+                std::slice::from_ref(&replacement),
+                "atomicity fault injection",
+            )
+            .is_err());
+            conn.execute_batch(&format!("DROP TRIGGER {trigger};"))
+                .unwrap();
+            let policy_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM signer_trust WHERE project_id = ?1",
+                    [&second.id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            let history_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM signer_trust_history WHERE project_id = ?1",
+                    [&second.id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            let import_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM trust_policy_imports WHERE project_id = ?1",
+                    [&second.id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!((policy_count, history_count, import_count), (0, 0, 0));
+        }
+        let imported = import_authorized_trust_policy(
+            &conn,
+            &second.id,
+            &witnessed_bundle,
+            &recovery_fingerprint,
+            verified.payload_sha256.as_deref().unwrap(),
+            &destination_revision,
+            std::slice::from_ref(&replacement),
             "fingerprint matched printed recovery record",
         )
         .unwrap();
@@ -2512,9 +2932,37 @@ mod tests {
         assert!(imported[0]
             .provenance
             .contains("fingerprint matched printed recovery record"));
-        let witnessed_bundle: SignedTrustPolicyBundle = serde_json::from_str(&portable).unwrap();
         let repeated = assess_trust_anchor(&conn, &second.id, &witnessed_bundle).unwrap();
         assert_eq!(repeated.status, "repeated");
+        upsert_signer_trust(
+            &conn,
+            &second.id,
+            &replacement,
+            "Release 2027",
+            "revoked",
+            "local compromise response",
+        )
+        .unwrap();
+        let replay = import_authorized_trust_policy(
+            &conn,
+            &second.id,
+            &witnessed_bundle,
+            &recovery_fingerprint,
+            verified.payload_sha256.as_deref().unwrap(),
+            "stale-preview-is-irrelevant-for-exact-replay",
+            std::slice::from_ref(&replacement),
+            "replayed package",
+        )
+        .unwrap();
+        assert!(replay.is_empty());
+        let replayed_status: String = conn
+            .query_row(
+                "SELECT status FROM signer_trust WHERE project_id = ?1 AND key_fingerprint = ?2",
+                rusqlite::params![second.id, replacement],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(replayed_status, "revoked");
         let mut rollback = witnessed_bundle;
         rollback.payload.source_history_event_count -= 1;
         assert_eq!(
@@ -2653,13 +3101,40 @@ mod tests {
         assert_eq!(replacement_preview[0].action, "replace");
         assert_eq!(
             replacement_preview[0].current_status.as_deref(),
-            Some("trusted")
+            Some("revoked")
         );
 
         let oversized = "x".repeat(MAX_TRUST_POLICY_BYTES + 1);
         let oversized_result = verify_trust_policy(&oversized);
         assert_eq!(oversized_result.status, "invalid");
         assert!(oversized_result.diagnostics[0].contains("1 MiB"));
+        let oversized_evidence = "x".repeat(MAX_EVIDENCE_BUNDLE_BYTES + 1);
+        let evidence_result = verify_evidence_bundle_at(&oversized_evidence, Utc::now());
+        assert_eq!(evidence_result.status, "invalid");
+        assert!(evidence_result.diagnostics[0].contains("1 MiB"));
+        let malformed = verify_trust_policy("{\"payload\":");
+        assert_eq!(malformed.status, "invalid");
+        assert!(malformed.diagnostics[0].contains("Malformed"));
+        let deeply_nested = format!("{}null{}", "[".repeat(256), "]".repeat(256));
+        let deeply_nested = verify_trust_policy(&deeply_nested);
+        assert_eq!(deeply_nested.status, "invalid");
+        let mut long_text_bundle: SignedTrustPolicyBundle =
+            serde_json::from_str(&portable).unwrap();
+        long_text_bundle.payload.policies[0].provenance = "x".repeat(MAX_PACKAGE_TEXT_BYTES + 1);
+        let long_text = verify_trust_policy(&serde_json::to_string(&long_text_bundle).unwrap());
+        assert_eq!(long_text.status, "invalid");
+        assert!(long_text.diagnostics[0].contains("invalid history anchor or policy record"));
+        let mut duplicate_bundle: SignedTrustPolicyBundle =
+            serde_json::from_str(&portable).unwrap();
+        duplicate_bundle
+            .payload
+            .policies
+            .push(duplicate_bundle.payload.policies[0].clone());
+        let duplicate = verify_trust_policy(&serde_json::to_string(&duplicate_bundle).unwrap());
+        assert_eq!(duplicate.status, "invalid");
+        assert!(duplicate.diagnostics[0].contains("invalid history anchor or policy record"));
+        let boundary = "x".repeat(MAX_TRUST_POLICY_BYTES);
+        assert!(!verify_trust_policy(&boundary).diagnostics[0].contains("size limit"));
     }
 
     #[test]

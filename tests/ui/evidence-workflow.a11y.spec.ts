@@ -44,14 +44,16 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
     mimeType: "application/json",
     buffer: Buffer.from("{}"),
   });
-  await expect(page.getByText(/Bundle status: unsupported/i)).toBeVisible();
+  await expect(page.getByText(/Bundle status: Unsupported evidence contract/i)).toBeVisible();
   await expect(page.getByText(/never added to this project/i)).toBeVisible();
   await page.getByLabel("Choose bundle JSON").setInputFiles({
     name: "signed-evidence-bundle.json",
     mimeType: "application/json",
     buffer: Buffer.from("preview-signed"),
   });
-  await expect(page.getByText(/Bundle status: signed_untrusted/i)).toBeVisible();
+  await expect(
+    page.getByText(/Bundle status: Signature valid; fingerprint not trusted/i),
+  ).toBeVisible();
   await expect(page.getByLabel("Trust decision provenance")).toBeVisible();
   await expect(page.getByRole("button", { name: "Mark trusted" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Mark revoked" })).toBeDisabled();
@@ -82,30 +84,58 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await page.getByLabel("Keychain signing identity").fill("Preview recovery signer");
   await expect(page.getByRole("button", { name: "Export signed trust policy" })).toBeEnabled();
   await page.getByLabel("Verify recovery policy JSON").setInputFiles({
+    name: "unauthorized-signer-trust-policy.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("preview-signed-trust-policy"),
+  });
+  await expect(page.getByText(/Destination recovery authorization: unknown/i)).toBeVisible();
+  await page.getByLabel("Confirm package signer fingerprint").fill("c".repeat(64));
+  await page.getByLabel(/Confirm add Recovered signer as trusted/).check();
+  await page.getByLabel("Recovery verification provenance").fill("Copied from the package itself");
+  await expect(
+    page.getByRole("button", { name: "Apply authorized signed policy changes" }),
+  ).toBeDisabled();
+  await page.getByLabel("Independently verified recovery fingerprint").fill("c".repeat(64));
+  await page.getByLabel("Operator label for this authority").fill("Disaster recovery authority");
+  await page
+    .getByLabel("Independent authority provenance")
+    .fill("Approved recovery runbook SEC-41");
+  await page.getByRole("button", { name: "Enroll recovery authority" }).click();
+  await expect(
+    page.getByText(/authority enrolled for this destination project only/i),
+  ).toBeVisible();
+  await page.getByLabel("Verify recovery policy JSON").setInputFiles({
     name: "signer-trust-policy.json",
     mimeType: "application/json",
     buffer: Buffer.from("preview-signed-trust-policy"),
   });
-  await expect(page.getByText(/Recovery policy: valid_untrusted/i)).toBeVisible();
+  await expect(
+    page.getByText(/Recovery policy: Signature valid; recovery authority not yet proven/i),
+  ).toBeVisible();
   await expect(page.getByText(/not recovery authority/i)).toBeVisible();
   await expect(page.getByText(/Payload digest:/i)).toBeVisible();
   await expect(page.getByText(/Proof checkpoint: genesis/i)).toBeVisible();
   await expect(page.getByRole("list", { name: "Recovery policy changes" })).toContainText(
     "add Recovered signer: absent → trusted",
   );
-  await expect(page.getByRole("button", { name: "Recover verified policy" })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Apply authorized signed policy changes" }),
+  ).toBeDisabled();
+  await page.getByLabel(/Confirm add Recovered signer as trusted/).check();
   await page.getByLabel("Confirm package signer fingerprint").fill("c".repeat(64));
   await page
     .getByLabel("Recovery verification provenance")
     .fill("Matched printed disaster recovery record");
-  await page.getByRole("button", { name: "Recover verified policy" }).click();
-  await expect(page.getByText(/Recovered 1 signer policies/i)).toBeVisible();
+  await page.getByRole("button", { name: "Apply authorized signed policy changes" }).click();
+  await expect(page.getByText(/Applied 1 authorized signer-policy changes/i)).toBeVisible();
   await page.getByLabel("Verify recovery policy JSON").setInputFiles({
     name: "signer-trust-policy-repeat.json",
     mimeType: "application/json",
     buffer: Buffer.from("preview-signed-trust-policy"),
   });
-  await expect(page.getByText(/Witnessed-anchor assessment: forward proven/i)).toBeVisible();
+  await expect(
+    page.getByText(/Witnessed-anchor assessment: Forward ancestry proven/i),
+  ).toBeVisible();
   await expect(page.getByText(/contains the witnessed head/i)).toBeVisible();
   await expect(page.getByRole("list", { name: "Recovery policy changes" })).toContainText(
     "replace Recovered signer: trusted → trusted",
@@ -118,7 +148,7 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
     "2 → 3 decisions",
   );
   await expect(page.getByText(/deterministic and unsigned/i)).toBeVisible();
-  await expect(page.getByText(/Receipt-chain integrity: verified/i)).toBeVisible();
+  await expect(page.getByText(/Receipt-chain local consistency: verified/i)).toBeVisible();
   await expect(page.getByText(/does not establish signer authority/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Export unsigned receipts" })).toBeEnabled();
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();

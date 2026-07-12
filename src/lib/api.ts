@@ -366,6 +366,8 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         stderr: "",
         executed_at: now(),
         execution_controls: {
+          platform: "browser_preview",
+          isolation_backend: "none",
           profile: "bounded",
           timeout: "applied",
           output_limit: "applied",
@@ -476,9 +478,11 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
                 ? "A test ran, but its placeholder assertion is not evidence."
                 : "Browser preview cannot scan the selected local project.",
           verification_policy: {
-            policy_id: "python_isolated_execution_v1",
+            policy_id: "python_platform_isolation_v1",
             status: "not_evaluated" as const,
             required_controls: [
+              "platform=macos",
+              "isolation_backend=sandbox-exec",
               "profile=macos_isolated",
               "timeout=applied",
               "output_limit=applied",

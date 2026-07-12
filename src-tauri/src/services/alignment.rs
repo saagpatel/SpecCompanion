@@ -432,7 +432,9 @@ fn classify_requirement(
     })
 }
 
-const PYTHON_REQUIRED_CONTROLS: [&str; 6] = [
+const PYTHON_REQUIRED_CONTROLS: [&str; 8] = [
+    "platform=macos",
+    "isolation_backend=sandbox-exec",
     "profile=macos_isolated",
     "timeout=applied",
     "output_limit=applied",
@@ -443,6 +445,12 @@ const PYTHON_REQUIRED_CONTROLS: [&str; 6] = [
 
 fn missing_enforcement_controls(controls: &crate::models::test::ExecutionControls) -> Vec<String> {
     let mut missing = Vec::new();
+    if controls.platform != "macos" {
+        missing.push("platform".into());
+    }
+    if controls.isolation_backend != "sandbox-exec" {
+        missing.push("isolation_backend".into());
+    }
     if controls.profile != "macos_isolated" {
         missing.push("profile".into());
     }
@@ -469,7 +477,7 @@ fn verification_policy_evidence(
 ) -> VerificationPolicyEvidence {
     if observations.is_empty() {
         return VerificationPolicyEvidence {
-            policy_id: "python_isolated_execution_v1".into(),
+            policy_id: "python_platform_isolation_v1".into(),
             status: VerificationPolicyStatus::NotApplicable,
             required_controls: PYTHON_REQUIRED_CONTROLS
                 .iter()
@@ -487,11 +495,22 @@ fn verification_policy_evidence(
         .collect();
     missing.sort();
     missing.dedup();
-    let sufficient = missing.is_empty();
+    let backend_available = observations.iter().all(|observation| {
+        observation.controls.platform == "macos"
+            && observation.controls.isolation_backend == "sandbox-exec"
+    });
+    let sufficient = backend_available && missing.is_empty();
     VerificationPolicyEvidence {
-        policy_id: "python_isolated_execution_v1".into(),
+        policy_id: if backend_available {
+            "python_macos_sandbox_exec_v1"
+        } else {
+            "python_platform_isolation_unavailable_v1"
+        }
+        .into(),
         status: if sufficient {
             VerificationPolicyStatus::Satisfied
+        } else if !backend_available {
+            VerificationPolicyStatus::Unavailable
         } else {
             VerificationPolicyStatus::Insufficient
         },
@@ -503,6 +522,11 @@ fn verification_policy_evidence(
         missing_controls: missing.clone(),
         summary: if sufficient {
             "All required Python execution controls were observed".into()
+        } else if !backend_available {
+            format!(
+                "No recognized isolation policy matches the observed platform/backend; missing or unproven controls: {}",
+                missing.join(", ")
+            )
         } else {
             format!("Missing or unproven controls: {}", missing.join(", "))
         },
@@ -616,6 +640,8 @@ mod tests {
             status,
             generation_mode,
             crate::models::test::ExecutionControls {
+                platform: "macos".into(),
+                isolation_backend: "sandbox-exec".into(),
                 profile: "macos_isolated".into(),
                 timeout: "applied".into(),
                 output_limit: "applied".into(),
@@ -786,14 +812,16 @@ mod tests {
         );
         assert_eq!(
             report.alignments[0].verification_policy.status,
-            VerificationPolicyStatus::Insufficient
+            VerificationPolicyStatus::Unavailable
         );
         assert_eq!(
             report.alignments[0].verification_policy.missing_controls,
             vec![
                 "filesystem_write",
+                "isolation_backend",
                 "network",
                 "output_limit",
+                "platform",
                 "process_tree_kill",
                 "profile",
                 "timeout",
@@ -920,6 +948,8 @@ mod tests {
     #[test]
     fn python_verification_requires_sufficient_typed_enforcement() {
         let bounded = crate::models::test::ExecutionControls {
+            platform: "macos".into(),
+            isolation_backend: "none".into(),
             profile: "bounded".into(),
             timeout: "applied".into(),
             output_limit: "applied".into(),
@@ -932,11 +962,24 @@ mod tests {
         assert!(enforcement_sufficient("vitest", &bounded));
 
         let isolated = crate::models::test::ExecutionControls {
+            isolation_backend: "sandbox-exec".into(),
             profile: "macos_isolated".into(),
             network: "denied".into(),
             filesystem_write: "denied_except:/tmp".into(),
             ..bounded
         };
         assert!(enforcement_sufficient("unittest", &isolated));
+
+        let wrong_platform = crate::models::test::ExecutionControls {
+            platform: "linux".into(),
+            ..isolated.clone()
+        };
+        assert!(!enforcement_sufficient("pytest", &wrong_platform));
+
+        let unrecognized_backend = crate::models::test::ExecutionControls {
+            isolation_backend: "claimed-equivalent".into(),
+            ..isolated
+        };
+        assert!(!enforcement_sufficient("pytest", &unrecognized_backend));
     }
 }

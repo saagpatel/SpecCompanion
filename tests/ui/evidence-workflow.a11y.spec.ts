@@ -110,6 +110,10 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await expect(page.getByRole("list", { name: "Recovery policy changes" })).toContainText(
     "replace Recovered signer: trusted → trusted",
   );
+  await page.getByLabel("Confirm package signer fingerprint").fill("c".repeat(64));
+  await page.getByLabel("Recovery verification provenance").fill("Bridge package SEC-43");
+  await page.getByRole("button", { name: "Record as bridge checkpoint" }).click();
+  await expect(page.getByText(/no signer policy was imported/i)).toBeVisible();
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Evidence bundle" })).toBeVisible();

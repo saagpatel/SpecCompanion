@@ -17,6 +17,7 @@ import {
   useExportSignerTrustPolicy,
   useVerifySignerTrustPolicy,
   useImportSignerTrustPolicy,
+  useAdvanceTrustAnchorWitness,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -47,6 +48,7 @@ export function Reports() {
   const exportTrustPolicy = useExportSignerTrustPolicy();
   const verifyTrustPolicy = useVerifySignerTrustPolicy(projectId ?? "");
   const importTrustPolicy = useImportSignerTrustPolicy(projectId ?? "");
+  const advanceTrustAnchor = useAdvanceTrustAnchorWitness(projectId ?? "");
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
   const {
@@ -395,6 +397,9 @@ export function Reports() {
                 const content = await file.text();
                 setRecoveryBundle(content);
                 setRecoveryFingerprint("");
+                setRecoveryProvenance("");
+                importTrustPolicy.reset();
+                advanceTrustAnchor.reset();
                 verifyTrustPolicy.mutate(content);
                 event.target.value = "";
               }}
@@ -518,8 +523,52 @@ export function Reports() {
                 >
                   Recover verified policy
                 </button>
+                {verifyTrustPolicy.data.anchor_status === "forward_proven" && (
+                  <button
+                    type="button"
+                    disabled={
+                      recoveryFingerprint.trim().toLowerCase() !==
+                        verifyTrustPolicy.data.key_fingerprint.toLowerCase() ||
+                      !recoveryProvenance.trim() ||
+                      advanceTrustAnchor.isPending
+                    }
+                    onClick={() =>
+                      advanceTrustAnchor.mutate(
+                        {
+                          bundleJson: recoveryBundle,
+                          fingerprint: recoveryFingerprint,
+                          payloadSha256: verifyTrustPolicy.data!.payload_sha256!,
+                          provenance: recoveryProvenance,
+                        },
+                        {
+                          onSuccess: () => {
+                            setRecoveryBundle("");
+                            setRecoveryFingerprint("");
+                            setRecoveryProvenance("");
+                            verifyTrustPolicy.reset();
+                          },
+                        },
+                      )
+                    }
+                    className="text-primary-light mt-2 ml-3 text-sm hover:underline disabled:opacity-50"
+                  >
+                    Record as bridge checkpoint
+                  </button>
+                )}
               </div>
             )}
+          {advanceTrustAnchor.isError && (
+            <p role="alert" className="text-danger mt-2 text-xs">
+              Checkpoint advancement failed. The witnessed anchor was not changed.
+            </p>
+          )}
+          {advanceTrustAnchor.isSuccess && (
+            <p role="status" className="mt-2 text-xs">
+              Witnessed anchor advanced from {advanceTrustAnchor.data.previous_event_count} to{" "}
+              {advanceTrustAnchor.data.advanced_event_count} decisions. Verify the next signed
+              package in sequence; no signer policy was imported.
+            </p>
+          )}
           {importTrustPolicy.isError && (
             <p role="alert" className="text-danger mt-2 text-xs">
               Recovery failed. Existing project trust remains unchanged.

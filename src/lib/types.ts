@@ -268,6 +268,17 @@ export interface TrustPolicyVerification {
   diagnostics: string[];
 }
 
+export interface TrustAnchorAdvancement {
+  id: string;
+  previous_head_digest: string;
+  previous_event_count: number;
+  advanced_head_digest: string;
+  advanced_event_count: number;
+  payload_sha256: string;
+  provenance: string;
+  advanced_at: string;
+}
+
 export interface SigningIdentityInfo {
   signer_identity: string;
   key_fingerprint: string;

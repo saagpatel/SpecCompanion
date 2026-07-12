@@ -17,6 +17,7 @@ import type {
   SignerTrustHistoryRecord,
   SignerTrustHistoryIntegrity,
   TrustPolicyVerification,
+  TrustAnchorAdvancement,
   AppSettings,
   EvidenceRecord,
   LinkRepositoryTestRequest,
@@ -722,6 +723,20 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       });
       return [recovered] as T;
     }
+    case "advance_trust_anchor_witness":
+      if (args.expected_signer_fingerprint !== "c".repeat(64)) {
+        throw new Error("Checkpoint confirmation does not match the verified package");
+      }
+      return {
+        id: nextId("anchor-advance"),
+        previous_head_digest: "a".repeat(64),
+        previous_event_count: 2,
+        advanced_head_digest: "f".repeat(64),
+        advanced_event_count: 3,
+        payload_sha256: "e".repeat(64),
+        provenance: String(args.provenance),
+        advanced_at: now(),
+      } as T;
     default:
       throw new Error(`Unsupported browser preview command: ${command}`);
   }
@@ -893,6 +908,21 @@ export const importSignerTrustPolicy = (
     expected_signer_fingerprint: expectedSignerFingerprint,
     expected_payload_sha256: expectedPayloadSha256,
     recovery_provenance: recoveryProvenance,
+  });
+
+export const advanceTrustAnchorWitness = (
+  projectId: string,
+  bundleJson: string,
+  expectedSignerFingerprint: string,
+  expectedPayloadSha256: string,
+  provenance: string,
+) =>
+  invoke<TrustAnchorAdvancement>("advance_trust_anchor_witness", {
+    project_id: projectId,
+    bundle_json: bundleJson,
+    expected_signer_fingerprint: expectedSignerFingerprint,
+    expected_payload_sha256: expectedPayloadSha256,
+    provenance,
   });
 
 export const createSigningIdentity = (signerIdentity: string) =>

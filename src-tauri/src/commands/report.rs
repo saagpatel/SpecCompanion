@@ -78,11 +78,11 @@ pub fn export_report(
         "json" => serde_json::to_string_pretty(&report).map_err(AppError::Serde),
         "csv" => {
             let mut csv = String::from(
-                "requirement_id,spec_section,classification,reason,details,verification_policy,policy_status,missing_controls\n",
+                "requirement_id,spec_section,classification,reason,details,verification_policy,policy_status,missing_controls,report_integrity\n",
             );
             for alignment in &report.alignments {
                 csv.push_str(&format!(
-                    "{},{},{},{},{},{},{},{}\n",
+                    "{},{},{},{},{},{},{},{},{}\n",
                     escape_csv(&alignment.requirement_id),
                     escape_csv(&alignment.section),
                     escape_csv(alignment.classification.as_str()),
@@ -91,6 +91,7 @@ pub fn export_report(
                     escape_csv(&alignment.verification_policy.policy_id),
                     escape_csv(alignment.verification_policy.status.as_str()),
                     escape_csv(&alignment.verification_policy.missing_controls.join(";")),
+                    escape_csv(&report.report.integrity_status),
                 ));
             }
             Ok(csv)
@@ -111,10 +112,11 @@ th { background: #252538; }
 </style></head><body>"#,
             );
             html.push_str(&format!(
-                "<h1>Alignment Report</h1><p>Coverage: <strong>{:.1}%</strong> ({}/{} requirements)</p>",
+                "<h1>Alignment Report</h1><p>Coverage: <strong>{:.1}%</strong> ({}/{} requirements)</p><p>Report integrity: <strong>{}</strong></p>",
                 report.report.coverage_percent,
                 report.report.covered_requirements,
                 report.report.total_requirements,
+                html_escape(&report.report.integrity_status),
             ));
 
             if report.alignments.is_empty() {

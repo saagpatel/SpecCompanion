@@ -69,6 +69,7 @@ pub fn generate_report_with_exclusions(
         failed_requirements: failed,
         unknown_requirements: unknown,
         evidence_digest: digest_alignments(&alignments)?,
+        integrity_status: "verified".into(),
         checked_languages: scan.checked_languages.clone(),
         skipped_languages: scan.skipped_languages.clone(),
         diagnostics: scan.diagnostics.clone(),
@@ -137,6 +138,7 @@ fn classify_requirement(
     let mut has_failure = false;
     let mut has_timeout = false;
     let mut has_runtime_unavailable = false;
+    let mut has_untrusted_provenance = false;
     let mut has_linked_test = !tests.is_empty();
     let mut policy_observations = Vec::new();
 
@@ -223,18 +225,24 @@ fn classify_requirement(
                     controls: result.execution_controls.clone(),
                 });
             }
-            match result.status.as_str() {
-                "passed" if quality_status == "meaningful" => {
-                    if enforcement_sufficient(&test.framework, &result.execution_controls) {
-                        has_pass = true;
-                    } else {
-                        has_pass_with_insufficient_enforcement = true;
+            if result.provenance_status != "verified" {
+                has_untrusted_provenance = true;
+            } else {
+                match result.status.as_str() {
+                    "passed" if quality_status == "meaningful" => {
+                        if enforcement_sufficient(&test.framework, &result.execution_controls) {
+                            has_pass = true;
+                        } else {
+                            has_pass_with_insufficient_enforcement = true;
+                        }
                     }
+                    "failed" | "error" => has_failure = true,
+                    "timed_out" => has_timeout = true,
+                    "runtime_unavailable" | "unsupported" | "blocked" => {
+                        has_runtime_unavailable = true
+                    }
+                    _ => {}
                 }
-                "failed" | "error" => has_failure = true,
-                "timed_out" => has_timeout = true,
-                "runtime_unavailable" | "unsupported" | "blocked" => has_runtime_unavailable = true,
-                _ => {}
             }
             evidence_records.push(EvidenceRecord {
                 id: evidence::evidence_id(&[&requirement.id, "execution", &result.id]),
@@ -245,8 +253,14 @@ fn classify_requirement(
                 symbol: Some(test.id.clone()),
                 status: result.status.clone(),
                 summary: format!(
-                    "{}; controls: {}",
+                    "{}; provenance={}; digest={}; controls: {}",
                     execution_summary(&result.status, result.execution_time_ms),
+                    result.provenance_status,
+                    if result.provenance_digest.is_empty() {
+                        "unavailable"
+                    } else {
+                        &result.provenance_digest
+                    },
                     execution_controls_summary(&result.execution_controls)
                 ),
             });
@@ -329,6 +343,12 @@ fn classify_requirement(
             AlignmentReason::EvidenceUnavailable,
             "This pre-migration requirement must be re-parsed before evidence can be trusted"
                 .into(),
+        )
+    } else if has_untrusted_provenance {
+        (
+            AlignmentClassification::Unknown,
+            AlignmentReason::EvidenceUnavailable,
+            "Execution evidence provenance is missing or invalid; the result cannot support a classification".into(),
         )
     } else if has_timeout {
         (
@@ -588,7 +608,7 @@ fn count(alignments: &[RequirementAlignment], classification: AlignmentClassific
         .count() as i64
 }
 
-fn digest_alignments(alignments: &[RequirementAlignment]) -> Result<String, AppError> {
+pub(crate) fn digest_alignments(alignments: &[RequirementAlignment]) -> Result<String, AppError> {
     let json = serde_json::to_vec(alignments)?;
     let digest = Sha256::digest(json);
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
@@ -627,7 +647,14 @@ mod tests {
     }
 
     fn seed(test_code: &str, status: Option<&str>) -> AlignmentReportWithEvidence {
-        seed_with_controls(test_code, status, "fixture", Default::default())
+        seed_with_controls(
+            test_code,
+            status,
+            "fixture",
+            Default::default(),
+            false,
+            false,
+        )
     }
 
     fn seed_with_mode(
@@ -650,6 +677,8 @@ mod tests {
                 filesystem_write: "denied_except:/tmp".into(),
                 child_process: "allowed_for_test_runtime".into(),
             },
+            false,
+            false,
         )
     }
 
@@ -658,6 +687,8 @@ mod tests {
         status: Option<&str>,
         generation_mode: &str,
         execution_controls: crate::models::test::ExecutionControls,
+        tamper_result: bool,
+        tamper_report_digest: bool,
     ) -> AlignmentReportWithEvidence {
         let fixture = Fixture::new();
         let db = Database::new(&fixture.root.join("app-data")).expect("db");
@@ -702,14 +733,32 @@ mod tests {
                     stderr: String::new(),
                     executed_at: "2026-01-01T00:00:00Z".into(),
                     execution_controls,
+                    provenance_digest: String::new(),
+                    provenance_status: String::new(),
                 },
             )
             .expect("result");
+            if tamper_result {
+                conn.execute(
+                    "UPDATE test_results SET status = 'failed' WHERE id = 'result-1'",
+                    [],
+                )
+                .expect("tamper result");
+            }
         }
         let first = generate_report(&conn, &project.id).expect("first report");
         let second = generate_report(&conn, &project.id).expect("second report");
         assert_eq!(first.report.evidence_digest, second.report.evidence_digest);
-        second
+        if tamper_report_digest {
+            conn.execute(
+                "UPDATE alignment_reports SET evidence_digest = 'tampered' WHERE id = ?1",
+                rusqlite::params![second.report.id],
+            )
+            .expect("tamper report digest");
+            queries::get_alignment_report(&conn, &second.report.id).expect("tampered report")
+        } else {
+            second
+        }
     }
 
     fn seed_without_test(
@@ -832,6 +881,63 @@ mod tests {
             "test-1"
         );
         assert_eq!(report.report.verified_requirements, 0);
+    }
+
+    #[test]
+    fn tampered_execution_result_is_unknown_not_failed_or_verified() {
+        let report = seed_with_controls(
+            "# Requirement-ID: $REQ\ndef test_add():\n    assert add_numbers(2, 3) == 5\n",
+            Some("passed"),
+            "fixture",
+            crate::models::test::ExecutionControls {
+                platform: "macos".into(),
+                isolation_backend: "sandbox-exec".into(),
+                profile: "macos_isolated".into(),
+                timeout: "applied".into(),
+                output_limit: "applied".into(),
+                process_tree_kill: "applied".into(),
+                network: "denied".into(),
+                filesystem_write: "denied_except:/tmp".into(),
+                child_process: "allowed_for_test_runtime".into(),
+            },
+            true,
+            false,
+        );
+        assert_eq!(
+            report.alignments[0].classification,
+            AlignmentClassification::Unknown
+        );
+        assert_eq!(
+            report.alignments[0].reason,
+            AlignmentReason::EvidenceUnavailable
+        );
+        assert!(report.alignments[0]
+            .evidence
+            .iter()
+            .any(|evidence| evidence.summary.contains("provenance=invalid")));
+    }
+
+    #[test]
+    fn persisted_report_digest_tampering_is_visible() {
+        let report = seed_with_controls(
+            "# Requirement-ID: $REQ\ndef test_add():\n    assert add_numbers(2, 3) == 5\n",
+            Some("passed"),
+            "fixture",
+            crate::models::test::ExecutionControls {
+                platform: "macos".into(),
+                isolation_backend: "sandbox-exec".into(),
+                profile: "macos_isolated".into(),
+                timeout: "applied".into(),
+                output_limit: "applied".into(),
+                process_tree_kill: "applied".into(),
+                network: "denied".into(),
+                filesystem_write: "denied_except:/tmp".into(),
+                child_process: "allowed_for_test_runtime".into(),
+            },
+            false,
+            true,
+        );
+        assert_eq!(report.report.integrity_status, "invalid");
     }
 
     #[test]

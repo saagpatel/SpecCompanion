@@ -376,6 +376,8 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           filesystem_write: "not_enforced",
           child_process: "not_enforced",
         },
+        provenance_digest: "",
+        provenance_status: "legacy_unverified",
       }));
       mockState.testResults.push(...results);
       return results as T;
@@ -512,6 +514,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         failed_requirements: failed,
         unknown_requirements: unknown,
         evidence_digest: `preview-${requirements.length}-${failed}-${unknown}`,
+        integrity_status: "not_checked",
         checked_languages: [],
         skipped_languages: [],
         diagnostics: ["Browser preview cannot scan or execute a local target repository."],

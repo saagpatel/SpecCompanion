@@ -2,7 +2,7 @@ use crate::errors::AppError;
 use crate::models::project::{CreateProjectRequest, Project, ProjectWithStats};
 use crate::models::report::{AlignmentReport, AlignmentReportWithEvidence, RequirementAlignment};
 use crate::models::spec::{Requirement, Spec};
-use crate::models::test::{GeneratedTest, TestResult};
+use crate::models::test::{execution_provenance_digest, GeneratedTest, TestResult};
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use uuid::Uuid;
@@ -422,9 +422,15 @@ pub fn get_generated_tests_for_project(
 // ─── Test Results ───────────────────────────────────────────────
 
 pub fn insert_test_result(conn: &Connection, result: &TestResult) -> Result<(), AppError> {
+    let test_code: String = conn.query_row(
+        "SELECT code FROM generated_tests WHERE id = ?1",
+        params![result.generated_test_id],
+        |row| row.get(0),
+    )?;
+    let provenance_digest = execution_provenance_digest(&test_code, result)?;
     conn.execute(
-        "INSERT INTO test_results (id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at, execution_controls_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![result.id, result.generated_test_id, result.status, result.execution_time_ms, result.stdout, result.stderr, result.executed_at, serde_json::to_string(&result.execution_controls)?],
+        "INSERT INTO test_results (id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at, execution_controls_json, provenance_digest) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![result.id, result.generated_test_id, result.status, result.execution_time_ms, result.stdout, result.stderr, result.executed_at, serde_json::to_string(&result.execution_controls)?, provenance_digest],
     )?;
     Ok(())
 }
@@ -434,7 +440,7 @@ pub fn get_test_results_for_project(
     project_id: &str,
 ) -> Result<Vec<TestResult>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT tr.id, tr.generated_test_id, tr.status, tr.execution_time_ms, tr.stdout, tr.stderr, tr.executed_at, tr.execution_controls_json
+        "SELECT tr.id, tr.generated_test_id, tr.status, tr.execution_time_ms, tr.stdout, tr.stderr, tr.executed_at, tr.execution_controls_json, tr.provenance_digest, gt.code
          FROM test_results tr
          JOIN generated_tests gt ON tr.generated_test_id = gt.id
          JOIN requirements r ON gt.requirement_id = r.id
@@ -443,7 +449,7 @@ pub fn get_test_results_for_project(
          ORDER BY tr.executed_at DESC"
     )?;
     let rows = stmt.query_map(params![project_id], |row| {
-        Ok(TestResult {
+        let mut result = TestResult {
             id: row.get(0)?,
             generated_test_id: row.get(1)?,
             status: row.get(2)?,
@@ -452,7 +458,11 @@ pub fn get_test_results_for_project(
             stderr: row.get(5)?,
             executed_at: row.get(6)?,
             execution_controls: serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default(),
-        })
+            provenance_digest: row.get(8)?,
+            provenance_status: String::new(),
+        };
+        result.provenance_status = provenance_status(&row.get::<_, String>(9)?, &result);
+        Ok(result)
     })?;
     let mut results = Vec::new();
     for row in rows {
@@ -463,10 +473,10 @@ pub fn get_test_results_for_project(
 
 pub fn get_test_result(conn: &Connection, id: &str) -> Result<TestResult, AppError> {
     conn.query_row(
-        "SELECT id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at, execution_controls_json FROM test_results WHERE id = ?1",
+        "SELECT tr.id, tr.generated_test_id, tr.status, tr.execution_time_ms, tr.stdout, tr.stderr, tr.executed_at, tr.execution_controls_json, tr.provenance_digest, gt.code FROM test_results tr JOIN generated_tests gt ON gt.id = tr.generated_test_id WHERE tr.id = ?1",
         params![id],
         |row| {
-            Ok(TestResult {
+            let mut result = TestResult {
                 id: row.get(0)?,
                 generated_test_id: row.get(1)?,
                 status: row.get(2)?,
@@ -475,7 +485,11 @@ pub fn get_test_result(conn: &Connection, id: &str) -> Result<TestResult, AppErr
                 stderr: row.get(5)?,
                 executed_at: row.get(6)?,
                 execution_controls: serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default(),
-            })
+                provenance_digest: row.get(8)?,
+                provenance_status: String::new(),
+            };
+            result.provenance_status = provenance_status(&row.get::<_, String>(9)?, &result);
+            Ok(result)
         },
     ).map_err(|_| AppError::NotFound(format!("Test result not found: {}", id)))
 }
@@ -485,10 +499,10 @@ pub fn get_latest_test_result_for_test(
     generated_test_id: &str,
 ) -> Result<Option<TestResult>, AppError> {
     let result = conn.query_row(
-        "SELECT id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at, execution_controls_json FROM test_results WHERE generated_test_id = ?1 ORDER BY executed_at DESC LIMIT 1",
+        "SELECT tr.id, tr.generated_test_id, tr.status, tr.execution_time_ms, tr.stdout, tr.stderr, tr.executed_at, tr.execution_controls_json, tr.provenance_digest, gt.code FROM test_results tr JOIN generated_tests gt ON gt.id = tr.generated_test_id WHERE tr.generated_test_id = ?1 ORDER BY tr.executed_at DESC LIMIT 1",
         params![generated_test_id],
         |row| {
-            Ok(TestResult {
+            let mut result = TestResult {
                 id: row.get(0)?,
                 generated_test_id: row.get(1)?,
                 status: row.get(2)?,
@@ -497,13 +511,27 @@ pub fn get_latest_test_result_for_test(
                 stderr: row.get(5)?,
                 executed_at: row.get(6)?,
                 execution_controls: serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default(),
-            })
+                provenance_digest: row.get(8)?,
+                provenance_status: String::new(),
+            };
+            result.provenance_status = provenance_status(&row.get::<_, String>(9)?, &result);
+            Ok(result)
         },
     );
     match result {
         Ok(r) => Ok(Some(r)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(AppError::Database(e)),
+    }
+}
+
+fn provenance_status(test_code: &str, result: &TestResult) -> String {
+    if result.provenance_digest.is_empty() {
+        return "legacy_unverified".into();
+    }
+    match execution_provenance_digest(test_code, result) {
+        Ok(digest) if digest == result.provenance_digest => "verified".into(),
+        _ => "invalid".into(),
     }
 }
 
@@ -541,7 +569,7 @@ pub fn get_alignment_report(
     conn: &Connection,
     id: &str,
 ) -> Result<AlignmentReportWithEvidence, AppError> {
-    let report = conn.query_row(
+    let mut report = conn.query_row(
         "SELECT id, project_id, coverage_percent, total_requirements, covered_requirements, verified_requirements, partial_requirements, failed_requirements, unknown_requirements, evidence_digest, checked_languages_json, skipped_languages_json, diagnostics_json, generated_at FROM alignment_reports WHERE id = ?1",
         params![id],
         |row| {
@@ -554,6 +582,7 @@ pub fn get_alignment_report(
                 verified_requirements: row.get(5)?, partial_requirements: row.get(6)?,
                 failed_requirements: row.get(7)?, unknown_requirements: row.get(8)?,
                 evidence_digest: row.get(9)?,
+                integrity_status: String::new(),
                 checked_languages: parse_json_column(row.get(10)?)?,
                 skipped_languages: parse_json_column(row.get(11)?)?,
                 diagnostics: parse_json_column(row.get(12)?)?,
@@ -563,6 +592,14 @@ pub fn get_alignment_report(
     ).map_err(|_| AppError::NotFound(format!("Report not found: {}", id)))?;
 
     let alignments = get_requirement_alignments_for_report(conn, &report.id)?;
+    report.integrity_status = if report.evidence_digest.is_empty() {
+        "legacy_unverified".into()
+    } else if crate::services::alignment::digest_alignments(&alignments)? == report.evidence_digest
+    {
+        "verified".into()
+    } else {
+        "invalid".into()
+    };
     Ok(AlignmentReportWithEvidence { report, alignments })
 }
 
@@ -602,6 +639,7 @@ pub fn list_reports(conn: &Connection, project_id: &str) -> Result<Vec<Alignment
             failed_requirements: row.get(7)?,
             unknown_requirements: row.get(8)?,
             evidence_digest: row.get(9)?,
+            integrity_status: "not_checked".into(),
             checked_languages: parse_json_column(row.get(10)?)?,
             skipped_languages: parse_json_column(row.get(11)?)?,
             diagnostics: parse_json_column(row.get(12)?)?,
@@ -625,7 +663,7 @@ fn parse_json_column(value: String) -> Result<Vec<String>, rusqlite::Error> {
 mod tests {
     use super::*;
     use crate::db::schema;
-    use crate::models::test::GeneratedTest;
+    use crate::models::test::{GeneratedTest, TestResult};
 
     #[test]
     fn project_scoped_queries_reject_cross_project_ids() {
@@ -677,5 +715,92 @@ mod tests {
         assert!(get_generated_test_for_project(&conn, &test.id, &second.id).is_err());
         assert!(get_requirement_for_project(&conn, &requirement.id, &first.id).is_ok());
         assert!(get_generated_test_for_project(&conn, &test.id, &first.id).is_ok());
+    }
+
+    #[test]
+    fn execution_provenance_detects_result_and_test_byte_tampering() {
+        let conn = Connection::open_in_memory().expect("database");
+        conn.execute_batch("PRAGMA foreign_keys=ON")
+            .expect("foreign keys");
+        schema::run_migrations(&conn).expect("migrations");
+        let project = create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Provenance".into(),
+                codebase_path: "/tmp/provenance".into(),
+            },
+        )
+        .expect("project");
+        let spec = create_spec(&conn, &project.id, "spec.md", "content").expect("spec");
+        let requirement = Requirement {
+            id: "req-provenance".into(),
+            spec_id: spec.id,
+            section: "Requirements".into(),
+            description: "The system shall add numbers".into(),
+            req_type: "functional".into(),
+            priority: "medium".into(),
+            content_fingerprint: "fingerprint".into(),
+            source_line_start: 1,
+            source_line_end: 1,
+        };
+        insert_requirements(&conn, std::slice::from_ref(&requirement)).expect("requirement");
+        insert_generated_test(
+            &conn,
+            &GeneratedTest {
+                id: "test-provenance".into(),
+                requirement_id: requirement.id,
+                framework: "pytest".into(),
+                code: "assert add(2, 3) == 5".into(),
+                generation_mode: "fixture".into(),
+                file_path: None,
+                created_at: "now".into(),
+            },
+        )
+        .expect("test");
+        insert_test_result(
+            &conn,
+            &TestResult {
+                id: "result-provenance".into(),
+                generated_test_id: "test-provenance".into(),
+                status: "passed".into(),
+                execution_time_ms: 5,
+                stdout: String::new(),
+                stderr: String::new(),
+                executed_at: "now".into(),
+                execution_controls: Default::default(),
+                provenance_digest: String::new(),
+                provenance_status: String::new(),
+            },
+        )
+        .expect("result");
+        assert_eq!(
+            get_test_result(&conn, "result-provenance")
+                .expect("verified result")
+                .provenance_status,
+            "verified"
+        );
+
+        conn.execute(
+            "UPDATE test_results SET status = 'failed' WHERE id = 'result-provenance'",
+            [],
+        )
+        .expect("tamper result");
+        assert_eq!(
+            get_test_result(&conn, "result-provenance")
+                .expect("tampered result")
+                .provenance_status,
+            "invalid"
+        );
+
+        conn.execute_batch(
+            "UPDATE test_results SET status = 'passed'; UPDATE generated_tests SET code = 'assert True' WHERE id = 'test-provenance'",
+        )
+        .expect("tamper test bytes");
+        assert_eq!(
+            get_test_result(&conn, "result-provenance")
+                .expect("test-byte tampering")
+                .provenance_status,
+            "invalid"
+        );
     }
 }

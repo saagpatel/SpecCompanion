@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-const CURRENT_VERSION: i32 = 6;
+const CURRENT_VERSION: i32 = 7;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -38,6 +38,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 6 {
             migrate_v6(&tx)?;
         }
+        if version < 7 {
+            migrate_v7(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -47,6 +50,22 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+fn migrate_v7(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE trust_anchor_witnesses (
+            project_id TEXT NOT NULL,
+            source_project_id TEXT NOT NULL,
+            package_signer_fingerprint TEXT NOT NULL,
+            history_head_digest TEXT NOT NULL,
+            history_event_count INTEGER NOT NULL,
+            payload_sha256 TEXT NOT NULL,
+            witnessed_at TEXT NOT NULL,
+            PRIMARY KEY (project_id, source_project_id, package_signer_fingerprint),
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );",
+    )
 }
 
 fn migrate_v6(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -314,6 +333,8 @@ mod tests {
             .expect("signer trust policy");
         conn.prepare("SELECT recorded_at, previous_digest, event_digest FROM signer_trust_history")
             .expect("signer trust history");
+        conn.prepare("SELECT history_head_digest, history_event_count FROM trust_anchor_witnesses")
+            .expect("trust anchor witness ledger");
     }
 
     #[test]

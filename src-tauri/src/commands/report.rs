@@ -171,8 +171,17 @@ pub struct TrustPolicyVerification {
     pub payload_sha256: Option<String>,
     pub source_history_head_digest: Option<String>,
     pub source_history_event_count: usize,
+    pub anchor_status: String,
+    pub witnessed_history_head_digest: Option<String>,
+    pub witnessed_history_event_count: Option<usize>,
     pub conflicts: Vec<TrustPolicyConflict>,
     pub diagnostics: Vec<String>,
+}
+
+struct AnchorAssessment {
+    status: String,
+    witnessed_head: Option<String>,
+    witnessed_count: Option<usize>,
 }
 
 #[derive(Serialize)]
@@ -787,6 +796,21 @@ pub fn verify_signer_trust_policy(
         result.diagnostics.extend(integrity.diagnostics);
         return result;
     }
+    match assess_trust_anchor(&conn, &project_id, &bundle) {
+        Ok(assessment) => {
+            result.anchor_status = assessment.status;
+            result.witnessed_history_head_digest = assessment.witnessed_head;
+            result.witnessed_history_event_count = assessment.witnessed_count;
+        }
+        Err(error) => {
+            result.status = "unknown".into();
+            result.anchor_status = "unknown".into();
+            result
+                .diagnostics
+                .push(format!("Anchor witness ledger is unavailable: {error}"));
+            return result;
+        }
+    }
     match preview_trust_policy(&conn, &project_id, &bundle.payload.policies) {
         Ok(conflicts) => result.conflicts = conflicts,
         Err(error) => {
@@ -837,6 +861,51 @@ fn preview_trust_policy(
     Ok(conflicts)
 }
 
+fn assess_trust_anchor(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    bundle: &SignedTrustPolicyBundle,
+) -> Result<AnchorAssessment, rusqlite::Error> {
+    let witnessed = match conn.query_row(
+        "SELECT history_head_digest, history_event_count FROM trust_anchor_witnesses
+         WHERE project_id = ?1 AND source_project_id = ?2 AND package_signer_fingerprint = ?3",
+        rusqlite::params![
+            project_id,
+            bundle.payload.source_project_id,
+            bundle.key_fingerprint
+        ],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+    ) {
+        Ok(value) => Some(value),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(error) => return Err(error),
+    };
+    let Some((head, count)) = witnessed else {
+        return Ok(AnchorAssessment {
+            status: "first_seen".into(),
+            witnessed_head: None,
+            witnessed_count: None,
+        });
+    };
+    let witnessed_count = usize::try_from(count).unwrap_or(usize::MAX);
+    let status = if head == bundle.payload.source_history_head_digest
+        && witnessed_count == bundle.payload.source_history_event_count
+    {
+        "repeated"
+    } else if bundle.payload.source_history_event_count < witnessed_count {
+        "rollback"
+    } else if bundle.payload.source_history_event_count == witnessed_count {
+        "conflict"
+    } else {
+        "advanced_unproven"
+    };
+    Ok(AnchorAssessment {
+        status: status.into(),
+        witnessed_head: Some(head),
+        witnessed_count: Some(witnessed_count),
+    })
+}
+
 #[tauri::command]
 pub fn import_signer_trust_policy(
     state: State<'_, Database>,
@@ -879,11 +948,20 @@ pub fn import_signer_trust_policy(
             integrity.status
         )));
     }
+    let anchor = assess_trust_anchor(&conn, &project_id, &bundle)?;
+    if matches!(anchor.status.as_str(), "rollback" | "conflict") {
+        return Err(AppError::InvalidInput(format!(
+            "Trust policy recovery refused because the signed anchor is classified as {}",
+            anchor.status
+        )));
+    }
     import_verified_trust_policy(
         &conn,
         &project_id,
         &bundle.payload.policies,
+        &bundle.payload.source_project_id,
         &fingerprint,
+        &payload_sha256,
         &bundle.payload.source_history_head_digest,
         bundle.payload.source_history_event_count,
         recovery_provenance.trim(),
@@ -935,6 +1013,9 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         payload_sha256: None,
         source_history_head_digest: None,
         source_history_event_count: 0,
+        anchor_status: "not_checked".into(),
+        witnessed_history_head_digest: None,
+        witnessed_history_event_count: None,
         conflicts: Vec::new(),
         diagnostics: Vec::new(),
     };
@@ -1076,7 +1157,9 @@ fn import_verified_trust_policy(
     conn: &rusqlite::Connection,
     project_id: &str,
     policies: &[PortableSignerPolicy],
+    source_project_id: &str,
     package_fingerprint: &str,
+    package_payload_sha256: &str,
     source_history_head_digest: &str,
     source_history_event_count: usize,
     recovery_provenance: &str,
@@ -1117,6 +1200,24 @@ fn import_verified_trust_policy(
             updated_at: now.clone(),
         });
     }
+    tx.execute(
+        "INSERT INTO trust_anchor_witnesses (project_id, source_project_id, package_signer_fingerprint, history_head_digest, history_event_count, payload_sha256, witnessed_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(project_id, source_project_id, package_signer_fingerprint) DO UPDATE SET
+           history_head_digest = excluded.history_head_digest,
+           history_event_count = excluded.history_event_count,
+           payload_sha256 = excluded.payload_sha256,
+           witnessed_at = excluded.witnessed_at",
+        rusqlite::params![
+            project_id,
+            source_project_id,
+            package_fingerprint,
+            source_history_head_digest,
+            source_history_event_count as i64,
+            package_payload_sha256,
+            now,
+        ],
+    )?;
     tx.commit()?;
     Ok(imported)
 }
@@ -1892,7 +1993,9 @@ mod tests {
             &conn,
             &second.id,
             &[recovery_policy.clone()],
+            &first.id,
             &recovery_fingerprint,
+            verified.payload_sha256.as_deref().unwrap(),
             verified.source_history_head_digest.as_deref().unwrap(),
             verified.source_history_event_count,
             "fingerprint matched printed recovery record",
@@ -1902,6 +2005,32 @@ mod tests {
         assert!(imported[0]
             .provenance
             .contains("fingerprint matched printed recovery record"));
+        let witnessed_bundle: SignedTrustPolicyBundle = serde_json::from_str(&portable).unwrap();
+        let repeated = assess_trust_anchor(&conn, &second.id, &witnessed_bundle).unwrap();
+        assert_eq!(repeated.status, "repeated");
+        let mut rollback = witnessed_bundle;
+        rollback.payload.source_history_event_count -= 1;
+        assert_eq!(
+            assess_trust_anchor(&conn, &second.id, &rollback)
+                .unwrap()
+                .status,
+            "rollback"
+        );
+        rollback.payload.source_history_event_count += 1;
+        rollback.payload.source_history_head_digest = "0".repeat(64);
+        assert_eq!(
+            assess_trust_anchor(&conn, &second.id, &rollback)
+                .unwrap()
+                .status,
+            "conflict"
+        );
+        rollback.payload.source_history_event_count += 1;
+        assert_eq!(
+            assess_trust_anchor(&conn, &second.id, &rollback)
+                .unwrap()
+                .status,
+            "advanced_unproven"
+        );
         let replacement_preview =
             preview_trust_policy(&conn, &second.id, &[recovery_policy]).unwrap();
         assert_eq!(replacement_preview[0].action, "replace");

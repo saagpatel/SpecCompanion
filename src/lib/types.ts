@@ -280,6 +280,15 @@ export interface TrustAnchorAdvancement {
   payload_sha256: string;
   provenance: string;
   advanced_at: string;
+  previous_receipt_digest: string;
+  receipt_digest: string;
+}
+
+export interface TrustAnchorAdvancementIntegrity {
+  status: "verified" | "invalid" | "empty" | "unknown";
+  receipt_count: number;
+  scope_count: number;
+  diagnostics: string[];
 }
 
 export interface SigningIdentityInfo {

@@ -20,6 +20,7 @@ import {
   useAdvanceTrustAnchorWitness,
   useTrustAnchorAdvancements,
   useExportTrustAnchorAdvancements,
+  useTrustAnchorAdvancementIntegrity,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -53,6 +54,7 @@ export function Reports() {
   const advanceTrustAnchor = useAdvanceTrustAnchorWitness(projectId ?? "");
   const trustAnchorAdvancements = useTrustAnchorAdvancements(projectId);
   const exportTrustAnchorAdvancements = useExportTrustAnchorAdvancements();
+  const trustAnchorAdvancementIntegrity = useTrustAnchorAdvancementIntegrity(projectId);
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
   const {
@@ -591,6 +593,28 @@ export function Reports() {
                   Local sequencing evidence only. These receipts are deterministic and unsigned;
                   they do not prove package-signer authority.
                 </p>
+                {trustAnchorAdvancementIntegrity.data && (
+                  <p
+                    role="status"
+                    className={`mt-1 text-xs ${
+                      trustAnchorAdvancementIntegrity.data.status === "invalid"
+                        ? "text-danger"
+                        : "text-text-muted"
+                    }`}
+                  >
+                    Receipt-chain integrity: {trustAnchorAdvancementIntegrity.data.status}. Checked{" "}
+                    {trustAnchorAdvancementIntegrity.data.receipt_count} receipts across{" "}
+                    {trustAnchorAdvancementIntegrity.data.scope_count} signer scopes. Chain
+                    integrity detects changed or broken retained receipts, but cannot detect
+                    deletion of an entire final chain without an external checkpoint and does not
+                    establish signer authority.
+                  </p>
+                )}
+                {trustAnchorAdvancementIntegrity.isError && (
+                  <p role="alert" className="text-danger mt-1 text-xs">
+                    Receipt-chain integrity is unknown because verification could not run.
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -649,6 +673,10 @@ export function Reports() {
                       Heads {receipt.previous_head_digest} → {receipt.advanced_head_digest}
                     </p>
                     <p className="break-all">Payload {receipt.payload_sha256}</p>
+                    <p className="break-all">
+                      Receipt chain {receipt.previous_receipt_digest || "genesis"} →{" "}
+                      {receipt.receipt_digest}
+                    </p>
                     <p>Provenance: {receipt.provenance}</p>
                   </li>
                 ))}

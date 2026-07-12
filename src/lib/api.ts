@@ -18,6 +18,7 @@ import type {
   SignerTrustHistoryIntegrity,
   TrustPolicyVerification,
   TrustAnchorAdvancement,
+  TrustAnchorAdvancementIntegrity,
   AppSettings,
   EvidenceRecord,
   LinkRepositoryTestRequest,
@@ -741,6 +742,8 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         payload_sha256: "e".repeat(64),
         provenance: String(args.provenance),
         advanced_at: now(),
+        previous_receipt_digest: "",
+        receipt_digest: "d".repeat(64),
       };
       mockState.trustAnchorAdvancements.push(advancement);
       return advancement as T;
@@ -755,15 +758,32 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       );
       return JSON.stringify(
         {
-          schema: "speccompanion.trust-anchor-advancements.v1",
+          schema: "speccompanion.trust-anchor-advancements.v2",
           project_id: String(args.project_id),
           receipt_count: receipts.length,
           signature_status: "unsigned_local_receipts",
+          integrity: {
+            status: receipts.length ? "verified" : "empty",
+            receipt_count: receipts.length,
+            scope_count: receipts.length ? 1 : 0,
+            diagnostics: [],
+          },
           receipts,
         },
         null,
         2,
       ) as T;
+    }
+    case "verify_trust_anchor_advancements": {
+      const count = mockState.trustAnchorAdvancements.filter(
+        (receipt) => receipt.project_id === args.project_id,
+      ).length;
+      return {
+        status: count ? "verified" : "empty",
+        receipt_count: count,
+        scope_count: count ? 1 : 0,
+        diagnostics: [],
+      } as T;
     }
     default:
       throw new Error(`Unsupported browser preview command: ${command}`);
@@ -960,6 +980,11 @@ export const listTrustAnchorAdvancements = (projectId: string) =>
 
 export const exportTrustAnchorAdvancements = (projectId: string) =>
   invoke<string>("export_trust_anchor_advancements", { project_id: projectId });
+
+export const verifyTrustAnchorAdvancements = (projectId: string) =>
+  invoke<TrustAnchorAdvancementIntegrity>("verify_trust_anchor_advancements", {
+    project_id: projectId,
+  });
 
 export const createSigningIdentity = (signerIdentity: string) =>
   invoke<SigningIdentityInfo>("create_signing_identity", { signer_identity: signerIdentity });

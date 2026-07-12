@@ -118,6 +118,8 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
     "2 → 3 decisions",
   );
   await expect(page.getByText(/deterministic and unsigned/i)).toBeVisible();
+  await expect(page.getByText(/Receipt-chain integrity: verified/i)).toBeVisible();
+  await expect(page.getByText(/does not establish signer authority/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Export unsigned receipts" })).toBeEnabled();
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();

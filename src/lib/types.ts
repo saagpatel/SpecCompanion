@@ -49,11 +49,25 @@ export interface ParsedSpec {
 export interface GeneratedTest {
   id: string;
   requirement_id: string;
-  framework: "jest" | "pytest";
+  framework: "jest" | "pytest" | "vitest" | "unittest";
   code: string;
-  generation_mode: "template" | "llm";
+  generation_mode: "template" | "llm" | "repository_link";
   file_path: string | null;
   created_at: string;
+}
+
+export interface RepositoryTestCandidate {
+  path: string;
+  language: "javascript" | "typescript" | "python";
+  framework: "jest" | "pytest" | "vitest" | "unittest";
+  assertion_status: "meaningful" | "placeholder" | "missing";
+  assertion_lines: number[];
+}
+
+export interface LinkRepositoryTestRequest {
+  project_id: string;
+  requirement_id: string;
+  path: string;
 }
 
 export interface GenerateTestsRequest {

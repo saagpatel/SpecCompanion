@@ -11,6 +11,22 @@ pub struct GeneratedTest {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct RepositoryTestCandidate {
+    pub path: String,
+    pub language: String,
+    pub framework: String,
+    pub assertion_status: String,
+    pub assertion_lines: Vec<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LinkRepositoryTestRequest {
+    pub project_id: String,
+    pub requirement_id: String,
+    pub path: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct GenerateTestsRequest {
     pub requirement_ids: Vec<String>,

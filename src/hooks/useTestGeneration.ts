@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "../lib/api";
-import type { GenerateTestsRequest, AppSettings } from "../lib/types";
+import type { AppSettings, GenerateTestsRequest, LinkRepositoryTestRequest } from "../lib/types";
 
 export function useGeneratedTests(requirementId: string | undefined) {
   return useQuery({
@@ -14,6 +14,25 @@ export function useGenerateTests() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (req: GenerateTestsRequest) => api.generateTests(req),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["generated-tests"] });
+      queryClient.invalidateQueries({ queryKey: ["all-generated-tests"] });
+    },
+  });
+}
+
+export function useRepositoryTests(projectId: string) {
+  return useQuery({
+    queryKey: ["repository-tests", projectId],
+    queryFn: () => api.listRepositoryTests(projectId),
+    enabled: Boolean(projectId),
+  });
+}
+
+export function useLinkRepositoryTest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: LinkRepositoryTestRequest) => api.linkRepositoryTest(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["generated-tests"] });
       queryClient.invalidateQueries({ queryKey: ["all-generated-tests"] });

@@ -41,6 +41,8 @@ pub fn run() {
             commands::test_gen::generate_tests,
             commands::test_gen::get_generated_tests,
             commands::test_gen::get_all_generated_tests,
+            commands::test_gen::list_repository_tests,
+            commands::test_gen::link_repository_test,
             commands::test_gen::save_test_to_disk,
             commands::test_gen::save_settings,
             commands::test_gen::load_settings,

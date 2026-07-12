@@ -138,7 +138,8 @@ fn classify_requirement(
     let mut has_linked_test = !tests.is_empty();
 
     for test in &tests {
-        let traced = evidence::has_requirement_trace(&test.code, requirement);
+        let explicitly_linked = test.generation_mode == "repository_link";
+        let traced = explicitly_linked || evidence::has_requirement_trace(&test.code, requirement);
         let quality = evidence::analyze_assertions(&test.code);
         let (quality_status, assertion_lines) = match &quality {
             AssertionQuality::Meaningful(lines)
@@ -172,8 +173,17 @@ fn classify_requirement(
             line_start: Some(1),
             line_end: Some(test.code.lines().count() as i64),
             symbol: Some(test.id.clone()),
-            status: if traced { "linked" } else { "unlinked" }.into(),
-            summary: if traced {
+            status: if explicitly_linked {
+                "explicitly_linked"
+            } else if traced {
+                "linked"
+            } else {
+                "unlinked"
+            }
+            .into(),
+            summary: if explicitly_linked {
+                "The user explicitly linked this contained repository test; semantic equivalence was not inferred".into()
+            } else if traced {
                 "Test is linked to the stable requirement identity".into()
             } else {
                 "Test lacks a stable requirement trace marker".into()
@@ -465,6 +475,14 @@ mod tests {
     }
 
     fn seed(test_code: &str, status: Option<&str>) -> AlignmentReportWithEvidence {
+        seed_with_mode(test_code, status, "fixture")
+    }
+
+    fn seed_with_mode(
+        test_code: &str,
+        status: Option<&str>,
+        generation_mode: &str,
+    ) -> AlignmentReportWithEvidence {
         let fixture = Fixture::new();
         let db = Database::new(&fixture.root.join("app-data")).expect("db");
         let conn = db.conn.lock().expect("lock");
@@ -491,7 +509,7 @@ mod tests {
             requirement_id: reqs[0].id.clone(),
             framework: "pytest".into(),
             code,
-            generation_mode: "fixture".into(),
+            generation_mode: generation_mode.into(),
             file_path: None,
             created_at: "2026-01-01T00:00:00Z".into(),
         };
@@ -589,6 +607,32 @@ mod tests {
         assert_eq!(
             report.alignments[0].classification,
             AlignmentClassification::Verified
+        );
+    }
+
+    #[test]
+    fn explicit_repository_link_replaces_source_marker_not_assertion_proof() {
+        let meaningful = seed_with_mode(
+            "def test_add():\n    assert add_numbers(2, 3) == 5\n",
+            Some("passed"),
+            "repository_link",
+        );
+        assert_eq!(
+            meaningful.alignments[0].classification,
+            AlignmentClassification::Verified
+        );
+        assert!(meaningful.alignments[0].evidence.iter().any(|evidence| {
+            evidence.kind == EvidenceKind::Test && evidence.status == "explicitly_linked"
+        }));
+
+        let placeholder = seed_with_mode(
+            "def test_add():\n    assert True\n",
+            Some("passed"),
+            "repository_link",
+        );
+        assert_eq!(
+            placeholder.alignments[0].reason,
+            AlignmentReason::TestNonProbative
         );
     }
 

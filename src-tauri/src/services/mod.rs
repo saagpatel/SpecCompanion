@@ -6,3 +6,4 @@ pub mod alignment;
 pub mod codebase_scanner;
 pub mod evidence;
 pub mod git_service;
+pub mod repository_tests;

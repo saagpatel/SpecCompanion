@@ -14,9 +14,10 @@ Built with Tauri v2 (Rust backend, React frontend). Runs locally, works offline,
 
 - **Stable requirement identities** — parses Markdown with `pulldown-cmark`, records exact source lines, distinguishes duplicates, and invalidates edited requirement identities
 - **Deterministic evidence scanning** — matches explicit JavaScript/TypeScript and Python implementation symbols without claiming arbitrary prose-to-code equivalence
+- **Existing-test linkage** — discovers contained repository tests and lets the user explicitly link one to a requirement without editing the target project or inferring prose equivalence
 - **Honest offline templates** — produces traceable Jest/PyTest scaffolds, while explicitly treating their placeholder assertions as non-probative
 - **LLM test generation** — optional Claude API mode generates tests with meaningful assertions, edge cases, and realistic mock data
-- **Bounded test execution** — runs only local Jest or allowlisted Python/PyTest commands with canonical paths, a fixed working directory, a 60-second timeout, process-tree termination, and capped output
+- **Bounded test execution** — runs contained Jest, Vitest, PyTest, or stdlib `unittest` evidence with canonical paths, stable executed-byte binding, fixed working directories, allowlisted runtimes, a 60-second timeout, process-tree termination, and capped output
 - **Evidence-backed alignment** — classifies every requirement as `VERIFIED`, `PARTIAL`, `FAILED`, or `UNKNOWN`, with exact implementation, assertion, execution, and diagnostic evidence
 - **Export** — JSON, HTML, or CSV reports
 
@@ -46,8 +47,8 @@ pnpm tauri dev
 1. Select your codebase directory and upload a markdown spec
 2. Requirements are extracted automatically
 3. Review deterministic implementation candidates
-4. Generate test scaffolds offline, or optionally use Claude-assisted generation
-5. Run selected tests in the bounded local runner
+4. Explicitly link a contained existing test, generate scaffolds offline, or optionally use Claude-assisted generation
+5. Run selected generated or linked tests in the bounded local runner
 6. Review each classification and expand its evidence trail
 
 ## Tech Stack

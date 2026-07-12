@@ -14,6 +14,7 @@ import type {
   EvidenceBundleVerification,
   SigningIdentityInfo,
   SignerTrustRecord,
+  SignerTrustHistoryRecord,
   AppSettings,
   EvidenceRecord,
   LinkRepositoryTestRequest,
@@ -30,6 +31,8 @@ interface MockState {
   generatedTests: GeneratedTest[];
   testResults: TestResult[];
   reports: AlignmentReportWithEvidence[];
+  signerTrust: SignerTrustRecord[];
+  signerTrustHistory: SignerTrustHistoryRecord[];
   settings: AppSettings;
 }
 
@@ -40,6 +43,8 @@ const mockState: MockState = {
   generatedTests: [],
   testResults: [],
   reports: [],
+  signerTrust: [],
+  signerTrustHistory: [],
   settings: {
     api_key: "",
     default_framework: "jest",
@@ -544,6 +549,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       ) as T;
     case "verify_evidence_bundle":
       if (String(args.bundle_json).includes("preview-signed")) {
+        const replacement = String(args.bundle_json).includes("preview-signed-b");
         return {
           status: "signed_untrusted",
           schema: "speccompanion.evidence-bundle.v1",
@@ -554,8 +560,8 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           freshness_status: "fresh",
           diagnostics: [],
           trust_status: "unknown",
-          key_fingerprint: "a".repeat(64),
-          signer_identity: "Preview signer",
+          key_fingerprint: (replacement ? "b" : "a").repeat(64),
+          signer_identity: replacement ? "Preview replacement signer" : "Preview signer",
         } as T;
       }
       return {
@@ -569,6 +575,68 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         diagnostics: ["Browser preview cannot run the native offline bundle verifier."],
         trust_status: "unknown",
       } as T;
+    case "list_signer_trust":
+      return mockState.signerTrust.filter((item) => item.project_id === args.project_id) as T;
+    case "list_signer_trust_history":
+      return mockState.signerTrustHistory.filter(
+        (item) => item.project_id === args.project_id,
+      ) as T;
+    case "set_signer_trust": {
+      const record: SignerTrustRecord = {
+        project_id: String(args.project_id),
+        key_fingerprint: String(args.key_fingerprint),
+        signer_identity: String(args.signer_identity),
+        status: args.status as "trusted" | "revoked",
+        provenance: String(args.provenance),
+        updated_at: now(),
+      };
+      mockState.signerTrust = mockState.signerTrust.filter(
+        (item) =>
+          item.project_id !== record.project_id || item.key_fingerprint !== record.key_fingerprint,
+      );
+      mockState.signerTrust.push(record);
+      mockState.signerTrustHistory.unshift({
+        ...record,
+        id: nextId("trust"),
+        recorded_at: record.updated_at,
+      });
+      return record as T;
+    }
+    case "rotate_signer_trust": {
+      const timestamp = now();
+      const updates: SignerTrustRecord[] = [
+        {
+          project_id: String(args.project_id),
+          key_fingerprint: String(args.previous_fingerprint),
+          signer_identity: "Previous signer",
+          status: "revoked",
+          provenance: String(args.provenance),
+          updated_at: timestamp,
+        },
+        {
+          project_id: String(args.project_id),
+          key_fingerprint: String(args.new_fingerprint),
+          signer_identity: String(args.new_signer_identity),
+          status: "trusted",
+          provenance: String(args.provenance),
+          updated_at: timestamp,
+        },
+      ];
+      for (const record of updates) {
+        mockState.signerTrust = mockState.signerTrust.filter(
+          (item) =>
+            item.project_id !== record.project_id ||
+            item.key_fingerprint !== record.key_fingerprint,
+        );
+        mockState.signerTrust.push(record);
+        mockState.signerTrustHistory.unshift({
+          ...record,
+          id: nextId("trust"),
+          recorded_at: timestamp,
+        });
+      }
+      return updates as T;
+    }
     default:
       throw new Error(`Unsupported browser preview command: ${command}`);
   }
@@ -691,6 +759,24 @@ export const setSignerTrust = (
 
 export const listSignerTrust = (projectId: string) =>
   invoke<SignerTrustRecord[]>("list_signer_trust", { project_id: projectId });
+
+export const listSignerTrustHistory = (projectId: string) =>
+  invoke<SignerTrustHistoryRecord[]>("list_signer_trust_history", { project_id: projectId });
+
+export const rotateSignerTrust = (
+  projectId: string,
+  previousFingerprint: string,
+  newFingerprint: string,
+  newSignerIdentity: string,
+  provenance: string,
+) =>
+  invoke<SignerTrustRecord[]>("rotate_signer_trust", {
+    project_id: projectId,
+    previous_fingerprint: previousFingerprint,
+    new_fingerprint: newFingerprint,
+    new_signer_identity: newSignerIdentity,
+    provenance,
+  });
 
 export const createSigningIdentity = (signerIdentity: string) =>
   invoke<SigningIdentityInfo>("create_signing_identity", { signer_identity: signerIdentity });

@@ -55,6 +55,29 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await expect(page.getByLabel("Trust decision provenance")).toBeVisible();
   await expect(page.getByRole("button", { name: "Mark trusted" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Mark revoked" })).toBeDisabled();
+  await page.getByLabel("Trust decision provenance").fill("Verified in release ceremony SEC-42");
+  await page.getByRole("button", { name: "Mark trusted" }).click();
+  await expect(page.getByText(/Project trust policy updated: trusted/i)).toBeVisible();
+  await expect(page.getByRole("list", { name: "Current signer trust policies" })).toContainText(
+    "Preview signer",
+  );
+  await page.getByText(/Decision history \(1\)/).click();
+  await expect(page.getByText(/Verified in release ceremony SEC-42/).last()).toBeVisible();
+  await page.getByLabel("Choose bundle JSON").setInputFiles({
+    name: "replacement-signed-evidence-bundle.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("preview-signed-b"),
+  });
+  await expect(
+    page.getByRole("heading", { name: "Rotate to the verified fingerprint" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Rotate trust atomically" })).toBeDisabled();
+  await page.getByLabel("Currently trusted key").selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Rotate trust atomically" }).click();
+  await expect(page.getByText(/Rotation recorded/i)).toBeVisible();
+  await expect(page.getByRole("list", { name: "Current signer trust policies" })).toContainText(
+    "Preview replacement signer",
+  );
   await expect(page.getByText(/Report integrity: not checked/i)).toBeVisible();
   await expect(page.getByText(/cannot be treated as tamper-evident/i)).toBeVisible();
   await expect(page.getByRole("button", { name: "Evidence bundle" })).toBeVisible();

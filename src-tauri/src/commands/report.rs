@@ -92,6 +92,17 @@ pub struct SignerTrustRecord {
     pub updated_at: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct SignerTrustHistoryRecord {
+    pub id: String,
+    pub project_id: String,
+    pub key_fingerprint: String,
+    pub signer_identity: String,
+    pub status: String,
+    pub provenance: String,
+    pub recorded_at: String,
+}
+
 #[derive(Serialize)]
 pub struct SigningIdentityInfo {
     pub signer_identity: String,
@@ -367,6 +378,139 @@ pub fn list_signer_trust(
     })?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(AppError::Database)
+}
+
+#[tauri::command]
+pub fn list_signer_trust_history(
+    state: State<'_, Database>,
+    project_id: String,
+) -> Result<Vec<SignerTrustHistoryRecord>, AppError> {
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at
+         FROM signer_trust_history WHERE project_id = ?1
+         ORDER BY recorded_at DESC, id DESC",
+    )?;
+    let rows = stmt.query_map([project_id], |row| {
+        Ok(SignerTrustHistoryRecord {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            key_fingerprint: row.get(2)?,
+            signer_identity: row.get(3)?,
+            status: row.get(4)?,
+            provenance: row.get(5)?,
+            recorded_at: row.get(6)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::Database)
+}
+
+#[tauri::command]
+pub fn rotate_signer_trust(
+    state: State<'_, Database>,
+    project_id: String,
+    previous_fingerprint: String,
+    new_fingerprint: String,
+    new_signer_identity: String,
+    provenance: String,
+) -> Result<Vec<SignerTrustRecord>, AppError> {
+    let valid_fingerprint =
+        |value: &str| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit());
+    if !valid_fingerprint(&previous_fingerprint)
+        || !valid_fingerprint(&new_fingerprint)
+        || previous_fingerprint.eq_ignore_ascii_case(&new_fingerprint)
+        || new_signer_identity.trim().is_empty()
+        || provenance.trim().is_empty()
+    {
+        return Err(AppError::InvalidInput(
+            "Invalid signer rotation policy".into(),
+        ));
+    }
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    rotate_signer_trust_records(
+        &conn,
+        &project_id,
+        &previous_fingerprint,
+        &new_fingerprint,
+        &new_signer_identity,
+        &provenance,
+    )
+}
+
+fn rotate_signer_trust_records(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    previous_fingerprint: &str,
+    new_fingerprint: &str,
+    new_signer_identity: &str,
+    provenance: &str,
+) -> Result<Vec<SignerTrustRecord>, AppError> {
+    let previous = conn.query_row(
+        "SELECT signer_identity, status FROM signer_trust WHERE project_id = ?1 AND key_fingerprint = ?2",
+        rusqlite::params![project_id, previous_fingerprint.to_lowercase()],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+    )?;
+    if previous.1 != "trusted" {
+        return Err(AppError::InvalidInput(
+            "Only a currently trusted fingerprint can be rotated".into(),
+        ));
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let previous_fingerprint = previous_fingerprint.to_lowercase();
+    let new_fingerprint = new_fingerprint.to_lowercase();
+    let provenance = provenance.trim();
+    let new_identity = new_signer_identity.trim();
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "UPDATE signer_trust SET status = 'revoked', provenance = ?3, updated_at = ?4
+         WHERE project_id = ?1 AND key_fingerprint = ?2",
+        rusqlite::params![project_id, previous_fingerprint, provenance, now],
+    )?;
+    tx.execute(
+        "INSERT INTO signer_trust (project_id, key_fingerprint, signer_identity, status, provenance, created_at, updated_at)
+         VALUES (?1, ?2, ?3, 'trusted', ?4, ?5, ?5)
+         ON CONFLICT(project_id, key_fingerprint) DO UPDATE SET signer_identity = excluded.signer_identity, status = 'trusted', provenance = excluded.provenance, updated_at = excluded.updated_at",
+        rusqlite::params![project_id, new_fingerprint, new_identity, provenance, now],
+    )?;
+    for (fingerprint, identity, status) in [
+        (&previous_fingerprint, previous.0.as_str(), "revoked"),
+        (&new_fingerprint, new_identity, "trusted"),
+    ] {
+        tx.execute(
+            "INSERT INTO signer_trust_history (id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![Uuid::new_v4().to_string(), project_id, fingerprint, identity, status, provenance, now],
+        )?;
+    }
+    tx.commit()?;
+    Ok(vec![
+        SignerTrustRecord {
+            project_id: project_id.into(),
+            key_fingerprint: previous_fingerprint,
+            signer_identity: previous.0,
+            status: "revoked".into(),
+            provenance: provenance.into(),
+            updated_at: now.clone(),
+        },
+        SignerTrustRecord {
+            project_id: project_id.into(),
+            key_fingerprint: new_fingerprint,
+            signer_identity: new_identity.into(),
+            status: "trusted".into(),
+            provenance: provenance.into(),
+            updated_at: now,
+        },
+    ])
 }
 
 #[tauri::command]
@@ -901,7 +1045,7 @@ mod tests {
         let status: String = conn
             .query_row(
                 "SELECT status FROM signer_trust WHERE project_id = ?1 AND key_fingerprint = ?2",
-                rusqlite::params![first.id, fingerprint],
+                rusqlite::params![&first.id, &fingerprint],
                 |row| row.get(0),
             )
             .unwrap();
@@ -909,7 +1053,7 @@ mod tests {
         let history: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM signer_trust_history WHERE project_id = ?1",
-                [first.id],
+                [&first.id],
                 |row| row.get(0),
             )
             .unwrap();
@@ -917,10 +1061,58 @@ mod tests {
         let other: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM signer_trust WHERE project_id = ?1",
-                [second.id],
+                [&second.id],
                 |row| row.get(0),
             )
             .unwrap();
         assert_eq!(other, 0);
+
+        let replacement = "b".repeat(64);
+        upsert_signer_trust(
+            &conn,
+            &first.id,
+            &fingerprint,
+            "Release",
+            "trusted",
+            "re-approved before rotation",
+        )
+        .unwrap();
+        let rotated = rotate_signer_trust_records(
+            &conn,
+            &first.id,
+            &fingerprint,
+            &replacement,
+            "Release 2027",
+            "rotation ceremony ticket SEC-42",
+        )
+        .unwrap();
+        assert_eq!(rotated[0].status, "revoked");
+        assert_eq!(rotated[1].status, "trusted");
+        let current: Vec<(String, String)> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT key_fingerprint, status FROM signer_trust WHERE project_id = ?1 ORDER BY key_fingerprint",
+                )
+                .unwrap();
+            stmt.query_map([&first.id], |row| Ok((row.get(0)?, row.get(1)?)))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(
+            current,
+            vec![
+                (fingerprint, "revoked".into()),
+                (replacement, "trusted".into())
+            ]
+        );
+        let history_after_rotation: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM signer_trust_history WHERE project_id = ?1",
+                [&first.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(history_after_rotation, 5);
     }
 }

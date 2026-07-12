@@ -14,7 +14,7 @@ use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 const BUNDLE_SCHEMA: &str = "speccompanion.evidence-bundle.v1";
-const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v3";
+const TRUST_POLICY_SCHEMA: &str = "speccompanion.signer-trust-policy.v4";
 const MAX_TRUST_POLICY_BYTES: usize = 1_048_576;
 const MAX_TRUST_POLICY_RECORDS: usize = 100;
 const MAX_TRUST_HISTORY_PROOF_EVENTS: usize = 100;
@@ -160,6 +160,10 @@ struct TrustPolicyPayload {
     #[serde(default)]
     source_history_event_count: usize,
     #[serde(default)]
+    proof_base_head_digest: String,
+    #[serde(default)]
+    proof_base_event_count: usize,
+    #[serde(default)]
     history_proof: Vec<PortableTrustHistoryEvent>,
     policies: Vec<PortableSignerPolicy>,
 }
@@ -187,6 +191,8 @@ pub struct TrustPolicyVerification {
     pub payload_sha256: Option<String>,
     pub source_history_head_digest: Option<String>,
     pub source_history_event_count: usize,
+    pub proof_base_head_digest: Option<String>,
+    pub proof_base_event_count: usize,
     pub anchor_status: String,
     pub witnessed_history_head_digest: Option<String>,
     pub witnessed_history_event_count: Option<usize>,
@@ -737,17 +743,11 @@ pub fn export_signer_trust_policy(
     let history_head = history.head_digest.ok_or_else(|| {
         AppError::InvalidInput("Trust policy export requires at least one history event".into())
     })?;
-    if history.event_count > MAX_TRUST_HISTORY_PROOF_EVENTS {
-        return Err(AppError::InvalidInput(format!(
-            "Trust policy export requires a bounded ancestry proof; {} events exceed the {} event limit",
-            history.event_count, MAX_TRUST_HISTORY_PROOF_EVENTS
-        )));
-    }
     let mut history_stmt = conn.prepare(
         "SELECT id, key_fingerprint, signer_identity, status, provenance, recorded_at, previous_digest, event_digest
          FROM signer_trust_history WHERE project_id = ?1 ORDER BY rowid",
     )?;
-    let history_proof = history_stmt
+    let mut history_proof = history_stmt
         .query_map([&project_id], |row| {
             Ok(PortableTrustHistoryEvent {
                 id: row.get(0)?,
@@ -761,6 +761,17 @@ pub fn export_signer_trust_policy(
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
+    let proof_base_event_count = history_proof
+        .len()
+        .saturating_sub(MAX_TRUST_HISTORY_PROOF_EVENTS);
+    let proof_base_head_digest = if proof_base_event_count == 0 {
+        String::new()
+    } else {
+        history_proof[proof_base_event_count - 1]
+            .event_digest
+            .clone()
+    };
+    history_proof.drain(..proof_base_event_count);
     let mut stmt = conn.prepare(
         "SELECT key_fingerprint, signer_identity, status, provenance FROM signer_trust
          WHERE project_id = ?1 ORDER BY key_fingerprint",
@@ -788,6 +799,8 @@ pub fn export_signer_trust_policy(
             exported_at: Utc::now().to_rfc3339(),
             source_history_head_digest: history_head,
             source_history_event_count: history.event_count,
+            proof_base_head_digest,
+            proof_base_event_count,
             history_proof,
             policies,
         },
@@ -937,17 +950,23 @@ fn assess_trust_anchor(
         "rollback"
     } else if bundle.payload.source_history_event_count == witnessed_count {
         "conflict"
-    } else if witnessed_count > 0
-        && bundle
-            .payload
-            .history_proof
-            .get(witnessed_count - 1)
-            .map(|event| event.event_digest.as_str())
-            == Some(head.as_str())
-    {
-        "forward_proven"
+    } else if witnessed_count < bundle.payload.proof_base_event_count {
+        "checkpoint_gap"
     } else {
-        "fork"
+        let included_head = if witnessed_count == bundle.payload.proof_base_event_count {
+            Some(bundle.payload.proof_base_head_digest.as_str())
+        } else {
+            bundle
+                .payload
+                .history_proof
+                .get(witnessed_count - bundle.payload.proof_base_event_count - 1)
+                .map(|event| event.event_digest.as_str())
+        };
+        if witnessed_count > 0 && included_head == Some(head.as_str()) {
+            "forward_proven"
+        } else {
+            "fork"
+        }
     };
     Ok(AnchorAssessment {
         status: status.into(),
@@ -999,7 +1018,10 @@ pub fn import_signer_trust_policy(
         )));
     }
     let anchor = assess_trust_anchor(&conn, &project_id, &bundle)?;
-    if matches!(anchor.status.as_str(), "rollback" | "conflict" | "fork") {
+    if matches!(
+        anchor.status.as_str(),
+        "rollback" | "conflict" | "fork" | "checkpoint_gap"
+    ) {
         return Err(AppError::InvalidInput(format!(
             "Trust policy recovery refused because the signed anchor is classified as {}",
             anchor.status
@@ -1063,6 +1085,8 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
         payload_sha256: None,
         source_history_head_digest: None,
         source_history_event_count: 0,
+        proof_base_head_digest: None,
+        proof_base_event_count: 0,
         anchor_status: "not_checked".into(),
         witnessed_history_head_digest: None,
         witnessed_history_event_count: None,
@@ -1092,6 +1116,12 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
     result.payload_sha256 = Some(bundle.payload_sha256.clone());
     result.source_history_head_digest = Some(bundle.payload.source_history_head_digest.clone());
     result.source_history_event_count = bundle.payload.source_history_event_count;
+    result.proof_base_head_digest = if bundle.payload.proof_base_head_digest.is_empty() {
+        None
+    } else {
+        Some(bundle.payload.proof_base_head_digest.clone())
+    };
+    result.proof_base_event_count = bundle.payload.proof_base_event_count;
     if bundle.payload.schema != TRUST_POLICY_SCHEMA || bundle.signature_algorithm != "ed25519" {
         result.status = "unsupported".into();
         result
@@ -1212,7 +1242,17 @@ fn verify_trust_policy(bundle_json: &str) -> TrustPolicyVerification {
 fn validate_portable_history_proof(payload: &TrustPolicyPayload) -> bool {
     if payload.history_proof.is_empty()
         || payload.history_proof.len() > MAX_TRUST_HISTORY_PROOF_EVENTS
-        || payload.history_proof.len() != payload.source_history_event_count
+        || payload
+            .proof_base_event_count
+            .checked_add(payload.history_proof.len())
+            != Some(payload.source_history_event_count)
+        || (payload.proof_base_event_count == 0 && !payload.proof_base_head_digest.is_empty())
+        || (payload.proof_base_event_count > 0
+            && (payload.proof_base_head_digest.len() != 64
+                || !payload
+                    .proof_base_head_digest
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit())))
         || payload
             .history_proof
             .last()
@@ -1221,7 +1261,7 @@ fn validate_portable_history_proof(payload: &TrustPolicyPayload) -> bool {
     {
         return false;
     }
-    let mut previous = String::new();
+    let mut previous = payload.proof_base_head_digest.clone();
     for event in &payload.history_proof {
         if event.previous_digest != previous
             || !matches!(event.status.as_str(), "trusted" | "revoked")
@@ -2058,6 +2098,8 @@ mod tests {
             exported_at: "2026-07-12T00:00:00Z".into(),
             source_history_head_digest: export_integrity.head_digest.clone().unwrap(),
             source_history_event_count: export_integrity.event_count,
+            proof_base_head_digest: String::new(),
+            proof_base_event_count: 0,
             history_proof,
             policies: vec![PortableSignerPolicy {
                 key_fingerprint: replacement.clone(),
@@ -2179,6 +2221,16 @@ mod tests {
                 .status,
             "forward_proven"
         );
+        rollback.payload.proof_base_event_count = 6;
+        rollback.payload.proof_base_head_digest = "2".repeat(64);
+        assert_eq!(
+            assess_trust_anchor(&conn, &second.id, &rollback)
+                .unwrap()
+                .status,
+            "checkpoint_gap"
+        );
+        rollback.payload.proof_base_event_count = 0;
+        rollback.payload.proof_base_head_digest.clear();
         rollback.payload.history_proof[verified.source_history_event_count - 1].event_digest =
             "1".repeat(64);
         assert_eq!(
@@ -2199,6 +2251,62 @@ mod tests {
         let oversized_result = verify_trust_policy(&oversized);
         assert_eq!(oversized_result.status, "invalid");
         assert!(oversized_result.diagnostics[0].contains("1 MiB"));
+    }
+
+    #[test]
+    fn compact_history_proof_validates_bounded_suffix_and_rejects_tampered_checkpoint() {
+        let source_project_id = "source-project".to_string();
+        let fingerprint = "a".repeat(64);
+        let mut previous = String::new();
+        let mut events = Vec::new();
+        for index in 0..105 {
+            let id = format!("event-{index}");
+            let recorded_at = format!("2026-07-12T00:{:02}:00Z", index % 60);
+            let event_digest = trust_history_digest(&[
+                &previous,
+                &id,
+                &source_project_id,
+                &fingerprint,
+                "Release",
+                "trusted",
+                "ceremony",
+                &recorded_at,
+            ]);
+            events.push(PortableTrustHistoryEvent {
+                id,
+                key_fingerprint: fingerprint.clone(),
+                signer_identity: "Release".into(),
+                status: "trusted".into(),
+                provenance: "ceremony".into(),
+                recorded_at,
+                previous_digest: previous,
+                event_digest: event_digest.clone(),
+            });
+            previous = event_digest;
+        }
+        let proof_base_event_count = events.len() - MAX_TRUST_HISTORY_PROOF_EVENTS;
+        let proof_base_head_digest = events[proof_base_event_count - 1].event_digest.clone();
+        let history_proof = events.split_off(proof_base_event_count);
+        let mut payload = TrustPolicyPayload {
+            schema: TRUST_POLICY_SCHEMA.into(),
+            source_project_id,
+            source_project_name: "Source".into(),
+            exported_at: "2026-07-12T00:00:00Z".into(),
+            source_history_head_digest: previous,
+            source_history_event_count: 105,
+            proof_base_head_digest,
+            proof_base_event_count,
+            history_proof,
+            policies: vec![PortableSignerPolicy {
+                key_fingerprint: fingerprint,
+                signer_identity: "Release".into(),
+                status: "trusted".into(),
+                provenance: "ceremony".into(),
+            }],
+        };
+        assert!(validate_portable_history_proof(&payload));
+        payload.proof_base_head_digest = "0".repeat(64);
+        assert!(!validate_portable_history_proof(&payload));
     }
 
     #[test]

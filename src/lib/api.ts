@@ -663,7 +663,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         );
         return {
           status: "valid_untrusted",
-          schema: "speccompanion.signer-trust-policy.v2",
+          schema: "speccompanion.signer-trust-policy.v4",
           signer_identity: "Preview recovery signer",
           key_fingerprint: "c".repeat(64),
           source_project_name: "Preview source project",
@@ -671,6 +671,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           payload_sha256: "e".repeat(64),
           source_history_head_digest: "f".repeat(64),
           source_history_event_count: 3,
+          proof_base_event_count: 0,
           anchor_status: existing ? "forward_proven" : "first_seen",
           conflicts: [
             {
@@ -691,6 +692,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         schema: "unknown",
         policy_count: 0,
         source_history_event_count: 0,
+        proof_base_event_count: 0,
         anchor_status: "not_checked",
         conflicts: [],
         diagnostics: ["Malformed trust policy"],

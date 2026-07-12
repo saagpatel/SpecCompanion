@@ -428,6 +428,13 @@ export function Reports() {
                   {verifyTrustPolicy.data.source_history_event_count} decisions.
                 </p>
               )}
+              <p className="break-all">
+                Proof checkpoint:{" "}
+                {verifyTrustPolicy.data.proof_base_event_count === 0
+                  ? "genesis"
+                  : `${verifyTrustPolicy.data.proof_base_head_digest ?? "unknown"} after ${verifyTrustPolicy.data.proof_base_event_count} decisions`}
+                .
+              </p>
               <p>
                 Witnessed-anchor assessment:{" "}
                 <strong>{verifyTrustPolicy.data.anchor_status.replace(/_/g, " ")}</strong>.
@@ -435,6 +442,12 @@ export function Reports() {
               {verifyTrustPolicy.data.anchor_status === "forward_proven" && (
                 <p>
                   The signed digest-chain proof contains the witnessed head at its recorded height.
+                </p>
+              )}
+              {verifyTrustPolicy.data.anchor_status === "checkpoint_gap" && (
+                <p>
+                  Recovery is blocked because the previously witnessed head predates this compact
+                  proof. Import an intermediate signed package that bridges the checkpoint.
                 </p>
               )}
               {(verifyTrustPolicy.data.anchor_status === "rollback" ||
@@ -487,7 +500,7 @@ export function Reports() {
                   disabled={
                     recoveryFingerprint.trim().toLowerCase() !==
                       verifyTrustPolicy.data.key_fingerprint.toLowerCase() ||
-                    ["rollback", "conflict", "fork", "unknown"].includes(
+                    ["rollback", "conflict", "fork", "checkpoint_gap", "unknown"].includes(
                       verifyTrustPolicy.data.anchor_status,
                     ) ||
                     !recoveryProvenance.trim() ||

@@ -155,4 +155,5 @@ export interface AppSettings {
   default_framework: "jest" | "pytest";
   default_mode: "template" | "llm";
   scan_exclusions: string[];
+  python_environment_root: string;
 }

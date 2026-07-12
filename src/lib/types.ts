@@ -223,6 +223,15 @@ export interface SignerTrustHistoryRecord {
   status: "trusted" | "revoked";
   provenance: string;
   recorded_at: string;
+  previous_digest: string;
+  event_digest: string;
+}
+
+export interface SignerTrustHistoryIntegrity {
+  status: "verified" | "invalid" | "unknown";
+  event_count: number;
+  head_digest?: string;
+  diagnostics: string[];
 }
 
 export interface TrustPolicyVerification {

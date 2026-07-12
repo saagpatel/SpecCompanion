@@ -15,6 +15,7 @@ import type {
   SigningIdentityInfo,
   SignerTrustRecord,
   SignerTrustHistoryRecord,
+  SignerTrustHistoryIntegrity,
   TrustPolicyVerification,
   AppSettings,
   EvidenceRecord,
@@ -582,6 +583,17 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       return mockState.signerTrustHistory.filter(
         (item) => item.project_id === args.project_id,
       ) as T;
+    case "get_signer_trust_history_integrity":
+      return {
+        status: "verified",
+        event_count: mockState.signerTrustHistory.filter(
+          (item) => item.project_id === args.project_id,
+        ).length,
+        head_digest: mockState.signerTrustHistory.find(
+          (item) => item.project_id === args.project_id,
+        )?.event_digest,
+        diagnostics: [],
+      } as T;
     case "set_signer_trust": {
       const record: SignerTrustRecord = {
         project_id: String(args.project_id),
@@ -600,6 +612,8 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         ...record,
         id: nextId("trust"),
         recorded_at: record.updated_at,
+        previous_digest: "",
+        event_digest: "preview-digest",
       });
       return record as T;
     }
@@ -634,6 +648,8 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           ...record,
           id: nextId("trust"),
           recorded_at: timestamp,
+          previous_digest: "preview-digest",
+          event_digest: `preview-digest-${record.key_fingerprint}`,
         });
       }
       return updates as T;
@@ -694,6 +710,8 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         ...recovered,
         id: nextId("trust"),
         recorded_at: recovered.updated_at,
+        previous_digest: "preview-digest",
+        event_digest: "preview-recovery-digest",
       });
       return [recovered] as T;
     }
@@ -822,6 +840,11 @@ export const listSignerTrust = (projectId: string) =>
 
 export const listSignerTrustHistory = (projectId: string) =>
   invoke<SignerTrustHistoryRecord[]>("list_signer_trust_history", { project_id: projectId });
+
+export const getSignerTrustHistoryIntegrity = (projectId: string) =>
+  invoke<SignerTrustHistoryIntegrity>("get_signer_trust_history_integrity", {
+    project_id: projectId,
+  });
 
 export const rotateSignerTrust = (
   projectId: string,

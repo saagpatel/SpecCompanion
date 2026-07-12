@@ -1,6 +1,7 @@
 use rusqlite::Connection;
+use sha2::{Digest, Sha256};
 
-const CURRENT_VERSION: i32 = 5;
+const CURRENT_VERSION: i32 = 6;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -34,6 +35,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 5 {
             migrate_v5(&tx)?;
         }
+        if version < 6 {
+            migrate_v6(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -43,6 +47,83 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+fn migrate_v6(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "ALTER TABLE signer_trust_history ADD COLUMN previous_digest TEXT NOT NULL DEFAULT '';
+         ALTER TABLE signer_trust_history ADD COLUMN event_digest TEXT NOT NULL DEFAULT '';",
+    )?;
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at
+         FROM signer_trust_history ORDER BY project_id, rowid",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(stmt);
+    let mut project = String::new();
+    let mut previous = String::new();
+    for (id, project_id, fingerprint, identity, status, provenance, recorded_at) in rows {
+        if project != project_id {
+            project.clone_from(&project_id);
+            previous.clear();
+        }
+        let digest = history_digest(
+            &previous,
+            &id,
+            &project_id,
+            &fingerprint,
+            &identity,
+            &status,
+            &provenance,
+            &recorded_at,
+        );
+        conn.execute(
+            "UPDATE signer_trust_history SET previous_digest = ?2, event_digest = ?3 WHERE id = ?1",
+            rusqlite::params![id, previous, digest],
+        )?;
+        previous = digest;
+    }
+    Ok(())
+}
+
+fn history_digest(
+    previous: &str,
+    id: &str,
+    project: &str,
+    fingerprint: &str,
+    identity: &str,
+    status: &str,
+    provenance: &str,
+    recorded_at: &str,
+) -> String {
+    let fields = [
+        previous,
+        id,
+        project,
+        fingerprint,
+        identity,
+        status,
+        provenance,
+        recorded_at,
+    ];
+    let mut hasher = Sha256::new();
+    for field in fields {
+        hasher.update((field.len() as u64).to_be_bytes());
+        hasher.update(field.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
 }
 
 fn migrate_v5(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -231,7 +312,7 @@ mod tests {
             .expect("execution provenance digest");
         conn.prepare("SELECT status, provenance FROM signer_trust")
             .expect("signer trust policy");
-        conn.prepare("SELECT recorded_at FROM signer_trust_history")
+        conn.prepare("SELECT recorded_at, previous_digest, event_digest FROM signer_trust_history")
             .expect("signer trust history");
     }
 

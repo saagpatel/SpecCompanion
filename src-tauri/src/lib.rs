@@ -64,6 +64,7 @@ pub fn run() {
             commands::report::set_signer_trust,
             commands::report::list_signer_trust,
             commands::report::list_signer_trust_history,
+            commands::report::get_signer_trust_history_integrity,
             commands::report::rotate_signer_trust,
             commands::report::export_signer_trust_policy,
             commands::report::verify_signer_trust_policy,

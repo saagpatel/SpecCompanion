@@ -1,5 +1,56 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct ExecutionPolicyObservation {
+    pub test_id: String,
+    pub framework: String,
+    pub controls: crate::models::test::ExecutionControls,
+    pub missing_controls: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VerificationPolicyStatus {
+    Satisfied,
+    Insufficient,
+    NotApplicable,
+    NotEvaluated,
+}
+
+impl VerificationPolicyStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Satisfied => "satisfied",
+            Self::Insufficient => "insufficient",
+            Self::NotApplicable => "not_applicable",
+            Self::NotEvaluated => "not_evaluated",
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct VerificationPolicyEvidence {
+    pub policy_id: String,
+    pub status: VerificationPolicyStatus,
+    pub required_controls: Vec<String>,
+    pub observations: Vec<ExecutionPolicyObservation>,
+    pub missing_controls: Vec<String>,
+    pub summary: String,
+}
+
+impl Default for VerificationPolicyEvidence {
+    fn default() -> Self {
+        Self {
+            policy_id: "not_evaluated".into(),
+            status: VerificationPolicyStatus::NotEvaluated,
+            required_controls: Vec::new(),
+            observations: Vec::new(),
+            missing_controls: Vec::new(),
+            summary: "This stored report predates structured verification-policy evidence".into(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AlignmentReport {
     pub id: String,
@@ -109,6 +160,8 @@ pub struct RequirementAlignment {
     pub source_line_start: i64,
     pub source_line_end: i64,
     pub summary: String,
+    #[serde(default)]
+    pub verification_policy: VerificationPolicyEvidence,
     pub evidence: Vec<EvidenceRecord>,
 }
 
@@ -117,4 +170,32 @@ pub struct AlignmentReportWithEvidence {
     #[serde(flatten)]
     pub report: AlignmentReport,
     pub alignments: Vec<RequirementAlignment>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_alignment_without_policy_is_honestly_not_evaluated() {
+        let alignment: RequirementAlignment = serde_json::from_value(serde_json::json!({
+            "requirement_id": "req-1",
+            "classification": "UNKNOWN",
+            "reason": "evidence_unavailable",
+            "description": "Legacy requirement",
+            "section": "Requirements",
+            "source_line_start": 2,
+            "source_line_end": 2,
+            "summary": "Legacy report",
+            "evidence": []
+        }))
+        .expect("legacy alignment");
+
+        assert_eq!(
+            alignment.verification_policy.status,
+            VerificationPolicyStatus::NotEvaluated
+        );
+        assert!(alignment.verification_policy.observations.is_empty());
+        assert!(alignment.verification_policy.missing_controls.is_empty());
+    }
 }

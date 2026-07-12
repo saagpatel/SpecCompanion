@@ -475,6 +475,21 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
               : generated
                 ? "A test ran, but its placeholder assertion is not evidence."
                 : "Browser preview cannot scan the selected local project.",
+          verification_policy: {
+            policy_id: "python_isolated_execution_v1",
+            status: "not_evaluated" as const,
+            required_controls: [
+              "profile=macos_isolated",
+              "timeout=applied",
+              "output_limit=applied",
+              "process_tree_kill=applied",
+              "network=denied",
+              "filesystem_write=denied_except:<temporary-directory>",
+            ],
+            observations: [],
+            missing_controls: [],
+            summary: "Browser preview cannot evaluate native execution enforcement.",
+          },
           evidence,
         };
       });

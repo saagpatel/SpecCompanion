@@ -2,7 +2,8 @@ use crate::db::queries;
 use crate::errors::AppError;
 use crate::models::report::{
     AlignmentClassification, AlignmentReason, AlignmentReport, AlignmentReportWithEvidence,
-    EvidenceKind, EvidenceRecord, RequirementAlignment,
+    EvidenceKind, EvidenceRecord, ExecutionPolicyObservation, RequirementAlignment,
+    VerificationPolicyEvidence, VerificationPolicyStatus,
 };
 use crate::models::spec::Requirement;
 use crate::services::evidence::{
@@ -137,6 +138,7 @@ fn classify_requirement(
     let mut has_timeout = false;
     let mut has_runtime_unavailable = false;
     let mut has_linked_test = !tests.is_empty();
+    let mut policy_observations = Vec::new();
 
     for test in &tests {
         let explicitly_linked = test.generation_mode == "repository_link";
@@ -211,6 +213,16 @@ fn classify_requirement(
         });
 
         if let Some(result) = queries::get_latest_test_result_for_test(conn, &test.id)? {
+            if quality_status == "meaningful"
+                && matches!(test.framework.as_str(), "pytest" | "unittest")
+            {
+                policy_observations.push(ExecutionPolicyObservation {
+                    test_id: test.id.clone(),
+                    framework: test.framework.clone(),
+                    missing_controls: missing_enforcement_controls(&result.execution_controls),
+                    controls: result.execution_controls.clone(),
+                });
+            }
             match result.status.as_str() {
                 "passed" if quality_status == "meaningful" => {
                     if enforcement_sufficient(&test.framework, &result.execution_controls) {
@@ -405,6 +417,7 @@ fn classify_requirement(
 
     evidence_records
         .sort_by(|left, right| (&left.kind_rank(), &left.id).cmp(&(&right.kind_rank(), &right.id)));
+    let verification_policy = verification_policy_evidence(policy_observations);
     Ok(RequirementAlignment {
         requirement_id: requirement.id.clone(),
         classification,
@@ -414,8 +427,86 @@ fn classify_requirement(
         source_line_start: requirement.source_line_start,
         source_line_end: requirement.source_line_end,
         summary,
+        verification_policy,
         evidence: evidence_records,
     })
+}
+
+const PYTHON_REQUIRED_CONTROLS: [&str; 6] = [
+    "profile=macos_isolated",
+    "timeout=applied",
+    "output_limit=applied",
+    "process_tree_kill=applied",
+    "network=denied",
+    "filesystem_write=denied_except:<temporary-directory>",
+];
+
+fn missing_enforcement_controls(controls: &crate::models::test::ExecutionControls) -> Vec<String> {
+    let mut missing = Vec::new();
+    if controls.profile != "macos_isolated" {
+        missing.push("profile".into());
+    }
+    if controls.timeout != "applied" {
+        missing.push("timeout".into());
+    }
+    if controls.output_limit != "applied" {
+        missing.push("output_limit".into());
+    }
+    if controls.process_tree_kill != "applied" {
+        missing.push("process_tree_kill".into());
+    }
+    if controls.network != "denied" {
+        missing.push("network".into());
+    }
+    if !controls.filesystem_write.starts_with("denied_except:") {
+        missing.push("filesystem_write".into());
+    }
+    missing
+}
+
+fn verification_policy_evidence(
+    observations: Vec<ExecutionPolicyObservation>,
+) -> VerificationPolicyEvidence {
+    if observations.is_empty() {
+        return VerificationPolicyEvidence {
+            policy_id: "python_isolated_execution_v1".into(),
+            status: VerificationPolicyStatus::NotApplicable,
+            required_controls: PYTHON_REQUIRED_CONTROLS
+                .iter()
+                .map(|value| (*value).into())
+                .collect(),
+            observations,
+            missing_controls: Vec::new(),
+            summary: "No meaningful executed Python evidence required this enforcement policy"
+                .into(),
+        };
+    }
+    let mut missing: Vec<String> = observations
+        .iter()
+        .flat_map(|observation| observation.missing_controls.clone())
+        .collect();
+    missing.sort();
+    missing.dedup();
+    let sufficient = missing.is_empty();
+    VerificationPolicyEvidence {
+        policy_id: "python_isolated_execution_v1".into(),
+        status: if sufficient {
+            VerificationPolicyStatus::Satisfied
+        } else {
+            VerificationPolicyStatus::Insufficient
+        },
+        required_controls: PYTHON_REQUIRED_CONTROLS
+            .iter()
+            .map(|value| (*value).into())
+            .collect(),
+        observations,
+        missing_controls: missing.clone(),
+        summary: if sufficient {
+            "All required Python execution controls were observed".into()
+        } else {
+            format!("Missing or unproven controls: {}", missing.join(", "))
+        },
+    }
 }
 
 fn enforcement_sufficient(
@@ -425,12 +516,7 @@ fn enforcement_sufficient(
     if !matches!(framework, "pytest" | "unittest") {
         return true;
     }
-    controls.profile == "macos_isolated"
-        && controls.timeout == "applied"
-        && controls.output_limit == "applied"
-        && controls.process_tree_kill == "applied"
-        && controls.network == "denied"
-        && controls.filesystem_write.starts_with("denied_except:")
+    missing_enforcement_controls(controls).is_empty()
 }
 
 trait EvidenceRank {
@@ -674,6 +760,14 @@ mod tests {
             report.alignments[0].classification,
             AlignmentClassification::Verified
         );
+        assert_eq!(
+            report.alignments[0].verification_policy.status,
+            VerificationPolicyStatus::Satisfied
+        );
+        assert!(report.alignments[0]
+            .verification_policy
+            .missing_controls
+            .is_empty());
     }
 
     #[test]
@@ -689,6 +783,25 @@ mod tests {
         assert_eq!(
             report.alignments[0].reason,
             AlignmentReason::InsufficientEnforcement
+        );
+        assert_eq!(
+            report.alignments[0].verification_policy.status,
+            VerificationPolicyStatus::Insufficient
+        );
+        assert_eq!(
+            report.alignments[0].verification_policy.missing_controls,
+            vec![
+                "filesystem_write",
+                "network",
+                "output_limit",
+                "process_tree_kill",
+                "profile",
+                "timeout",
+            ]
+        );
+        assert_eq!(
+            report.alignments[0].verification_policy.observations[0].test_id,
+            "test-1"
         );
         assert_eq!(report.report.verified_requirements, 0);
     }

@@ -153,7 +153,24 @@ export interface RequirementAlignment {
   source_line_start: number;
   source_line_end: number;
   summary: string;
+  verification_policy: VerificationPolicyEvidence;
   evidence: EvidenceRecord[];
+}
+
+export interface ExecutionPolicyObservation {
+  test_id: string;
+  framework: string;
+  controls: ExecutionControls;
+  missing_controls: string[];
+}
+
+export interface VerificationPolicyEvidence {
+  policy_id: string;
+  status: "satisfied" | "insufficient" | "not_applicable" | "not_evaluated";
+  required_controls: string[];
+  observations: ExecutionPolicyObservation[];
+  missing_controls: string[];
+  summary: string;
 }
 
 export interface AlignmentReportWithEvidence extends AlignmentReport {

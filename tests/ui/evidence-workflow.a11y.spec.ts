@@ -45,6 +45,11 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
     .getByRole("button", { name: /Show 3/ })
     .first()
     .click();
+  await expect(page.getByRole("heading", { name: "Verification policy" }).first()).toBeVisible();
+  await expect(
+    page.getByText(/browser preview cannot evaluate native execution enforcement/i).first(),
+  ).toBeVisible();
+  await expect(page.getByText(/profile=macos_isolated/i).first()).toBeVisible();
   await expect(page.getByText(/tautology is non-probative/i).first()).toBeVisible();
 
   if (testInfo.project.name === "mobile") {

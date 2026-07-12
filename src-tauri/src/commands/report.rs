@@ -77,16 +77,20 @@ pub fn export_report(
     match format.as_str() {
         "json" => serde_json::to_string_pretty(&report).map_err(AppError::Serde),
         "csv" => {
-            let mut csv =
-                String::from("requirement_id,spec_section,classification,reason,details\n");
+            let mut csv = String::from(
+                "requirement_id,spec_section,classification,reason,details,verification_policy,policy_status,missing_controls\n",
+            );
             for alignment in &report.alignments {
                 csv.push_str(&format!(
-                    "{},{},{},{},{}\n",
+                    "{},{},{},{},{},{},{},{}\n",
                     escape_csv(&alignment.requirement_id),
                     escape_csv(&alignment.section),
                     escape_csv(alignment.classification.as_str()),
                     escape_csv(alignment.reason.as_str()),
                     escape_csv(&alignment.summary),
+                    escape_csv(&alignment.verification_policy.policy_id),
+                    escape_csv(alignment.verification_policy.status.as_str()),
+                    escape_csv(&alignment.verification_policy.missing_controls.join(";")),
                 ));
             }
             Ok(csv)
@@ -116,15 +120,17 @@ th { background: #252538; }
             if report.alignments.is_empty() {
                 html.push_str("<p>No requirements were available to classify.</p>");
             } else {
-                html.push_str("<table><thead><tr><th>Section</th><th>Type</th><th>Details</th></tr></thead><tbody>");
+                html.push_str("<table><thead><tr><th>Section</th><th>Type</th><th>Details</th><th>Verification policy</th></tr></thead><tbody>");
                 for alignment in &report.alignments {
                     let classification = alignment.classification.as_str();
                     html.push_str(&format!(
-                        "<tr><td>{}</td><td><span class=\"badge {}\">{}</span></td><td>{}</td></tr>",
+                        "<tr><td>{}</td><td><span class=\"badge {}\">{}</span></td><td>{}</td><td><strong>{}</strong><br>{}</td></tr>",
                         html_escape(&alignment.section),
                         html_escape(classification),
                         html_escape(classification),
                         html_escape(&alignment.summary),
+                        html_escape(alignment.verification_policy.status.as_str()),
+                        html_escape(&alignment.verification_policy.summary),
                     ));
                 }
                 html.push_str("</tbody></table>");

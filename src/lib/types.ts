@@ -250,7 +250,8 @@ export interface TrustPolicyVerification {
     | "repeated"
     | "rollback"
     | "conflict"
-    | "advanced_unproven"
+    | "forward_proven"
+    | "fork"
     | "unknown";
   witnessed_history_head_digest?: string;
   witnessed_history_event_count?: number;

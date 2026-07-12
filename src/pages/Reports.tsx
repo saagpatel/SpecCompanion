@@ -432,13 +432,14 @@ export function Reports() {
                 Witnessed-anchor assessment:{" "}
                 <strong>{verifyTrustPolicy.data.anchor_status.replace(/_/g, " ")}</strong>.
               </p>
-              {verifyTrustPolicy.data.anchor_status === "advanced_unproven" && (
+              {verifyTrustPolicy.data.anchor_status === "forward_proven" && (
                 <p>
-                  A higher event count is not proof that this head descends from the witnessed head.
+                  The signed digest-chain proof contains the witnessed head at its recorded height.
                 </p>
               )}
               {(verifyTrustPolicy.data.anchor_status === "rollback" ||
-                verifyTrustPolicy.data.anchor_status === "conflict") && (
+                verifyTrustPolicy.data.anchor_status === "conflict" ||
+                verifyTrustPolicy.data.anchor_status === "fork") && (
                 <p>
                   Recovery is blocked because this package contradicts a previously witnessed
                   anchor.
@@ -486,7 +487,7 @@ export function Reports() {
                   disabled={
                     recoveryFingerprint.trim().toLowerCase() !==
                       verifyTrustPolicy.data.key_fingerprint.toLowerCase() ||
-                    ["rollback", "conflict", "unknown"].includes(
+                    ["rollback", "conflict", "fork", "unknown"].includes(
                       verifyTrustPolicy.data.anchor_status,
                     ) ||
                     !recoveryProvenance.trim() ||

@@ -671,7 +671,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           payload_sha256: "e".repeat(64),
           source_history_head_digest: "f".repeat(64),
           source_history_event_count: 3,
-          anchor_status: existing ? "advanced_unproven" : "first_seen",
+          anchor_status: existing ? "forward_proven" : "first_seen",
           conflicts: [
             {
               key_fingerprint: "d".repeat(64),

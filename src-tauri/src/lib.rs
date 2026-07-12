@@ -71,6 +71,7 @@ pub fn run() {
             commands::report::advance_trust_anchor_witness,
             commands::report::list_trust_anchor_advancements,
             commands::report::export_trust_anchor_advancements,
+            commands::report::verify_trust_anchor_advancements,
             commands::report::import_signer_trust_policy,
             // Git
             commands::git::get_repo_info,

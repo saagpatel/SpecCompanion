@@ -174,6 +174,9 @@ export function useAdvanceTrustAnchorWitness(projectId: string) {
       api.advanceTrustAnchorWitness(projectId, bundleJson, fingerprint, payloadSha256, provenance),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trust-anchor-advancements", projectId] });
+      queryClient.invalidateQueries({
+        queryKey: ["trust-anchor-advancement-integrity", projectId],
+      });
     },
   });
 }
@@ -182,6 +185,14 @@ export function useTrustAnchorAdvancements(projectId: string | undefined) {
   return useQuery({
     queryKey: ["trust-anchor-advancements", projectId],
     queryFn: () => api.listTrustAnchorAdvancements(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useTrustAnchorAdvancementIntegrity(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["trust-anchor-advancement-integrity", projectId],
+    queryFn: () => api.verifyTrustAnchorAdvancements(projectId!),
     enabled: !!projectId,
   });
 }

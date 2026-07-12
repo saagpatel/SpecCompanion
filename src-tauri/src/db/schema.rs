@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-const CURRENT_VERSION: i32 = 8;
+const CURRENT_VERSION: i32 = 9;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -44,6 +44,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 8 {
             migrate_v8(&tx)?;
         }
+        if version < 9 {
+            migrate_v9(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -52,6 +55,90 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         tx.commit()?;
     }
 
+    Ok(())
+}
+
+fn advancement_receipt_digest(fields: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    for field in fields {
+        hasher.update((field.len() as u64).to_be_bytes());
+        hasher.update(field.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+fn migrate_v9(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "ALTER TABLE trust_anchor_advancements ADD COLUMN previous_receipt_digest TEXT NOT NULL DEFAULT '';
+         ALTER TABLE trust_anchor_advancements ADD COLUMN receipt_digest TEXT NOT NULL DEFAULT '';",
+    )?;
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, source_project_id, package_signer_fingerprint,
+                previous_head_digest, previous_event_count, advanced_head_digest,
+                advanced_event_count, payload_sha256, provenance, advanced_at
+         FROM trust_anchor_advancements
+         ORDER BY project_id, source_project_id, package_signer_fingerprint,
+                  previous_event_count, advanced_event_count, advanced_at, id",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, String>(8)?,
+                row.get::<_, String>(9)?,
+                row.get::<_, String>(10)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(stmt);
+    let mut scope = (String::new(), String::new(), String::new());
+    let mut previous = String::new();
+    for (
+        id,
+        project,
+        source,
+        signer,
+        old_head,
+        old_count,
+        new_head,
+        new_count,
+        payload,
+        provenance,
+        at,
+    ) in rows
+    {
+        let next_scope = (project.clone(), source.clone(), signer.clone());
+        if next_scope != scope {
+            scope = next_scope;
+            previous.clear();
+        }
+        let digest = advancement_receipt_digest(&[
+            &previous,
+            &id,
+            &project,
+            &source,
+            &signer,
+            &old_head,
+            &old_count.to_string(),
+            &new_head,
+            &new_count.to_string(),
+            &payload,
+            &provenance,
+            &at,
+        ]);
+        conn.execute(
+            "UPDATE trust_anchor_advancements SET previous_receipt_digest = ?1, receipt_digest = ?2 WHERE id = ?3",
+            rusqlite::params![previous, digest, id],
+        )?;
+        previous = digest;
+    }
     Ok(())
 }
 
@@ -359,8 +446,42 @@ mod tests {
             .expect("signer trust history");
         conn.prepare("SELECT history_head_digest, history_event_count FROM trust_anchor_witnesses")
             .expect("trust anchor witness ledger");
-        conn.prepare("SELECT previous_head_digest, advanced_head_digest, provenance FROM trust_anchor_advancements")
+        conn.prepare("SELECT previous_head_digest, advanced_head_digest, provenance, previous_receipt_digest, receipt_digest FROM trust_anchor_advancements")
             .expect("trust anchor advancement receipts");
+    }
+
+    #[test]
+    fn version_eight_upgrade_backfills_advancement_receipt_chain() {
+        let conn = Connection::open_in_memory().expect("database");
+        conn.execute_batch("CREATE TABLE schema_version (version INTEGER NOT NULL); INSERT INTO schema_version VALUES (8);")
+            .expect("version table");
+        for migration in [
+            migrate_v1, migrate_v2, migrate_v3, migrate_v4, migrate_v5, migrate_v6, migrate_v7,
+            migrate_v8,
+        ] {
+            migration(&conn).expect("legacy migration");
+        }
+        conn.execute(
+            "INSERT INTO projects VALUES ('project', 'Project', '/tmp/project', 'now', 'now')",
+            [],
+        )
+        .expect("project");
+        conn.execute(
+            "INSERT INTO trust_anchor_advancements VALUES
+             ('receipt', 'project', 'source', 'signer', 'old', 1, 'new', 2, 'payload', 'verified locally', 'now')",
+            [],
+        )
+        .expect("legacy receipt");
+        run_migrations(&conn).expect("upgrade");
+        let (previous, digest): (String, String) = conn
+            .query_row(
+                "SELECT previous_receipt_digest, receipt_digest FROM trust_anchor_advancements",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("backfilled receipt");
+        assert!(previous.is_empty());
+        assert_eq!(digest.len(), 64);
     }
 
     #[test]

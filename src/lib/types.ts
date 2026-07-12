@@ -97,6 +97,8 @@ export interface TestResult {
 }
 
 export interface ExecutionControls {
+  platform: string;
+  isolation_backend: string;
   profile: string;
   timeout: string;
   output_limit: string;
@@ -166,7 +168,7 @@ export interface ExecutionPolicyObservation {
 
 export interface VerificationPolicyEvidence {
   policy_id: string;
-  status: "satisfied" | "insufficient" | "not_applicable" | "not_evaluated";
+  status: "satisfied" | "insufficient" | "unavailable" | "not_applicable" | "not_evaluated";
   required_controls: string[];
   observations: ExecutionPolicyObservation[];
   missing_controls: string[];

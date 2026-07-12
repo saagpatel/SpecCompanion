@@ -13,6 +13,7 @@ pub struct ExecutionPolicyObservation {
 pub enum VerificationPolicyStatus {
     Satisfied,
     Insufficient,
+    Unavailable,
     NotApplicable,
     NotEvaluated,
 }
@@ -22,6 +23,7 @@ impl VerificationPolicyStatus {
         match self {
             Self::Satisfied => "satisfied",
             Self::Insufficient => "insufficient",
+            Self::Unavailable => "unavailable",
             Self::NotApplicable => "not_applicable",
             Self::NotEvaluated => "not_evaluated",
         }

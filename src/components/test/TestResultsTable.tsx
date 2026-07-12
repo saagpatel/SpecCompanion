@@ -104,7 +104,7 @@ export function TestResultsTable({ results }: Props) {
                       <span className="text-text-muted text-xs font-medium">Applied controls:</span>
                       <p className="text-text-muted mt-1 font-mono text-xs">
                         {result.execution_controls.profile
-                          ? `profile=${result.execution_controls.profile}; network=${result.execution_controls.network}; filesystem_write=${result.execution_controls.filesystem_write}; child_process=${result.execution_controls.child_process}`
+                          ? `platform=${result.execution_controls.platform || "unknown"}; backend=${result.execution_controls.isolation_backend || "unknown"}; profile=${result.execution_controls.profile}; network=${result.execution_controls.network}; filesystem_write=${result.execution_controls.filesystem_write}; child_process=${result.execution_controls.child_process}`
                           : "Control evidence unavailable for this legacy result."}
                       </p>
                     </div>

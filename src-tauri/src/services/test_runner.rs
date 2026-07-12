@@ -313,6 +313,8 @@ fn python_command(
         return Ok((
             command,
             ExecutionControls {
+                platform: std::env::consts::OS.into(),
+                isolation_backend: "none".into(),
                 profile: "bounded".into(),
                 timeout: "applied".into(),
                 output_limit: "applied".into(),
@@ -341,6 +343,8 @@ fn python_command(
             .args(["-p", &policy, python.to_string_lossy().as_ref()])
             .args(args);
         let controls = ExecutionControls {
+            platform: "macos".into(),
+            isolation_backend: "sandbox-exec".into(),
             profile: "macos_isolated".into(),
             timeout: "applied".into(),
             output_limit: "applied".into(),
@@ -939,6 +943,8 @@ mod tests {
         )
         .expect("isolated execution");
         assert_eq!(result.status, "passed", "{}", result.stderr);
+        assert_eq!(result.execution_controls.platform, "macos");
+        assert_eq!(result.execution_controls.isolation_backend, "sandbox-exec");
         assert_eq!(result.execution_controls.network, "denied");
         assert_eq!(result.execution_controls.child_process, "not_enforced");
         assert!(!fixture.root.join("escape.txt").exists());

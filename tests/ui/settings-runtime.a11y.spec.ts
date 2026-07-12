@@ -15,6 +15,8 @@ test("@a11y Python runtime trust is project-scoped, explicit, and explained", as
   await expect(page.getByText(/never installs packages/i)).toBeVisible();
   await expect(page.getByText(/scoped to this project/i)).toBeVisible();
   await expect(page.getByText(/package inventory changes/i)).toBeVisible();
+  await expect(page.getByText(/platform-bound isolation receipt/i)).toBeVisible();
+  await expect(page.getByText(/only macOS sandbox-exec is recognized/i)).toBeVisible();
 
   await runtime.fill("/Users/example/.virtualenvs/requirements");
   await runtime.press("Tab");

@@ -92,6 +92,10 @@ export function TestExecution() {
               is scoped to this project and execution stops as UNKNOWN if the interpreter or package
               inventory changes.
             </p>
+            <p className="text-text-muted mt-1 text-xs">
+              VERIFIED also requires a platform-bound isolation receipt. Today, only macOS
+              sandbox-exec is recognized; bounded or unavailable platform policies remain PARTIAL.
+            </p>
           </div>
           {runtime.data?.configured && (
             <span

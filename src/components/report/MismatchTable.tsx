@@ -118,7 +118,9 @@ export function EvidenceTable({ alignments }: Props) {
                         )}
                         {alignment.verification_policy.observations.map((observation) => (
                           <p key={observation.test_id} className="text-text-muted mt-2 text-xs">
-                            Observed for {observation.test_id}: profile=
+                            Observed for {observation.test_id}: platform=
+                            {observation.controls.platform || "unknown"}, backend=
+                            {observation.controls.isolation_backend || "unknown"}, profile=
                             {observation.controls.profile}, network={observation.controls.network},
                             filesystem_write=
                             {observation.controls.filesystem_write}, timeout=

@@ -200,6 +200,18 @@ pub struct TrustPolicyVerification {
     pub diagnostics: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct TrustAnchorAdvancement {
+    pub id: String,
+    pub previous_head_digest: String,
+    pub previous_event_count: usize,
+    pub advanced_head_digest: String,
+    pub advanced_event_count: usize,
+    pub payload_sha256: String,
+    pub provenance: String,
+    pub advanced_at: String,
+}
+
 struct AnchorAssessment {
     status: String,
     witnessed_head: Option<String>,
@@ -1038,6 +1050,124 @@ pub fn import_signer_trust_policy(
         bundle.payload.source_history_event_count,
         recovery_provenance.trim(),
     )
+}
+
+#[tauri::command]
+pub fn advance_trust_anchor_witness(
+    state: State<'_, Database>,
+    project_id: String,
+    bundle_json: String,
+    expected_signer_fingerprint: String,
+    expected_payload_sha256: String,
+    provenance: String,
+) -> Result<TrustAnchorAdvancement, AppError> {
+    let verification = verify_trust_policy(&bundle_json);
+    if verification.status != "valid_untrusted" {
+        return Err(AppError::InvalidInput(
+            "Checkpoint package signature or payload is invalid".into(),
+        ));
+    }
+    let fingerprint = verification.key_fingerprint.ok_or_else(|| {
+        AppError::InvalidInput("Checkpoint package signer fingerprint is unavailable".into())
+    })?;
+    let payload_sha256 = verification.payload_sha256.ok_or_else(|| {
+        AppError::InvalidInput("Checkpoint package payload digest is unavailable".into())
+    })?;
+    if !fingerprint.eq_ignore_ascii_case(expected_signer_fingerprint.trim())
+        || payload_sha256 != expected_payload_sha256.trim()
+        || provenance.trim().is_empty()
+    {
+        return Err(AppError::InvalidInput(
+            "Checkpoint confirmation does not match the verified package".into(),
+        ));
+    }
+    let bundle: SignedTrustPolicyBundle = serde_json::from_str(&bundle_json)?;
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    let integrity = verify_trust_history_integrity(&conn, &project_id);
+    if integrity.status != "verified" {
+        return Err(AppError::InvalidInput(format!(
+            "Checkpoint advancement refused because destination history integrity is {}",
+            integrity.status
+        )));
+    }
+    advance_verified_trust_anchor(&conn, &project_id, &bundle, provenance.trim())
+}
+
+fn advance_verified_trust_anchor(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    bundle: &SignedTrustPolicyBundle,
+    provenance: &str,
+) -> Result<TrustAnchorAdvancement, AppError> {
+    if provenance.trim().is_empty() {
+        return Err(AppError::InvalidInput(
+            "Checkpoint verification provenance is required".into(),
+        ));
+    }
+    let anchor = assess_trust_anchor(conn, project_id, bundle)?;
+    if anchor.status != "forward_proven" {
+        return Err(AppError::InvalidInput(format!(
+            "Checkpoint advancement requires forward_proven ancestry; package is {}",
+            anchor.status
+        )));
+    }
+    let previous_head_digest = anchor
+        .witnessed_head
+        .ok_or_else(|| AppError::InvalidInput("A prior witnessed anchor is required".into()))?;
+    let previous_event_count = anchor
+        .witnessed_count
+        .ok_or_else(|| AppError::InvalidInput("A prior witnessed height is required".into()))?;
+    let advanced_at = Utc::now().to_rfc3339();
+    let advancement = TrustAnchorAdvancement {
+        id: Uuid::new_v4().to_string(),
+        previous_head_digest,
+        previous_event_count,
+        advanced_head_digest: bundle.payload.source_history_head_digest.clone(),
+        advanced_event_count: bundle.payload.source_history_event_count,
+        payload_sha256: bundle.payload_sha256.clone(),
+        provenance: provenance.trim().into(),
+        advanced_at,
+    };
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "INSERT INTO trust_anchor_advancements
+         (id, project_id, source_project_id, package_signer_fingerprint, previous_head_digest,
+          previous_event_count, advanced_head_digest, advanced_event_count, payload_sha256, provenance, advanced_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        rusqlite::params![
+            advancement.id,
+            project_id,
+            bundle.payload.source_project_id,
+            bundle.key_fingerprint,
+            advancement.previous_head_digest,
+            advancement.previous_event_count as i64,
+            advancement.advanced_head_digest,
+            advancement.advanced_event_count as i64,
+            advancement.payload_sha256,
+            advancement.provenance,
+            advancement.advanced_at,
+        ],
+    )?;
+    tx.execute(
+        "UPDATE trust_anchor_witnesses SET history_head_digest = ?1, history_event_count = ?2,
+          payload_sha256 = ?3, witnessed_at = ?4
+         WHERE project_id = ?5 AND source_project_id = ?6 AND package_signer_fingerprint = ?7",
+        rusqlite::params![
+            advancement.advanced_head_digest,
+            advancement.advanced_event_count as i64,
+            advancement.payload_sha256,
+            advancement.advanced_at,
+            project_id,
+            bundle.payload.source_project_id,
+            bundle.key_fingerprint,
+        ],
+    )?;
+    tx.commit()?;
+    Ok(advancement)
 }
 
 fn load_signing_key(identity: &str) -> Result<SigningKey, AppError> {
@@ -2229,8 +2359,21 @@ mod tests {
                 .status,
             "checkpoint_gap"
         );
+        assert!(advance_verified_trust_anchor(
+            &conn,
+            &second.id,
+            &rollback,
+            "must not skip checkpoint"
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("requires forward_proven"));
         rollback.payload.proof_base_event_count = 0;
         rollback.payload.proof_base_head_digest.clear();
+        let included_witness = rollback.payload.history_proof
+            [verified.source_history_event_count - 1]
+            .event_digest
+            .clone();
         rollback.payload.history_proof[verified.source_history_event_count - 1].event_digest =
             "1".repeat(64);
         assert_eq!(
@@ -2239,6 +2382,28 @@ mod tests {
                 .status,
             "fork"
         );
+        rollback.payload.history_proof[verified.source_history_event_count - 1].event_digest =
+            included_witness;
+        let advancement =
+            advance_verified_trust_anchor(&conn, &second.id, &rollback, "bridge package SEC-43")
+                .unwrap();
+        assert_eq!(advancement.previous_event_count, 5);
+        assert_eq!(advancement.advanced_event_count, 6);
+        assert_eq!(
+            assess_trust_anchor(&conn, &second.id, &rollback)
+                .unwrap()
+                .status,
+            "repeated"
+        );
+        let receipt: (i64, i64, String) = conn
+            .query_row(
+                "SELECT previous_event_count, advanced_event_count, provenance
+                 FROM trust_anchor_advancements WHERE id = ?1",
+                [&advancement.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(receipt, (5, 6, "bridge package SEC-43".into()));
         let replacement_preview =
             preview_trust_policy(&conn, &second.id, &[recovery_policy]).unwrap();
         assert_eq!(replacement_preview[0].action, "replace");

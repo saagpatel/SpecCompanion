@@ -157,6 +157,23 @@ export function useImportSignerTrustPolicy(projectId: string) {
   });
 }
 
+export function useAdvanceTrustAnchorWitness(projectId: string) {
+  return useMutation({
+    mutationFn: ({
+      bundleJson,
+      fingerprint,
+      payloadSha256,
+      provenance,
+    }: {
+      bundleJson: string;
+      fingerprint: string;
+      payloadSha256: string;
+      provenance: string;
+    }) =>
+      api.advanceTrustAnchorWitness(projectId, bundleJson, fingerprint, payloadSha256, provenance),
+  });
+}
+
 export function useCreateSigningIdentity() {
   return useMutation({ mutationFn: (identity: string) => api.createSigningIdentity(identity) });
 }

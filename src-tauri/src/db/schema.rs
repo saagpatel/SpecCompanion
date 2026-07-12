@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-const CURRENT_VERSION: i32 = 7;
+const CURRENT_VERSION: i32 = 8;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -41,6 +41,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 7 {
             migrate_v7(&tx)?;
         }
+        if version < 8 {
+            migrate_v8(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -50,6 +53,27 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+fn migrate_v8(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE trust_anchor_advancements (
+            id TEXT PRIMARY KEY NOT NULL,
+            project_id TEXT NOT NULL,
+            source_project_id TEXT NOT NULL,
+            package_signer_fingerprint TEXT NOT NULL,
+            previous_head_digest TEXT NOT NULL,
+            previous_event_count INTEGER NOT NULL,
+            advanced_head_digest TEXT NOT NULL,
+            advanced_event_count INTEGER NOT NULL,
+            payload_sha256 TEXT NOT NULL,
+            provenance TEXT NOT NULL,
+            advanced_at TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_trust_anchor_advancements_scope
+          ON trust_anchor_advancements(project_id, source_project_id, package_signer_fingerprint, advanced_at);",
+    )
 }
 
 fn migrate_v7(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -335,6 +359,8 @@ mod tests {
             .expect("signer trust history");
         conn.prepare("SELECT history_head_digest, history_event_count FROM trust_anchor_witnesses")
             .expect("trust anchor witness ledger");
+        conn.prepare("SELECT previous_head_digest, advanced_head_digest, provenance FROM trust_anchor_advancements")
+            .expect("trust anchor advancement receipts");
     }
 
     #[test]

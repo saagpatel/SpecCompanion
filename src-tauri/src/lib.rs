@@ -68,6 +68,7 @@ pub fn run() {
             commands::report::rotate_signer_trust,
             commands::report::export_signer_trust_policy,
             commands::report::verify_signer_trust_policy,
+            commands::report::advance_trust_anchor_witness,
             commands::report::import_signer_trust_policy,
             // Git
             commands::git::get_repo_info,

@@ -158,6 +158,7 @@ export function useImportSignerTrustPolicy(projectId: string) {
 }
 
 export function useAdvanceTrustAnchorWitness(projectId: string) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       bundleJson,
@@ -171,6 +172,23 @@ export function useAdvanceTrustAnchorWitness(projectId: string) {
       provenance: string;
     }) =>
       api.advanceTrustAnchorWitness(projectId, bundleJson, fingerprint, payloadSha256, provenance),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trust-anchor-advancements", projectId] });
+    },
+  });
+}
+
+export function useTrustAnchorAdvancements(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["trust-anchor-advancements", projectId],
+    queryFn: () => api.listTrustAnchorAdvancements(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useExportTrustAnchorAdvancements() {
+  return useMutation({
+    mutationFn: (projectId: string) => api.exportTrustAnchorAdvancements(projectId),
   });
 }
 

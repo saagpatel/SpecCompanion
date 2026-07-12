@@ -270,6 +270,9 @@ export interface TrustPolicyVerification {
 
 export interface TrustAnchorAdvancement {
   id: string;
+  project_id: string;
+  source_project_id: string;
+  package_signer_fingerprint: string;
   previous_head_digest: string;
   previous_event_count: number;
   advanced_head_digest: string;

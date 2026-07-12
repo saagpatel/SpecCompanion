@@ -203,6 +203,9 @@ pub struct TrustPolicyVerification {
 #[derive(Debug, Serialize)]
 pub struct TrustAnchorAdvancement {
     pub id: String,
+    pub project_id: String,
+    pub source_project_id: String,
+    pub package_signer_fingerprint: String,
     pub previous_head_digest: String,
     pub previous_event_count: usize,
     pub advanced_head_digest: String,
@@ -210,6 +213,15 @@ pub struct TrustAnchorAdvancement {
     pub payload_sha256: String,
     pub provenance: String,
     pub advanced_at: String,
+}
+
+#[derive(Serialize)]
+struct TrustAnchorAdvancementExport {
+    schema: String,
+    project_id: String,
+    receipt_count: usize,
+    signature_status: String,
+    receipts: Vec<TrustAnchorAdvancement>,
 }
 
 struct AnchorAssessment {
@@ -1124,6 +1136,9 @@ fn advance_verified_trust_anchor(
     let advanced_at = Utc::now().to_rfc3339();
     let advancement = TrustAnchorAdvancement {
         id: Uuid::new_v4().to_string(),
+        project_id: project_id.into(),
+        source_project_id: bundle.payload.source_project_id.clone(),
+        package_signer_fingerprint: bundle.key_fingerprint.clone(),
         previous_head_digest,
         previous_event_count,
         advanced_head_digest: bundle.payload.source_history_head_digest.clone(),
@@ -1168,6 +1183,84 @@ fn advance_verified_trust_anchor(
     )?;
     tx.commit()?;
     Ok(advancement)
+}
+
+#[tauri::command]
+pub fn list_trust_anchor_advancements(
+    state: State<'_, Database>,
+    project_id: String,
+) -> Result<Vec<TrustAnchorAdvancement>, AppError> {
+    if project_id.trim().is_empty() {
+        return Err(AppError::InvalidInput("Project ID is required".into()));
+    }
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    list_trust_anchor_advancement_receipts(&conn, &project_id)
+}
+
+#[tauri::command]
+pub fn export_trust_anchor_advancements(
+    state: State<'_, Database>,
+    project_id: String,
+) -> Result<String, AppError> {
+    if project_id.trim().is_empty() {
+        return Err(AppError::InvalidInput("Project ID is required".into()));
+    }
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    export_trust_anchor_advancement_receipts(&conn, &project_id)
+}
+
+fn export_trust_anchor_advancement_receipts(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<String, AppError> {
+    let receipts = list_trust_anchor_advancement_receipts(conn, project_id)?;
+    serde_json::to_string_pretty(&TrustAnchorAdvancementExport {
+        schema: "speccompanion.trust-anchor-advancements.v1".into(),
+        project_id: project_id.into(),
+        receipt_count: receipts.len(),
+        signature_status: "unsigned_local_receipts".into(),
+        receipts,
+    })
+    .map_err(AppError::Serde)
+}
+
+fn list_trust_anchor_advancement_receipts(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<Vec<TrustAnchorAdvancement>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, source_project_id, package_signer_fingerprint,
+                previous_head_digest, previous_event_count, advanced_head_digest,
+                advanced_event_count, payload_sha256, provenance, advanced_at
+         FROM trust_anchor_advancements WHERE project_id = ?1
+         ORDER BY source_project_id, package_signer_fingerprint, previous_event_count,
+                  advanced_event_count, advanced_at, id",
+    )?;
+    let receipts = stmt.query_map([project_id], |row| {
+        Ok(TrustAnchorAdvancement {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            source_project_id: row.get(2)?,
+            package_signer_fingerprint: row.get(3)?,
+            previous_head_digest: row.get(4)?,
+            previous_event_count: usize::try_from(row.get::<_, i64>(5)?).unwrap_or(usize::MAX),
+            advanced_head_digest: row.get(6)?,
+            advanced_event_count: usize::try_from(row.get::<_, i64>(7)?).unwrap_or(usize::MAX),
+            payload_sha256: row.get(8)?,
+            provenance: row.get(9)?,
+            advanced_at: row.get(10)?,
+        })
+    })?
+    .collect::<Result<Vec<_>, _>>()?;
+    Ok(receipts)
 }
 
 fn load_signing_key(identity: &str) -> Result<SigningKey, AppError> {
@@ -2404,6 +2497,13 @@ mod tests {
             )
             .unwrap();
         assert_eq!(receipt, (5, 6, "bridge package SEC-43".into()));
+        let listed = list_trust_anchor_advancement_receipts(&conn, &second.id).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].package_signer_fingerprint, recovery_fingerprint);
+        let first_export = export_trust_anchor_advancement_receipts(&conn, &second.id).unwrap();
+        let second_export = export_trust_anchor_advancement_receipts(&conn, &second.id).unwrap();
+        assert_eq!(first_export, second_export);
+        assert!(first_export.contains("unsigned_local_receipts"));
         let replacement_preview =
             preview_trust_policy(&conn, &second.id, &[recovery_policy]).unwrap();
         assert_eq!(replacement_preview[0].action, "replace");

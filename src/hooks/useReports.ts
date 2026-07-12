@@ -43,3 +43,14 @@ export function useExportReport() {
 export function useVerifyEvidenceBundle() {
   return useMutation({ mutationFn: (bundleJson: string) => api.verifyEvidenceBundle(bundleJson) });
 }
+
+export function useCreateSigningIdentity() {
+  return useMutation({ mutationFn: (identity: string) => api.createSigningIdentity(identity) });
+}
+
+export function useExportSignedEvidenceBundle() {
+  return useMutation({
+    mutationFn: ({ reportId, identity }: { reportId: string; identity: string }) =>
+      api.exportSignedEvidenceBundle(reportId, identity),
+  });
+}

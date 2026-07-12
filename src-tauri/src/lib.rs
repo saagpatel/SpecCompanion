@@ -59,6 +59,8 @@ pub fn run() {
             commands::report::list_reports,
             commands::report::export_report,
             commands::report::verify_evidence_bundle,
+            commands::report::create_signing_identity,
+            commands::report::export_signed_evidence_bundle,
             // Git
             commands::git::get_repo_info,
             commands::git::get_changed_files,

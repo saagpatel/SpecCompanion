@@ -12,6 +12,7 @@ import {
   useSetSignerTrust,
   useSignerTrust,
   useSignerTrustHistory,
+  useSignerTrustHistoryIntegrity,
   useRotateSignerTrust,
   useExportSignerTrustPolicy,
   useVerifySignerTrustPolicy,
@@ -35,6 +36,7 @@ export function Reports() {
   const signerTrust = useSetSignerTrust(projectId ?? "");
   const trustPolicies = useSignerTrust(projectId);
   const trustHistory = useSignerTrustHistory(projectId);
+  const trustHistoryIntegrity = useSignerTrustHistoryIntegrity(projectId);
   const rotateTrust = useRotateSignerTrust(projectId ?? "");
   const [previousFingerprint, setPreviousFingerprint] = useState("");
   const [policySignerIdentity, setPolicySignerIdentity] = useState("");
@@ -237,14 +239,15 @@ export function Reports() {
           Project signer trust
         </h3>
         <p className="text-text-muted mt-1 text-sm">
-          Trust applies only to this project and exact fingerprints. History is append-only.
+          Trust applies only to this project and exact fingerprints. Every decision is linked by a
+          tamper-evident digest chain.
         </p>
-        {(trustPolicies.isLoading || trustHistory.isLoading) && (
+        {(trustPolicies.isLoading || trustHistory.isLoading || trustHistoryIntegrity.isLoading) && (
           <p role="status" className="text-text-muted mt-3 text-sm">
             Loading signer trust…
           </p>
         )}
-        {(trustPolicies.isError || trustHistory.isError) && (
+        {(trustPolicies.isError || trustHistory.isError || trustHistoryIntegrity.isError) && (
           <p role="alert" className="text-danger mt-3 text-sm">
             Signer trust records are unavailable. No signer should be assumed trusted.
           </p>
@@ -489,6 +492,17 @@ export function Reports() {
             </p>
           )}
         </div>
+        {trustHistoryIntegrity.data && (
+          <div
+            role="status"
+            className={`mt-4 rounded border p-3 text-xs ${trustHistoryIntegrity.data.status === "verified" ? "border-success/30 bg-success/5 text-success" : "border-warning/30 bg-warning/5 text-warning"}`}
+          >
+            Trust history integrity: <strong>{trustHistoryIntegrity.data.status}</strong> ·{" "}
+            {trustHistoryIntegrity.data.event_count} decisions checked.
+            {trustHistoryIntegrity.data.status !== "verified" &&
+              " Stored trust is ignored and recovery is blocked until integrity can be established."}
+          </div>
+        )}
         <details className="mt-4">
           <summary className="text-primary-light cursor-pointer text-sm">
             Decision history ({trustHistory.data?.length ?? 0})

@@ -105,6 +105,16 @@ pub struct SignerTrustHistoryRecord {
     pub status: String,
     pub provenance: String,
     pub recorded_at: String,
+    pub previous_digest: String,
+    pub event_digest: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SignerTrustHistoryIntegrity {
+    pub status: String,
+    pub event_count: usize,
+    pub head_digest: Option<String>,
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -328,6 +338,17 @@ pub fn verify_evidence_bundle(
         return result;
     };
     if let Ok(conn) = state.conn.lock() {
+        let integrity = verify_trust_history_integrity(&conn, &project_id);
+        if integrity.status != "verified" {
+            result.trust_status = "unknown".into();
+            result.trust_provenance = None;
+            result.diagnostics.push(format!(
+                "Signer trust history integrity is {}; project trust policy was ignored",
+                integrity.status
+            ));
+            result.diagnostics.extend(integrity.diagnostics);
+            return result;
+        }
         let policy = conn.query_row(
             "SELECT status, provenance FROM signer_trust WHERE project_id = ?1 AND key_fingerprint = ?2",
             rusqlite::params![project_id, fingerprint],
@@ -397,9 +418,14 @@ fn upsert_signer_trust(
          ON CONFLICT(project_id, key_fingerprint) DO UPDATE SET signer_identity = excluded.signer_identity, status = excluded.status, provenance = excluded.provenance, updated_at = excluded.updated_at",
         rusqlite::params![project_id, key_fingerprint.to_lowercase(), signer_identity.trim(), status, provenance.trim(), now],
     )?;
-    tx.execute(
-        "INSERT INTO signer_trust_history (id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        rusqlite::params![Uuid::new_v4().to_string(), project_id, key_fingerprint.to_lowercase(), signer_identity.trim(), status, provenance.trim(), now],
+    append_trust_history(
+        &tx,
+        project_id,
+        &key_fingerprint.to_lowercase(),
+        signer_identity.trim(),
+        status,
+        provenance.trim(),
+        &now,
     )?;
     tx.commit()?;
     Ok(SignerTrustRecord {
@@ -448,7 +474,7 @@ pub fn list_signer_trust_history(
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at
+        "SELECT id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at, previous_digest, event_digest
          FROM signer_trust_history WHERE project_id = ?1
          ORDER BY recorded_at DESC, id DESC",
     )?;
@@ -461,10 +487,28 @@ pub fn list_signer_trust_history(
             status: row.get(4)?,
             provenance: row.get(5)?,
             recorded_at: row.get(6)?,
+            previous_digest: row.get(7)?,
+            event_digest: row.get(8)?,
         })
     })?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(AppError::Database)
+}
+
+#[tauri::command]
+pub fn get_signer_trust_history_integrity(
+    state: State<'_, Database>,
+    project_id: String,
+) -> SignerTrustHistoryIntegrity {
+    match state.conn.lock() {
+        Ok(conn) => verify_trust_history_integrity(&conn, &project_id),
+        Err(error) => SignerTrustHistoryIntegrity {
+            status: "unknown".into(),
+            event_count: 0,
+            head_digest: None,
+            diagnostics: vec![format!("Trust history is unavailable: {error}")],
+        },
+    }
 }
 
 #[tauri::command]
@@ -543,10 +587,14 @@ fn rotate_signer_trust_records(
         (&previous_fingerprint, previous.0.as_str(), "revoked"),
         (&new_fingerprint, new_identity, "trusted"),
     ] {
-        tx.execute(
-            "INSERT INTO signer_trust_history (id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![Uuid::new_v4().to_string(), project_id, fingerprint, identity, status, provenance, now],
+        append_trust_history(
+            &tx,
+            project_id,
+            fingerprint,
+            identity,
+            status,
+            provenance,
+            &now,
         )?;
     }
     tx.commit()?;
@@ -711,6 +759,16 @@ pub fn verify_signer_trust_policy(
             .push("Destination project is unavailable".into());
         return result;
     }
+    let integrity = verify_trust_history_integrity(&conn, &project_id);
+    if integrity.status != "verified" {
+        result.status = "unknown".into();
+        result.diagnostics.push(format!(
+            "Destination trust history integrity is {}; recovery preview is unavailable",
+            integrity.status
+        ));
+        result.diagnostics.extend(integrity.diagnostics);
+        return result;
+    }
     match preview_trust_policy(&conn, &project_id, &bundle.payload.policies) {
         Ok(conflicts) => result.conflicts = conflicts,
         Err(error) => {
@@ -796,6 +854,13 @@ pub fn import_signer_trust_policy(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
+    let integrity = verify_trust_history_integrity(&conn, &project_id);
+    if integrity.status != "verified" {
+        return Err(AppError::InvalidInput(format!(
+            "Trust policy recovery refused because destination history integrity is {}",
+            integrity.status
+        )));
+    }
     import_verified_trust_policy(
         &conn,
         &project_id,
@@ -997,10 +1062,14 @@ fn import_verified_trust_policy(
              ON CONFLICT(project_id, key_fingerprint) DO UPDATE SET signer_identity = excluded.signer_identity, status = excluded.status, provenance = excluded.provenance, updated_at = excluded.updated_at",
             rusqlite::params![project_id, policy.key_fingerprint.to_lowercase(), policy.signer_identity, policy.status, provenance, now],
         )?;
-        tx.execute(
-            "INSERT INTO signer_trust_history (id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            rusqlite::params![Uuid::new_v4().to_string(), project_id, policy.key_fingerprint.to_lowercase(), policy.signer_identity, policy.status, provenance, now],
+        append_trust_history(
+            &tx,
+            project_id,
+            &policy.key_fingerprint.to_lowercase(),
+            &policy.signer_identity,
+            &policy.status,
+            &provenance,
+            &now,
         )?;
         imported.push(SignerTrustRecord {
             project_id: project_id.into(),
@@ -1013,6 +1082,173 @@ fn import_verified_trust_policy(
     }
     tx.commit()?;
     Ok(imported)
+}
+
+fn trust_history_digest(fields: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    for field in fields {
+        hasher.update((field.len() as u64).to_be_bytes());
+        hasher.update(field.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
+}
+
+fn append_trust_history(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    fingerprint: &str,
+    identity: &str,
+    status: &str,
+    provenance: &str,
+    recorded_at: &str,
+) -> Result<(), rusqlite::Error> {
+    let previous = match conn.query_row(
+        "SELECT event_digest FROM signer_trust_history WHERE project_id = ?1 ORDER BY rowid DESC LIMIT 1",
+        [project_id],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(previous) => previous,
+        Err(rusqlite::Error::QueryReturnedNoRows) => String::new(),
+        Err(error) => return Err(error),
+    };
+    let id = Uuid::new_v4().to_string();
+    let digest = trust_history_digest(&[
+        &previous,
+        &id,
+        project_id,
+        fingerprint,
+        identity,
+        status,
+        provenance,
+        recorded_at,
+    ]);
+    conn.execute(
+        "INSERT INTO signer_trust_history (id, project_id, key_fingerprint, signer_identity, status, provenance, recorded_at, previous_digest, event_digest)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        rusqlite::params![id, project_id, fingerprint, identity, status, provenance, recorded_at, previous, digest],
+    )?;
+    Ok(())
+}
+
+fn verify_trust_history_integrity(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> SignerTrustHistoryIntegrity {
+    let mut result = SignerTrustHistoryIntegrity {
+        status: "verified".into(),
+        event_count: 0,
+        head_digest: None,
+        diagnostics: Vec::new(),
+    };
+    let mut stmt = match conn.prepare(
+        "SELECT id, key_fingerprint, signer_identity, status, provenance, recorded_at, previous_digest, event_digest
+         FROM signer_trust_history WHERE project_id = ?1 ORDER BY rowid",
+    ) { Ok(stmt) => stmt, Err(error) => return SignerTrustHistoryIntegrity { status: "unknown".into(), event_count: 0, head_digest: None, diagnostics: vec![error.to_string()] } };
+    let rows = match stmt.query_map([project_id], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+            row.get::<_, String>(6)?,
+            row.get::<_, String>(7)?,
+        ))
+    }) {
+        Ok(rows) => match rows.collect::<Result<Vec<_>, _>>() {
+            Ok(rows) => rows,
+            Err(error) => {
+                return SignerTrustHistoryIntegrity {
+                    status: "unknown".into(),
+                    event_count: 0,
+                    head_digest: None,
+                    diagnostics: vec![error.to_string()],
+                }
+            }
+        },
+        Err(error) => {
+            return SignerTrustHistoryIntegrity {
+                status: "unknown".into(),
+                event_count: 0,
+                head_digest: None,
+                diagnostics: vec![error.to_string()],
+            }
+        }
+    };
+    let mut previous = String::new();
+    let mut latest = std::collections::HashMap::new();
+    for (
+        id,
+        fingerprint,
+        identity,
+        status,
+        provenance,
+        recorded_at,
+        stored_previous,
+        stored_digest,
+    ) in &rows
+    {
+        let expected = trust_history_digest(&[
+            &previous,
+            id,
+            project_id,
+            fingerprint,
+            identity,
+            status,
+            provenance,
+            recorded_at,
+        ]);
+        if stored_previous != &previous || stored_digest != &expected {
+            result.status = "invalid".into();
+            result
+                .diagnostics
+                .push(format!("Digest chain mismatch at history event {id}"));
+            break;
+        }
+        previous.clone_from(stored_digest);
+        latest.insert(
+            fingerprint.clone(),
+            (identity.clone(), status.clone(), provenance.clone()),
+        );
+    }
+    result.event_count = rows.len();
+    result.head_digest = if previous.is_empty() {
+        None
+    } else {
+        Some(previous)
+    };
+    if result.status == "verified" {
+        let mut current = match conn.prepare("SELECT key_fingerprint, signer_identity, status, provenance FROM signer_trust WHERE project_id = ?1") {
+            Ok(stmt) => stmt, Err(error) => { result.status = "unknown".into(); result.diagnostics.push(error.to_string()); return result; }
+        };
+        let rows = current.query_map([project_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        });
+        match rows.and_then(|rows| rows.collect::<Result<Vec<_>, _>>()) {
+            Ok(rows) => {
+                for (fingerprint, identity, status, provenance) in rows {
+                    if latest.get(&fingerprint) != Some(&(identity, status, provenance)) {
+                        result.status = "invalid".into();
+                        result.diagnostics.push(format!(
+                            "Current trust policy does not match history for {fingerprint}"
+                        ));
+                        break;
+                    }
+                }
+            }
+            Err(error) => {
+                result.status = "unknown".into();
+                result.diagnostics.push(error.to_string());
+            }
+        }
+    }
+    result
 }
 
 fn export_evidence_bundle(
@@ -1500,6 +1736,10 @@ mod tests {
             )
             .unwrap();
         assert_eq!(history, 2);
+        let integrity = verify_trust_history_integrity(&conn, &first.id);
+        assert_eq!(integrity.status, "verified");
+        assert_eq!(integrity.event_count, 2);
+        assert_eq!(integrity.head_digest.as_deref().unwrap().len(), 64);
         let other: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM signer_trust WHERE project_id = ?1",
@@ -1617,5 +1857,55 @@ mod tests {
         let oversized_result = verify_trust_policy(&oversized);
         assert_eq!(oversized_result.status, "invalid");
         assert!(oversized_result.diagnostics[0].contains("1 MiB"));
+    }
+
+    #[test]
+    fn tampered_trust_history_and_projection_are_invalid() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        schema::run_migrations(&conn).unwrap();
+        let project = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Integrity".into(),
+                codebase_path: "/tmp/integrity".into(),
+            },
+        )
+        .unwrap();
+        let fingerprint = "c".repeat(64);
+        upsert_signer_trust(
+            &conn,
+            &project.id,
+            &fingerprint,
+            "Release",
+            "trusted",
+            "ceremony",
+        )
+        .unwrap();
+        upsert_signer_trust(
+            &conn,
+            &project.id,
+            &fingerprint,
+            "Release",
+            "revoked",
+            "retired",
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE signer_trust_history SET provenance = 'tampered' WHERE project_id = ?1 AND status = 'trusted'",
+            [&project.id],
+        ).unwrap();
+        let integrity = verify_trust_history_integrity(&conn, &project.id);
+        assert_eq!(integrity.status, "invalid");
+        assert!(integrity.diagnostics[0].contains("Digest chain mismatch"));
+
+        conn.execute(
+            "DELETE FROM signer_trust_history WHERE project_id = ?1",
+            [&project.id],
+        )
+        .unwrap();
+        let projection = verify_trust_history_integrity(&conn, &project.id);
+        assert_eq!(projection.status, "invalid");
+        assert!(projection.diagnostics[0].contains("does not match history"));
     }
 }

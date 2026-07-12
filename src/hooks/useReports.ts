@@ -63,6 +63,7 @@ export function useSetSignerTrust(projectId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["signer-trust-history-integrity", projectId] });
     },
   });
 }
@@ -79,6 +80,14 @@ export function useSignerTrustHistory(projectId: string | undefined) {
   return useQuery({
     queryKey: ["signer-trust-history", projectId],
     queryFn: () => api.listSignerTrustHistory(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useSignerTrustHistoryIntegrity(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["signer-trust-history-integrity", projectId],
+    queryFn: () => api.getSignerTrustHistoryIntegrity(projectId!),
     enabled: !!projectId,
   });
 }
@@ -107,6 +116,7 @@ export function useRotateSignerTrust(projectId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["signer-trust-history-integrity", projectId] });
     },
   });
 }
@@ -142,6 +152,7 @@ export function useImportSignerTrustPolicy(projectId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["signer-trust-history-integrity", projectId] });
     },
   });
 }

@@ -11,6 +11,7 @@ export function Settings() {
     default_mode: "template",
     scan_exclusions: [],
     python_environment_root: "",
+    python_environments: {},
   });
   const [exclusionInput, setExclusionInput] = useState("");
   const [showSaved, setShowSaved] = useState(false);
@@ -128,27 +129,6 @@ export function Settings() {
           />
           <p className="text-text-muted mt-1 text-xs">
             Comma-separated directory names to skip during codebase scanning.
-          </p>
-        </div>
-
-        <div>
-          <label htmlFor="python-environment-root" className="text-text-muted mb-1 block text-sm">
-            Trusted Python environment (optional)
-          </label>
-          <input
-            id="python-environment-root"
-            type="text"
-            value={form.python_environment_root}
-            onChange={(e) => setForm({ ...form, python_environment_root: e.target.value })}
-            placeholder="/Users/you/.virtualenvs/project-tests"
-            autoComplete="off"
-            spellCheck={false}
-            className="bg-surface border-border text-text focus:border-primary w-full rounded-lg border px-3 py-2 font-mono text-sm focus:outline-none"
-          />
-          <p className="text-text-muted mt-1 text-xs">
-            Used only for Python tests. SpecCompanion never installs packages. The environment must
-            be an absolute, non-symlink directory outside the target project and is validated again
-            before every run. Saving it explicitly trusts code already installed there.
           </p>
         </div>
 

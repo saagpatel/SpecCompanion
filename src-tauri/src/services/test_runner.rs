@@ -1,4 +1,5 @@
 use crate::errors::AppError;
+use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -14,6 +15,13 @@ pub struct ExecutionResult {
     pub execution_time_ms: i64,
     pub stdout: String,
     pub stderr: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PythonEnvironmentAttestation {
+    pub root: String,
+    pub interpreter: String,
+    pub fingerprint: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -48,6 +56,22 @@ pub fn run_pytest_test_with_environment(
         test_file,
         working_dir,
         environment_root,
+        None,
+        RunnerConfig::default(),
+    )
+}
+
+pub fn run_pytest_test_with_attested_environment(
+    test_file: &str,
+    working_dir: &str,
+    environment_root: Option<&str>,
+    expected_fingerprint: Option<&str>,
+) -> Result<ExecutionResult, AppError> {
+    run_pytest_test_with_runtime_config(
+        test_file,
+        working_dir,
+        environment_root,
+        expected_fingerprint,
         RunnerConfig::default(),
     )
 }
@@ -69,6 +93,22 @@ pub fn run_unittest_test_with_environment(
         test_file,
         working_dir,
         environment_root,
+        None,
+        RunnerConfig::default(),
+    )
+}
+
+pub fn run_unittest_test_with_attested_environment(
+    test_file: &str,
+    working_dir: &str,
+    environment_root: Option<&str>,
+    expected_fingerprint: Option<&str>,
+) -> Result<ExecutionResult, AppError> {
+    run_unittest_test_with_runtime_config(
+        test_file,
+        working_dir,
+        environment_root,
+        expected_fingerprint,
         RunnerConfig::default(),
     )
 }
@@ -118,20 +158,21 @@ pub fn run_pytest_test_with_config(
     working_dir: &str,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
-    run_pytest_test_with_runtime_config(test_file, working_dir, None, config)
+    run_pytest_test_with_runtime_config(test_file, working_dir, None, None, config)
 }
 
 fn run_pytest_test_with_runtime_config(
     test_file: &str,
     working_dir: &str,
     environment_root: Option<&str>,
+    expected_fingerprint: Option<&str>,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
     let paths = validate_execution_paths(test_file, working_dir)?;
     if paths.test.extension().and_then(|value| value.to_str()) != Some("py") {
         return Ok(blocked("PyTest execution requires a Python test file"));
     }
-    let python = match resolve_python(&paths.root, environment_root) {
+    let python = match resolve_python(&paths.root, environment_root, expected_fingerprint) {
         Ok(python) => python,
         Err(message) => return Ok(runtime_unavailable(&message)),
     };
@@ -203,20 +244,21 @@ pub fn run_unittest_test_with_config(
     working_dir: &str,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
-    run_unittest_test_with_runtime_config(test_file, working_dir, None, config)
+    run_unittest_test_with_runtime_config(test_file, working_dir, None, None, config)
 }
 
 fn run_unittest_test_with_runtime_config(
     test_file: &str,
     working_dir: &str,
     environment_root: Option<&str>,
+    expected_fingerprint: Option<&str>,
     config: RunnerConfig,
 ) -> Result<ExecutionResult, AppError> {
     let paths = validate_execution_paths(test_file, working_dir)?;
     if paths.test.extension().and_then(|value| value.to_str()) != Some("py") {
         return Ok(blocked("unittest execution requires a Python test file"));
     }
-    let python = match resolve_python(&paths.root, environment_root) {
+    let python = match resolve_python(&paths.root, environment_root, expected_fingerprint) {
         Ok(python) => python,
         Err(message) => return Ok(runtime_unavailable(&message)),
     };
@@ -419,10 +461,33 @@ fn find_allowed_python(project_root: &Path) -> Option<PathBuf> {
 fn resolve_python(
     project_root: &Path,
     environment_root: Option<&str>,
+    expected_fingerprint: Option<&str>,
 ) -> Result<Option<PathBuf>, String> {
     let Some(environment_root) = environment_root else {
         return Ok(find_allowed_python(project_root));
     };
+    let attestation = attest_python_environment_path(project_root, environment_root)?;
+    if expected_fingerprint.is_some_and(|expected| expected != attestation.fingerprint) {
+        return Err(
+            "Trusted Python runtime drifted after approval; trust it again before execution".into(),
+        );
+    }
+    Ok(Some(PathBuf::from(attestation.interpreter)))
+}
+
+pub fn attest_python_environment(
+    project_root: &str,
+    environment_root: &str,
+) -> Result<PythonEnvironmentAttestation, String> {
+    let project_root = std::fs::canonicalize(project_root)
+        .map_err(|_| "Target project is missing or unreadable".to_string())?;
+    attest_python_environment_path(&project_root, environment_root)
+}
+
+fn attest_python_environment_path(
+    project_root: &Path,
+    environment_root: &str,
+) -> Result<PythonEnvironmentAttestation, String> {
     let configured = Path::new(environment_root);
     if !configured.is_absolute() {
         return Err("Trusted Python environment must use an absolute path".into());
@@ -450,10 +515,88 @@ fn resolve_python(
             if target.starts_with(project_root) {
                 return Err("Trusted Python interpreter resolves into the target project".into());
             }
-            return Ok(Some(candidate));
+            let fingerprint = python_environment_fingerprint(&root, &candidate, &target)?;
+            return Ok(PythonEnvironmentAttestation {
+                root: root.to_string_lossy().into_owned(),
+                interpreter: candidate.to_string_lossy().into_owned(),
+                fingerprint,
+            });
         }
     }
     Err("Trusted Python environment has no bin/python3 or bin/python interpreter".into())
+}
+
+fn python_environment_fingerprint(
+    root: &Path,
+    interpreter: &Path,
+    target: &Path,
+) -> Result<String, String> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"speccompanion-python-runtime-v1\0");
+    hasher.update(root.to_string_lossy().as_bytes());
+    hasher.update(interpreter.to_string_lossy().as_bytes());
+    hasher.update(target.to_string_lossy().as_bytes());
+    let metadata = std::fs::metadata(target)
+        .map_err(|_| "Python interpreter metadata is unavailable".to_string())?;
+    if metadata.len() > 256 * 1024 * 1024 {
+        return Err("Python interpreter exceeds the attestation limit".into());
+    }
+    hasher.update(metadata.len().to_le_bytes());
+    if let Ok(modified) = metadata.modified().and_then(|time| {
+        time.duration_since(std::time::UNIX_EPOCH)
+            .map_err(std::io::Error::other)
+    }) {
+        hasher.update(modified.as_nanos().to_le_bytes());
+    }
+    hash_file_into(&mut hasher, target, 256 * 1024 * 1024)?;
+    let config = root.join("pyvenv.cfg");
+    if let Ok(bytes) = std::fs::read(&config) {
+        if bytes.len() > 64 * 1024 {
+            return Err("Python environment configuration exceeds the attestation limit".into());
+        }
+        hasher.update(&bytes);
+    }
+    let mut packages = Vec::new();
+    if let Ok(lib_entries) = std::fs::read_dir(root.join("lib")) {
+        for python_dir in lib_entries.flatten() {
+            let site_packages = python_dir.path().join("site-packages");
+            if let Ok(entries) = std::fs::read_dir(site_packages) {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if name.ends_with(".dist-info") {
+                        packages.push((name, entry.path()));
+                    }
+                }
+            }
+        }
+    }
+    packages.sort_by(|left, right| left.0.cmp(&right.0));
+    if packages.len() > 2048 {
+        return Err("Python environment package inventory exceeds the attestation limit".into());
+    }
+    for (package, path) in packages {
+        hasher.update(package.as_bytes());
+        hasher.update(b"\0");
+        for evidence_file in ["METADATA", "RECORD"] {
+            let path = path.join(evidence_file);
+            if path.is_file() {
+                hasher.update(evidence_file.as_bytes());
+                hash_file_into(&mut hasher, &path, 2 * 1024 * 1024)?;
+            }
+        }
+    }
+    Ok(format!("sha256:{:x}", hasher.finalize()))
+}
+
+fn hash_file_into(hasher: &mut Sha256, path: &Path, limit: u64) -> Result<(), String> {
+    let metadata =
+        std::fs::metadata(path).map_err(|_| "Attested file is unreadable".to_string())?;
+    if metadata.len() > limit {
+        return Err("Attested file exceeds the fingerprint limit".into());
+    }
+    let bytes = std::fs::read(path).map_err(|_| "Attested file is unreadable".to_string())?;
+    hasher.update(&bytes);
+    Ok(())
 }
 
 fn safe_path(project_root: &Path, prepend: Option<&Path>) -> std::ffi::OsString {
@@ -604,12 +747,13 @@ mod tests {
     fn trusted_python_environment_must_be_absolute_and_external() {
         let fixture = Fixture::new();
         let project_root = fs::canonicalize(&fixture.root).expect("canonical project");
-        let relative = resolve_python(&project_root, Some(".venv")).expect_err("relative path");
+        let relative =
+            resolve_python(&project_root, Some(".venv"), None).expect_err("relative path");
         assert!(relative.contains("absolute path"));
 
         let inside = fixture.root.join(".venv");
         fs::create_dir_all(inside.join("bin")).expect("environment tree");
-        let rejected = resolve_python(&project_root, Some(inside.to_string_lossy().as_ref()))
+        let rejected = resolve_python(&project_root, Some(inside.to_string_lossy().as_ref()), None)
             .expect_err("project-controlled environment");
         assert!(rejected.contains("separate from the target project"));
     }
@@ -624,7 +768,7 @@ mod tests {
         fs::create_dir_all(&environment).expect("environment");
         let link = fixture.root.with_extension("environment-link");
         symlink(&environment, &link).expect("environment link");
-        let rejected = resolve_python(&fixture.root, Some(link.to_string_lossy().as_ref()))
+        let rejected = resolve_python(&fixture.root, Some(link.to_string_lossy().as_ref()), None)
             .expect_err("symlink root");
         assert!(rejected.contains("not a symlink"));
         let _ = fs::remove_file(link);
@@ -654,6 +798,46 @@ mod tests {
         )
         .expect("execution result");
         assert_eq!(result.status, "passed", "stderr: {}", result.stderr);
+        let _ = fs::remove_dir_all(environment);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn changed_package_inventory_expires_runtime_trust() {
+        use std::os::unix::fs::symlink;
+        let fixture = Fixture::new();
+        let environment =
+            std::env::temp_dir().join(format!("spec-python-attestation-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(environment.join("bin")).expect("environment bin");
+        fs::create_dir_all(environment.join("lib/python3.12/site-packages")).expect("packages");
+        let system_python = find_allowed_python(&fixture.root).expect("system Python");
+        symlink(system_python, environment.join("bin/python3")).expect("python entry");
+        fs::write(
+            environment.join("pyvenv.cfg"),
+            "include-system-site-packages = false\n",
+        )
+        .expect("venv config");
+        let dependency = environment.join("lib/python3.12/site-packages/dependency-1.0.dist-info");
+        fs::create_dir_all(&dependency).expect("dependency marker");
+        fs::write(
+            dependency.join("RECORD"),
+            "dependency.py,sha256=before,10\n",
+        )
+        .expect("package record");
+        let project = fs::canonicalize(&fixture.root).expect("project");
+        let trusted =
+            attest_python_environment_path(&project, environment.to_string_lossy().as_ref())
+                .expect("initial attestation");
+
+        fs::write(dependency.join("RECORD"), "dependency.py,sha256=after,10\n")
+            .expect("changed package record");
+        let drift = resolve_python(
+            &project,
+            Some(environment.to_string_lossy().as_ref()),
+            Some(&trusted.fingerprint),
+        )
+        .expect_err("changed inventory must expire trust");
+        assert!(drift.contains("drifted after approval"));
         let _ = fs::remove_dir_all(environment);
     }
 

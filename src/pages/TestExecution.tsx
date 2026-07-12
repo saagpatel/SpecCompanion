@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useProject } from "../hooks/useProjects";
-import { useTestResults, useExecuteTests } from "../hooks/useTestExecution";
+import {
+  useTestResults,
+  useExecuteTests,
+  usePythonRuntime,
+  useConfigurePythonRuntime,
+  useClearPythonRuntime,
+} from "../hooks/useTestExecution";
 import { TestResultsTable } from "../components/test/TestResultsTable";
 import { ExecutionProgress } from "../components/test/ExecutionProgress";
 import { getAllGeneratedTests } from "../lib/api";
@@ -12,6 +18,10 @@ export function TestExecution() {
   const { data: project } = useProject(projectId);
   const { data: results, isError: resultsError } = useTestResults(projectId);
   const executeTests = useExecuteTests(projectId ?? "");
+  const runtime = usePythonRuntime(projectId ?? "");
+  const configureRuntime = useConfigurePythonRuntime(projectId ?? "");
+  const clearRuntime = useClearPythonRuntime(projectId ?? "");
+  const [runtimeRoot, setRuntimeRoot] = useState("");
 
   const {
     data: allTests,
@@ -64,6 +74,76 @@ export function TestExecution() {
       <h2 className="mb-6 text-2xl font-bold">Test Execution</h2>
 
       <ExecutionProgress />
+
+      <section
+        aria-labelledby="python-runtime-heading"
+        className="border-border bg-surface-alt mb-6 rounded-xl border p-4"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 id="python-runtime-heading" className="font-semibold">
+              Project Python runtime
+            </h3>
+            <p className="text-text-muted mt-1 text-sm">
+              Optional for dependencyful Python tests. SpecCompanion never installs packages. Trust
+              is scoped to this project and execution stops as UNKNOWN if the interpreter or package
+              inventory changes.
+            </p>
+          </div>
+          {runtime.data?.configured && (
+            <span
+              className={`rounded-full px-2 py-1 text-xs ${runtime.data.valid ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}
+            >
+              {runtime.data.valid ? "Attestation matches" : "Trust expired"}
+            </span>
+          )}
+        </div>
+        <label htmlFor="project-python-runtime" className="text-text-muted mt-4 block text-sm">
+          External environment root
+        </label>
+        <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+          <input
+            id="project-python-runtime"
+            value={runtimeRoot}
+            onChange={(event) => setRuntimeRoot(event.target.value)}
+            placeholder={runtime.data?.root || "/Users/you/.virtualenvs/project-tests"}
+            autoComplete="off"
+            spellCheck={false}
+            className="bg-surface border-border text-text focus:border-primary min-w-0 flex-1 rounded-lg border px-3 py-2 font-mono text-sm focus:outline-none"
+          />
+          <button
+            onClick={() => configureRuntime.mutate(runtimeRoot)}
+            disabled={!runtimeRoot.trim() || configureRuntime.isPending}
+            className="bg-primary hover:bg-primary-dark rounded-lg px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {configureRuntime.isPending
+              ? "Attesting..."
+              : runtime.data?.configured
+                ? "Trust again"
+                : "Trust runtime"}
+          </button>
+          {runtime.data?.configured && (
+            <button
+              onClick={() => clearRuntime.mutate()}
+              className="border-border rounded-lg border px-4 py-2 text-sm"
+            >
+              Clear trust
+            </button>
+          )}
+        </div>
+        {runtime.data && (
+          <p role="status" className="text-text-muted mt-2 text-xs">
+            {runtime.data.reason}
+          </p>
+        )}
+        {(configureRuntime.isError || clearRuntime.isError || runtime.isError) && (
+          <p role="alert" className="text-danger mt-2 text-sm">
+            {configureRuntime.isError
+              ? String(configureRuntime.error)
+              : "Python runtime trust could not be updated."}
+          </p>
+        )}
+      </section>
 
       {(testsError || resultsError || executeTests.isError) && (
         <div className="border-danger/30 bg-danger/5 text-danger mb-4 rounded-lg border p-4 text-sm">

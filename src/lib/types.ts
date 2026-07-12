@@ -156,4 +156,20 @@ export interface AppSettings {
   default_mode: "template" | "llm";
   scan_exclusions: string[];
   python_environment_root: string;
+  python_environments: Record<string, TrustedPythonEnvironment>;
+}
+
+export interface TrustedPythonEnvironment {
+  root: string;
+  fingerprint: string;
+  interpreter: string;
+}
+
+export interface PythonRuntimeStatus {
+  configured: boolean;
+  valid: boolean;
+  root: string;
+  interpreter: string;
+  fingerprint: string;
+  reason: string;
 }

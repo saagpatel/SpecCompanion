@@ -63,6 +63,8 @@ pub fn run() {
             commands::report::export_signed_evidence_bundle,
             commands::report::set_signer_trust,
             commands::report::list_signer_trust,
+            commands::report::list_signer_trust_history,
+            commands::report::rotate_signer_trust,
             // Git
             commands::git::get_repo_info,
             commands::git::get_changed_files,

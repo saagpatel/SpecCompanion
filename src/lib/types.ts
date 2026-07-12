@@ -215,6 +215,16 @@ export interface SignerTrustRecord {
   updated_at: string;
 }
 
+export interface SignerTrustHistoryRecord {
+  id: string;
+  project_id: string;
+  key_fingerprint: string;
+  signer_identity: string;
+  status: "trusted" | "revoked";
+  provenance: string;
+  recorded_at: string;
+}
+
 export interface SigningIdentityInfo {
   signer_identity: string;
   key_fingerprint: string;

@@ -10,6 +10,9 @@ import {
   useCreateSigningIdentity,
   useExportSignedEvidenceBundle,
   useSetSignerTrust,
+  useSignerTrust,
+  useSignerTrustHistory,
+  useRotateSignerTrust,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -27,6 +30,10 @@ export function Reports() {
   const [signerIdentity, setSignerIdentity] = useState("");
   const [trustProvenance, setTrustProvenance] = useState("");
   const signerTrust = useSetSignerTrust(projectId ?? "");
+  const trustPolicies = useSignerTrust(projectId);
+  const trustHistory = useSignerTrustHistory(projectId);
+  const rotateTrust = useRotateSignerTrust(projectId ?? "");
+  const [previousFingerprint, setPreviousFingerprint] = useState("");
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
 
   const {
@@ -209,6 +216,125 @@ export function Reports() {
             The selected file could not be verified. No evidence was imported.
           </p>
         )}
+      </section>
+
+      <section
+        aria-labelledby="signer-trust-heading"
+        className="border-border bg-surface-alt mb-6 rounded-xl border p-4"
+      >
+        <h3 id="signer-trust-heading" className="text-sm font-semibold">
+          Project signer trust
+        </h3>
+        <p className="text-text-muted mt-1 text-sm">
+          Trust applies only to this project and exact fingerprints. History is append-only.
+        </p>
+        {(trustPolicies.isLoading || trustHistory.isLoading) && (
+          <p role="status" className="text-text-muted mt-3 text-sm">
+            Loading signer trust…
+          </p>
+        )}
+        {(trustPolicies.isError || trustHistory.isError) && (
+          <p role="alert" className="text-danger mt-3 text-sm">
+            Signer trust records are unavailable. No signer should be assumed trusted.
+          </p>
+        )}
+        {trustPolicies.data && trustPolicies.data.length === 0 && (
+          <p className="text-text-muted mt-3 text-sm">
+            No fingerprints have been trusted or revoked.
+          </p>
+        )}
+        {trustPolicies.data && trustPolicies.data.length > 0 && (
+          <ul aria-label="Current signer trust policies" className="mt-3 space-y-2">
+            {trustPolicies.data.map((policy) => (
+              <li key={policy.key_fingerprint} className="border-border rounded border p-3 text-sm">
+                <p>
+                  <strong>{policy.signer_identity}</strong> — {policy.status}
+                </p>
+                <p className="text-text-muted text-xs break-all">{policy.key_fingerprint}</p>
+                <p className="text-text-muted text-xs">{policy.provenance}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        {verifyBundle.data?.key_fingerprint &&
+          verifyBundle.data.signer_identity &&
+          trustPolicies.data?.some(
+            (policy) =>
+              policy.status === "trusted" &&
+              policy.key_fingerprint !== verifyBundle.data!.key_fingerprint,
+          ) && (
+            <div className="border-border mt-4 border-t pt-4">
+              <h4 className="text-sm font-medium">Rotate to the verified fingerprint</h4>
+              <p className="text-text-muted mt-1 text-xs">
+                This atomically revokes the selected old key and trusts the verified new key.
+              </p>
+              <label htmlFor="previous-fingerprint" className="mt-2 block text-xs">
+                Currently trusted key
+              </label>
+              <select
+                id="previous-fingerprint"
+                value={previousFingerprint}
+                onChange={(event) => setPreviousFingerprint(event.target.value)}
+                className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+              >
+                <option value="">Select the key being replaced</option>
+                {trustPolicies.data
+                  .filter((policy) => policy.status === "trusted")
+                  .map((policy) => (
+                    <option key={policy.key_fingerprint} value={policy.key_fingerprint}>
+                      {policy.signer_identity} — {policy.key_fingerprint.slice(0, 12)}…
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                disabled={!previousFingerprint || !trustProvenance.trim() || rotateTrust.isPending}
+                onClick={() =>
+                  rotateTrust.mutate({
+                    previousFingerprint,
+                    newFingerprint: verifyBundle.data!.key_fingerprint!,
+                    newIdentity: verifyBundle.data!.signer_identity!,
+                    provenance: trustProvenance,
+                  })
+                }
+                className="text-primary-light mt-2 text-sm hover:underline disabled:opacity-50"
+              >
+                Rotate trust atomically
+              </button>
+            </div>
+          )}
+        {rotateTrust.isError && (
+          <p role="alert" className="text-danger mt-3 text-xs">
+            Rotation failed; the previous trust policy remains in force.
+          </p>
+        )}
+        {rotateTrust.isSuccess && (
+          <p role="status" className="mt-3 text-xs">
+            Rotation recorded. Re-verify the bundle to apply the new policy.
+          </p>
+        )}
+        <details className="mt-4">
+          <summary className="text-primary-light cursor-pointer text-sm">
+            Decision history ({trustHistory.data?.length ?? 0})
+          </summary>
+          {trustHistory.data && trustHistory.data.length === 0 ? (
+            <p className="text-text-muted mt-2 text-sm">No trust decisions recorded.</p>
+          ) : (
+            <ol className="mt-2 space-y-2">
+              {trustHistory.data?.map((entry) => (
+                <li key={entry.id} className="border-border border-l-2 pl-3 text-xs">
+                  <p>
+                    <strong>{entry.status}</strong> {entry.signer_identity}
+                  </p>
+                  <p className="text-text-muted break-all">{entry.key_fingerprint}</p>
+                  <p className="text-text-muted">
+                    {entry.provenance} · {new Date(entry.recorded_at).toLocaleString()}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
+        </details>
       </section>
 
       {reportError && (

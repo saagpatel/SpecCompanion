@@ -47,6 +47,7 @@ export function useVerifyEvidenceBundle(projectId?: string) {
 }
 
 export function useSetSignerTrust(projectId: string) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
       fingerprint,
@@ -59,6 +60,54 @@ export function useSetSignerTrust(projectId: string) {
       status: "trusted" | "revoked";
       provenance: string;
     }) => api.setSignerTrust(projectId, fingerprint, identity, status, provenance),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
+    },
+  });
+}
+
+export function useSignerTrust(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["signer-trust", projectId],
+    queryFn: () => api.listSignerTrust(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useSignerTrustHistory(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["signer-trust-history", projectId],
+    queryFn: () => api.listSignerTrustHistory(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useRotateSignerTrust(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      previousFingerprint,
+      newFingerprint,
+      newIdentity,
+      provenance,
+    }: {
+      previousFingerprint: string;
+      newFingerprint: string;
+      newIdentity: string;
+      provenance: string;
+    }) =>
+      api.rotateSignerTrust(
+        projectId,
+        previousFingerprint,
+        newFingerprint,
+        newIdentity,
+        provenance,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
+    },
   });
 }
 

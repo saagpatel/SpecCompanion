@@ -29,3 +29,27 @@ export function useExecuteTests(projectId: string) {
     },
   });
 }
+
+export function usePythonRuntime(projectId: string) {
+  return useQuery({
+    queryKey: ["python-runtime", projectId],
+    queryFn: () => api.getProjectPythonRuntimeStatus(projectId),
+    enabled: Boolean(projectId),
+  });
+}
+
+export function useConfigurePythonRuntime(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (root: string) => api.configureProjectPythonRuntime(projectId, root),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["python-runtime", projectId] }),
+  });
+}
+
+export function useClearPythonRuntime(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.clearProjectPythonRuntime(projectId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["python-runtime", projectId] }),
+  });
+}

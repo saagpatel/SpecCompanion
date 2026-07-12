@@ -48,6 +48,9 @@ pub fn run() {
             commands::test_gen::load_settings,
             // Test Execution
             commands::test_exec::execute_tests,
+            commands::test_exec::configure_project_python_runtime,
+            commands::test_exec::get_project_python_runtime_status,
+            commands::test_exec::clear_project_python_runtime,
             commands::test_exec::get_test_results,
             commands::test_exec::get_test_result,
             // Reports

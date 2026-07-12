@@ -7,6 +7,7 @@ use crate::models::test::{
 use crate::services::{codebase_scanner, llm_generator, repository_tests, template_generator};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
@@ -18,6 +19,15 @@ pub struct AppSettings {
     pub scan_exclusions: Vec<String>,
     #[serde(default)]
     pub python_environment_root: String,
+    #[serde(default)]
+    pub python_environments: HashMap<String, TrustedPythonEnvironment>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TrustedPythonEnvironment {
+    pub root: String,
+    pub fingerprint: String,
+    pub interpreter: String,
 }
 
 impl Default for AppSettings {
@@ -28,6 +38,7 @@ impl Default for AppSettings {
             default_mode: "template".to_string(),
             scan_exclusions: Vec::new(),
             python_environment_root: String::new(),
+            python_environments: HashMap::new(),
         }
     }
 }
@@ -273,13 +284,20 @@ pub fn save_settings(app_handle: AppHandle, settings: AppSettings) -> Result<(),
             settings.default_mode
         )));
     }
+    save_settings_internal(&app_handle, &settings)
+}
+
+pub(crate) fn save_settings_internal(
+    app_handle: &AppHandle,
+    settings: &AppSettings,
+) -> Result<(), AppError> {
     let config_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| AppError::General(e.to_string()))?;
     std::fs::create_dir_all(&config_dir)?;
     let path = config_dir.join("settings.json");
-    let json = serde_json::to_string_pretty(&settings)?;
+    let json = serde_json::to_string_pretty(settings)?;
     std::fs::write(path, json)?;
     Ok(())
 }
@@ -301,5 +319,20 @@ pub(crate) fn load_settings_internal(app_handle: &AppHandle) -> Result<AppSettin
         Ok(settings)
     } else {
         Ok(AppSettings::default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_settings_load_without_project_runtime_attestations() {
+        let settings: AppSettings = serde_json::from_str(
+            r#"{"api_key":"","default_framework":"pytest","default_mode":"template","scan_exclusions":[],"python_environment_root":"/legacy/global"}"#,
+        )
+        .expect("legacy settings");
+        assert!(settings.python_environments.is_empty());
+        assert_eq!(settings.python_environment_root, "/legacy/global");
     }
 }

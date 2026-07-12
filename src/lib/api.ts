@@ -15,6 +15,7 @@ import type {
   EvidenceRecord,
   LinkRepositoryTestRequest,
   RepositoryTestCandidate,
+  PythonRuntimeStatus,
 } from "./types";
 
 type InvokeArgs = Record<string, unknown>;
@@ -42,6 +43,7 @@ const mockState: MockState = {
     default_mode: "template",
     scan_exclusions: ["node_modules", "dist", ".git"],
     python_environment_root: "",
+    python_environments: {},
   },
 };
 
@@ -313,6 +315,45 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
       return undefined as T;
     case "load_settings":
       return mockState.settings as T;
+    case "configure_project_python_runtime": {
+      const projectId = args.project_id as string;
+      const root = args.environment_root as string;
+      const runtime = {
+        root,
+        interpreter: `${root}/bin/python3`,
+        fingerprint: "sha256:mock-attestation",
+      };
+      mockState.settings.python_environments[projectId] = runtime;
+      return {
+        configured: true,
+        valid: true,
+        ...runtime,
+        reason: "Runtime identity and installed package inventory are attested.",
+      } as T;
+    }
+    case "get_project_python_runtime_status": {
+      const runtime = mockState.settings.python_environments[args.project_id as string];
+      return (
+        runtime
+          ? {
+              configured: true,
+              valid: true,
+              ...runtime,
+              reason: "Runtime attestation matches the saved trust decision.",
+            }
+          : {
+              configured: false,
+              valid: false,
+              root: "",
+              interpreter: "",
+              fingerprint: "",
+              reason: "No external Python runtime is trusted for this project.",
+            }
+      ) as T;
+    }
+    case "clear_project_python_runtime":
+      delete mockState.settings.python_environments[args.project_id as string];
+      return undefined as T;
     case "execute_tests": {
       const testIds = args.test_ids as string[];
       const results = testIds.map<TestResult>((testId) => ({
@@ -529,6 +570,18 @@ export const loadSettings = () => invoke<AppSettings>("load_settings");
 // Test execution commands
 export const executeTests = (projectId: string, testIds: string[]) =>
   invoke<TestResult[]>("execute_tests", { project_id: projectId, test_ids: testIds });
+
+export const configureProjectPythonRuntime = (projectId: string, environmentRoot: string) =>
+  invoke<PythonRuntimeStatus>("configure_project_python_runtime", {
+    project_id: projectId,
+    environment_root: environmentRoot,
+  });
+
+export const getProjectPythonRuntimeStatus = (projectId: string) =>
+  invoke<PythonRuntimeStatus>("get_project_python_runtime_status", { project_id: projectId });
+
+export const clearProjectPythonRuntime = (projectId: string) =>
+  invoke<void>("clear_project_python_runtime", { project_id: projectId });
 
 export const getTestResults = (projectId: string) =>
   invoke<TestResult[]>("get_test_results", { project_id: projectId });

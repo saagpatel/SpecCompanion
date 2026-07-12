@@ -1,18 +1,26 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-test("@a11y trusted Python runtime is an explicit, explained setting", async ({ page }) => {
-  await page.goto("/settings");
+test("@a11y Python runtime trust is project-scoped, explicit, and explained", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "New Project" }).click();
+  await page.getByLabel("Project Name").fill("Python Runtime Trust");
+  await page.getByLabel("Codebase Path").fill("/preview/python-fixture");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("link", { name: /Python Runtime Trust/ }).click();
+  await page.getByRole("link", { name: "Run Tests" }).click();
 
-  const runtime = page.getByLabel("Trusted Python environment (optional)");
+  const runtime = page.getByLabel("External environment root");
   await expect(runtime).toBeVisible();
   await expect(page.getByText(/never installs packages/i)).toBeVisible();
-  await expect(page.getByText(/validated again before every run/i)).toBeVisible();
+  await expect(page.getByText(/scoped to this project/i)).toBeVisible();
+  await expect(page.getByText(/package inventory changes/i)).toBeVisible();
 
   await runtime.fill("/Users/example/.virtualenvs/requirements");
   await runtime.press("Tab");
-  await page.getByRole("button", { name: "Save Settings" }).press("Enter");
-  await expect(page.getByRole("status")).toHaveText("Settings saved.");
+  await page.getByRole("button", { name: "Trust runtime" }).press("Enter");
+  await expect(page.getByText("Attestation matches", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("attestation matches");
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   const blocking = accessibility.violations.filter(

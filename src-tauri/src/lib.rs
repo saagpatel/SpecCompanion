@@ -160,6 +160,8 @@ mod desktop_workflow_tests {
             stderr: execution.stderr,
             executed_at: Utc::now().to_rfc3339(),
             execution_controls: execution.execution_controls,
+            provenance_digest: String::new(),
+            provenance_status: String::new(),
         };
         queries::insert_test_result(&conn, &result).expect("store test result");
 

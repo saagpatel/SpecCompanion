@@ -67,6 +67,8 @@ pub struct AlignmentReport {
     pub failed_requirements: i64,
     pub unknown_requirements: i64,
     pub evidence_digest: String,
+    #[serde(default)]
+    pub integrity_status: String,
     pub checked_languages: Vec<String>,
     pub skipped_languages: Vec<String>,
     pub diagnostics: Vec<String>,

@@ -94,6 +94,8 @@ export interface TestResult {
   stderr: string;
   executed_at: string;
   execution_controls: ExecutionControls;
+  provenance_digest: string;
+  provenance_status: "verified" | "invalid" | "legacy_unverified" | "";
 }
 
 export interface ExecutionControls {
@@ -127,6 +129,7 @@ export interface AlignmentReport {
   failed_requirements: number;
   unknown_requirements: number;
   evidence_digest: string;
+  integrity_status: "verified" | "invalid" | "legacy_unverified" | "not_checked";
   checked_languages: string[];
   skipped_languages: string[];
   diagnostics: string[];

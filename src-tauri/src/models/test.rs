@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 pub struct ExecutionControls {
@@ -61,6 +62,42 @@ pub struct TestResult {
     pub executed_at: String,
     #[serde(default)]
     pub execution_controls: ExecutionControls,
+    #[serde(default)]
+    pub provenance_digest: String,
+    #[serde(default)]
+    pub provenance_status: String,
+}
+
+#[derive(Serialize)]
+struct ExecutionProvenance<'a> {
+    generated_test_id: &'a str,
+    test_code: &'a str,
+    status: &'a str,
+    execution_time_ms: i64,
+    stdout: &'a str,
+    stderr: &'a str,
+    executed_at: &'a str,
+    execution_controls: &'a ExecutionControls,
+}
+
+pub fn execution_provenance_digest(
+    test_code: &str,
+    result: &TestResult,
+) -> Result<String, serde_json::Error> {
+    let bytes = serde_json::to_vec(&ExecutionProvenance {
+        generated_test_id: &result.generated_test_id,
+        test_code,
+        status: &result.status,
+        execution_time_ms: result.execution_time_ms,
+        stdout: &result.stdout,
+        stderr: &result.stderr,
+        executed_at: &result.executed_at,
+        execution_controls: &result.execution_controls,
+    })?;
+    Ok(Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 #[derive(Debug, Serialize, Clone)]

@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: i32 = 3;
+const CURRENT_VERSION: i32 = 4;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -28,6 +28,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 3 {
             migrate_v3(&tx)?;
         }
+        if version < 4 {
+            migrate_v4(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -36,6 +39,13 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         tx.commit()?;
     }
 
+    Ok(())
+}
+
+fn migrate_v4(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "ALTER TABLE test_results ADD COLUMN provenance_digest TEXT NOT NULL DEFAULT '';",
+    )?;
     Ok(())
 }
 
@@ -186,6 +196,8 @@ mod tests {
             .expect("alignment evidence table");
         conn.prepare("SELECT execution_controls_json FROM test_results")
             .expect("typed execution controls");
+        conn.prepare("SELECT provenance_digest FROM test_results")
+            .expect("execution provenance digest");
     }
 
     #[test]

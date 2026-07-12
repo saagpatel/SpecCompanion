@@ -170,6 +170,8 @@ pub async fn execute_tests(
             stderr: exec_result.stderr,
             executed_at: Utc::now().to_rfc3339(),
             execution_controls: exec_result.execution_controls,
+            provenance_digest: String::new(),
+            provenance_status: String::new(),
         });
     }
 

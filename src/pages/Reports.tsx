@@ -126,6 +126,14 @@ export function Reports() {
         </p>
       ) : report ? (
         <div className="space-y-6">
+          <p
+            role="status"
+            className={`rounded-lg border p-3 text-sm ${report.integrity_status === "verified" ? "border-success/30 bg-success/5 text-success" : "border-warning/30 bg-warning/5 text-warning"}`}
+          >
+            Report integrity: {report.integrity_status.replace(/_/g, " ")}.
+            {report.integrity_status !== "verified" &&
+              " Persisted evidence cannot be treated as tamper-evident."}
+          </p>
           <section
             aria-labelledby="scan-scope-heading"
             className="border-border bg-surface-alt rounded-xl border p-4"

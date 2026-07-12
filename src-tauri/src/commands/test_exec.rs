@@ -106,6 +106,7 @@ pub async fn execute_tests(
                 execution_time_ms: 0,
                 stdout: String::new(),
                 stderr: error.clone(),
+                execution_controls: Default::default(),
             },
             Ok(_) => match test.framework.as_str() {
                 "pytest" => test_runner::run_pytest_test_with_attested_environment(
@@ -129,6 +130,7 @@ pub async fn execute_tests(
                     execution_time_ms: 0,
                     stdout: String::new(),
                     stderr: format!("Unsupported test framework: {unsupported}"),
+                    execution_controls: Default::default(),
                 }),
             }
             .unwrap_or_else(|error| test_runner::ExecutionResult {
@@ -136,6 +138,7 @@ pub async fn execute_tests(
                 execution_time_ms: 0,
                 stdout: String::new(),
                 stderr: format!("Execution blocked: {error}"),
+                execution_controls: Default::default(),
             }),
         };
 
@@ -166,6 +169,7 @@ pub async fn execute_tests(
             stdout: exec_result.stdout,
             stderr: exec_result.stderr,
             executed_at: Utc::now().to_rfc3339(),
+            execution_controls: exec_result.execution_controls,
         });
     }
 

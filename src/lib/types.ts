@@ -93,6 +93,17 @@ export interface TestResult {
   stdout: string;
   stderr: string;
   executed_at: string;
+  execution_controls: ExecutionControls;
+}
+
+export interface ExecutionControls {
+  profile: string;
+  timeout: string;
+  output_limit: string;
+  process_tree_kill: string;
+  network: string;
+  filesystem_write: string;
+  child_process: string;
 }
 
 export interface TestProgress {

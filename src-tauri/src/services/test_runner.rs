@@ -1,4 +1,5 @@
 use crate::errors::AppError;
+use crate::models::test::ExecutionControls;
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -15,6 +16,7 @@ pub struct ExecutionResult {
     pub execution_time_ms: i64,
     pub stdout: String,
     pub stderr: String,
+    pub execution_controls: ExecutionControls,
 }
 
 #[derive(Debug, Clone)]
@@ -302,13 +304,24 @@ fn run_unittest_test_with_runtime_config(
 fn python_command(
     python: &Path,
     args: &[String],
-    project_root: &Path,
+    _project_root: &Path,
     profile: Option<&str>,
-) -> Result<(Command, String), AppError> {
+) -> Result<(Command, ExecutionControls), AppError> {
     if profile != Some("macos_isolated") {
         let mut command = Command::new(python);
         command.args(args);
-        return Ok((command, "profile=bounded;timeout=applied;output_limit=applied;process_tree_kill=applied;network=not_enforced;filesystem_write=not_enforced".into()));
+        return Ok((
+            command,
+            ExecutionControls {
+                profile: "bounded".into(),
+                timeout: "applied".into(),
+                output_limit: "applied".into(),
+                process_tree_kill: "applied".into(),
+                network: "not_enforced".into(),
+                filesystem_write: "not_enforced".into(),
+                child_process: "not_enforced".into(),
+            },
+        ));
     }
     #[cfg(not(target_os = "macos"))]
     return Err(AppError::InvalidInput(
@@ -327,16 +340,24 @@ fn python_command(
         command
             .args(["-p", &policy, python.to_string_lossy().as_ref()])
             .args(args);
-        let controls = format!("profile=macos_isolated;timeout=applied;output_limit=applied;process_tree_kill=applied;network=denied;filesystem_write=denied_except:{};child_process=not_enforced;project={}", escape(&temp), escape(project_root));
+        let controls = ExecutionControls {
+            profile: "macos_isolated".into(),
+            timeout: "applied".into(),
+            output_limit: "applied".into(),
+            process_tree_kill: "applied".into(),
+            network: "denied".into(),
+            filesystem_write: format!("denied_except:{}", escape(&temp)),
+            child_process: "not_enforced".into(),
+        };
         Ok((command, controls))
     }
 }
 
 fn with_control_receipt(
     mut result: ExecutionResult,
-    controls: &str,
+    controls: &ExecutionControls,
 ) -> Result<ExecutionResult, AppError> {
-    result.stdout = format!("[speccompanion-controls] {controls}\n{}", result.stdout);
+    result.execution_controls = controls.clone();
     Ok(result)
 }
 
@@ -458,6 +479,7 @@ fn wait_bounded(mut child: Child, config: RunnerConfig, start: Instant) -> Execu
         execution_time_ms: start.elapsed().as_millis() as i64,
         stdout,
         stderr,
+        execution_controls: ExecutionControls::default(),
     }
 }
 
@@ -679,6 +701,7 @@ fn runtime_unavailable(message: &str) -> ExecutionResult {
         execution_time_ms: 0,
         stdout: String::new(),
         stderr: message.into(),
+        execution_controls: ExecutionControls::default(),
     }
 }
 
@@ -688,6 +711,7 @@ fn blocked(message: &str) -> ExecutionResult {
         execution_time_ms: 0,
         stdout: String::new(),
         stderr: message.into(),
+        execution_controls: ExecutionControls::default(),
     }
 }
 
@@ -915,7 +939,8 @@ mod tests {
         )
         .expect("isolated execution");
         assert_eq!(result.status, "passed", "{}", result.stderr);
-        assert!(result.stdout.contains("network=denied"));
+        assert_eq!(result.execution_controls.network, "denied");
+        assert_eq!(result.execution_controls.child_process, "not_enforced");
         assert!(!fixture.root.join("escape.txt").exists());
     }
 

@@ -423,8 +423,8 @@ pub fn get_generated_tests_for_project(
 
 pub fn insert_test_result(conn: &Connection, result: &TestResult) -> Result<(), AppError> {
     conn.execute(
-        "INSERT INTO test_results (id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![result.id, result.generated_test_id, result.status, result.execution_time_ms, result.stdout, result.stderr, result.executed_at],
+        "INSERT INTO test_results (id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at, execution_controls_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![result.id, result.generated_test_id, result.status, result.execution_time_ms, result.stdout, result.stderr, result.executed_at, serde_json::to_string(&result.execution_controls)?],
     )?;
     Ok(())
 }
@@ -434,7 +434,7 @@ pub fn get_test_results_for_project(
     project_id: &str,
 ) -> Result<Vec<TestResult>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT tr.id, tr.generated_test_id, tr.status, tr.execution_time_ms, tr.stdout, tr.stderr, tr.executed_at
+        "SELECT tr.id, tr.generated_test_id, tr.status, tr.execution_time_ms, tr.stdout, tr.stderr, tr.executed_at, tr.execution_controls_json
          FROM test_results tr
          JOIN generated_tests gt ON tr.generated_test_id = gt.id
          JOIN requirements r ON gt.requirement_id = r.id
@@ -451,6 +451,7 @@ pub fn get_test_results_for_project(
             stdout: row.get(4)?,
             stderr: row.get(5)?,
             executed_at: row.get(6)?,
+            execution_controls: serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default(),
         })
     })?;
     let mut results = Vec::new();
@@ -462,7 +463,7 @@ pub fn get_test_results_for_project(
 
 pub fn get_test_result(conn: &Connection, id: &str) -> Result<TestResult, AppError> {
     conn.query_row(
-        "SELECT id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at FROM test_results WHERE id = ?1",
+        "SELECT id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at, execution_controls_json FROM test_results WHERE id = ?1",
         params![id],
         |row| {
             Ok(TestResult {
@@ -473,6 +474,7 @@ pub fn get_test_result(conn: &Connection, id: &str) -> Result<TestResult, AppErr
                 stdout: row.get(4)?,
                 stderr: row.get(5)?,
                 executed_at: row.get(6)?,
+                execution_controls: serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default(),
             })
         },
     ).map_err(|_| AppError::NotFound(format!("Test result not found: {}", id)))
@@ -483,7 +485,7 @@ pub fn get_latest_test_result_for_test(
     generated_test_id: &str,
 ) -> Result<Option<TestResult>, AppError> {
     let result = conn.query_row(
-        "SELECT id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at FROM test_results WHERE generated_test_id = ?1 ORDER BY executed_at DESC LIMIT 1",
+        "SELECT id, generated_test_id, status, execution_time_ms, stdout, stderr, executed_at, execution_controls_json FROM test_results WHERE generated_test_id = ?1 ORDER BY executed_at DESC LIMIT 1",
         params![generated_test_id],
         |row| {
             Ok(TestResult {
@@ -494,6 +496,7 @@ pub fn get_latest_test_result_for_test(
                 stdout: row.get(4)?,
                 stderr: row.get(5)?,
                 executed_at: row.get(6)?,
+                execution_controls: serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default(),
             })
         },
     );

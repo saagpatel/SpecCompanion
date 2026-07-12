@@ -159,6 +159,7 @@ mod desktop_workflow_tests {
             stdout: execution.stdout,
             stderr: execution.stderr,
             executed_at: Utc::now().to_rfc3339(),
+            execution_controls: execution.execution_controls,
         };
         queries::insert_test_result(&conn, &result).expect("store test result");
 

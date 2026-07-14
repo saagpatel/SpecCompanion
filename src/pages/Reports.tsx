@@ -25,6 +25,7 @@ import {
   useSetRecoveryAuthority,
   useProtectedTrustCheckpoint,
   useSealProtectedTrustCheckpoint,
+  useRebindProtectedProjectIdentity,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -65,6 +66,8 @@ const evidenceStatusLabel = (status: string) =>
 const protectedCheckpointStatusLabel = (status: string) =>
   ({
     not_configured: "Not configured; local consistency only",
+    identity_unbound: "Checkpoint identity binding required",
+    project_identity_mismatch: "Protected project identity changed",
     protected_match: "Protected state matches",
     changed_since_checkpoint: "Changed since protected checkpoint",
     rollback_or_deletion: "Rollback or deletion detected",
@@ -112,8 +115,12 @@ export function Reports() {
   const trustAnchorAdvancementIntegrity = useTrustAnchorAdvancementIntegrity(projectId);
   const protectedCheckpoint = useProtectedTrustCheckpoint(projectId);
   const sealProtectedCheckpoint = useSealProtectedTrustCheckpoint(projectId ?? "");
+  const rebindProtectedIdentity = useRebindProtectedProjectIdentity(projectId ?? "");
   const [checkpointReviewNote, setCheckpointReviewNote] = useState("");
   const [checkpointReviewed, setCheckpointReviewed] = useState(false);
+  const [previousProtectedProjectId, setPreviousProtectedProjectId] = useState("");
+  const [identityRebindNote, setIdentityRebindNote] = useState("");
+  const [identityRebindReviewed, setIdentityRebindReviewed] = useState(false);
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
   const protectedTrustUseAllowed =
     protectedCheckpoint.data &&
@@ -331,10 +338,10 @@ export function Reports() {
           <h4 className="text-sm font-medium">macOS Keychain protected checkpoint</h4>
           <p className="text-text-muted mt-1 text-xs">
             An explicit seal anchors the reviewed trust-history head, recovery-authority state,
-            recovery-import receipts, and checkpoint-receipt scopes outside SQLite. It can detect a
-            database-only rollback, deletion, or replacement of sealed state. It does not prove
-            package authorship, organizational authority, trusted time, or safety after Keychain
-            compromise.
+            recovery-import receipts, checkpoint-receipt scopes, and the project identity for this
+            canonical codebase location outside SQLite. It can detect a database-only rollback,
+            deletion, or replacement of sealed state at that location. It does not prove package
+            authorship, organizational authority, trusted time, or safety after Keychain compromise.
           </p>
           {protectedCheckpoint.isLoading && (
             <p role="status" className="text-text-muted mt-2 text-xs">
@@ -354,9 +361,13 @@ export function Reports() {
                 protectedCheckpoint.data.status,
               )}. ${protectedCheckpoint.data.diagnostics.join(" ")}`}
               className={`mt-2 text-xs ${
-                ["rollback_or_deletion", "mismatch", "local_invalid", "unknown"].includes(
-                  protectedCheckpoint.data.status,
-                )
+                [
+                  "rollback_or_deletion",
+                  "project_identity_mismatch",
+                  "mismatch",
+                  "local_invalid",
+                  "unknown",
+                ].includes(protectedCheckpoint.data.status)
                   ? "text-danger"
                   : protectedCheckpoint.data.status === "protected_match"
                     ? "text-success"
@@ -380,7 +391,103 @@ export function Reports() {
                 {protectedCheckpoint.data.import_receipt_count} imports, and{" "}
                 {protectedCheckpoint.data.receipt_scope_count} receipt scopes.
               </p>
+              {protectedCheckpoint.data.canonical_codebase_path && (
+                <p className="break-all">
+                  Protected location: {protectedCheckpoint.data.canonical_codebase_path}
+                </p>
+              )}
             </div>
+          )}
+          {protectedCheckpoint.data?.status === "project_identity_mismatch" && (
+            <div
+              className="border-danger mt-3 rounded border p-3"
+              role="group"
+              aria-labelledby="identity-rebind-heading"
+            >
+              <h5 id="identity-rebind-heading" className="text-danger text-sm font-semibold">
+                Dangerous project identity recovery
+              </h5>
+              <p className="text-text-muted mt-1 text-xs">
+                This codebase location was sealed for project ID{" "}
+                <span className="font-mono break-all">
+                  {protectedCheckpoint.data.protected_project_id}
+                </span>
+                , but the database now presents project ID{" "}
+                <span className="font-mono break-all">{projectId}</span>. Rebinding protects the
+                current database state; it does not prove that state is authentic, safe, or
+                authorized. Review every signer, recovery authority, and receipt first.
+              </p>
+              <label htmlFor="previous-protected-project-id" className="mt-2 block text-xs">
+                Type the previous protected project ID
+              </label>
+              <input
+                id="previous-protected-project-id"
+                value={previousProtectedProjectId}
+                onChange={(event) => setPreviousProtectedProjectId(event.target.value)}
+                className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 font-mono text-xs"
+              />
+              <label htmlFor="identity-rebind-note" className="mt-2 block text-xs">
+                Independent recovery review note
+              </label>
+              <input
+                id="identity-rebind-note"
+                value={identityRebindNote}
+                onChange={(event) => setIdentityRebindNote(event.target.value)}
+                maxLength={500}
+                placeholder="Which backup or independent record justified this rebind?"
+                className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+              />
+              <label className="mt-2 flex items-start gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={identityRebindReviewed}
+                  onChange={(event) => setIdentityRebindReviewed(event.target.checked)}
+                />
+                <span>
+                  I reviewed the current trust and recovery state. I understand that rebinding is an
+                  operator decision, not proof of authorship or organizational authority.
+                </span>
+              </label>
+              <button
+                type="button"
+                disabled={
+                  previousProtectedProjectId.trim() !==
+                    protectedCheckpoint.data.protected_project_id ||
+                  !identityRebindNote.trim() ||
+                  !identityRebindReviewed ||
+                  rebindProtectedIdentity.isPending
+                }
+                onClick={() =>
+                  rebindProtectedIdentity.mutate(
+                    {
+                      previousProjectId: previousProtectedProjectId.trim(),
+                      operatorNote: identityRebindNote,
+                    },
+                    {
+                      onSuccess: () => {
+                        setPreviousProtectedProjectId("");
+                        setIdentityRebindNote("");
+                        setIdentityRebindReviewed(false);
+                      },
+                    },
+                  )
+                }
+                className="text-danger mt-2 text-sm font-medium hover:underline disabled:opacity-50"
+              >
+                Rebind and seal reviewed current state
+              </button>
+              {rebindProtectedIdentity.isError && (
+                <p role="alert" className="text-danger mt-2 text-xs">
+                  Project identity rebind did not complete. Refresh status; no protected trust
+                  should be assumed. {String(rebindProtectedIdentity.error)}
+                </p>
+              )}
+            </div>
+          )}
+          {rebindProtectedIdentity.isSuccess && (
+            <p role="status" className="text-success mt-2 text-xs">
+              Reviewed project identity rebound and current trust state sealed.
+            </p>
           )}
           <label htmlFor="checkpoint-review-note" className="mt-3 block text-xs">
             Protected checkpoint review note
@@ -411,9 +518,13 @@ export function Reports() {
               !checkpointReviewed ||
               sealProtectedCheckpoint.isPending ||
               !protectedCheckpoint.data ||
-              ["rollback_or_deletion", "mismatch", "local_invalid", "unknown"].includes(
-                protectedCheckpoint.data.status,
-              )
+              [
+                "rollback_or_deletion",
+                "project_identity_mismatch",
+                "mismatch",
+                "local_invalid",
+                "unknown",
+              ].includes(protectedCheckpoint.data.status)
             }
             aria-describedby="protected-checkpoint-help"
             onClick={() =>
@@ -644,6 +755,11 @@ export function Reports() {
             package can change trust. Signature validity alone never grants that authority. When a
             protected checkpoint exists, exports, recovery imports, and checkpoint advancement are
             blocked until current state matches a reviewed Keychain seal.
+          </p>
+          <p className="text-text-muted mt-1 text-xs">
+            On a fresh device, the original Keychain identity is not assumed or transferred.
+            Independently enroll the destination recovery authority, review every proposed change,
+            import only the authorized package, and then seal a new local checkpoint.
           </p>
           <label htmlFor="policy-signer-identity" className="mt-2 block text-xs">
             Keychain signing identity

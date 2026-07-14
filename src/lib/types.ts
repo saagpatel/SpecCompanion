@@ -306,6 +306,8 @@ export interface TrustAnchorAdvancementIntegrity {
 export interface ProtectedTrustCheckpointStatus {
   status:
     | "not_configured"
+    | "identity_unbound"
+    | "project_identity_mismatch"
     | "protected_match"
     | "changed_since_checkpoint"
     | "rollback_or_deletion"
@@ -319,6 +321,9 @@ export interface ProtectedTrustCheckpointStatus {
   recovery_authority_count: number;
   import_receipt_count: number;
   receipt_scope_count: number;
+  protected_project_id?: string;
+  canonical_codebase_path?: string;
+  locator_digest?: string;
   diagnostics: string[];
 }
 

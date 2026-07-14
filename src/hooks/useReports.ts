@@ -260,6 +260,22 @@ export function useSealProtectedTrustCheckpoint(projectId: string) {
   });
 }
 
+export function useRebindProtectedProjectIdentity(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      previousProjectId,
+      operatorNote,
+    }: {
+      previousProjectId: string;
+      operatorNote: string;
+    }) => api.rebindProtectedProjectIdentity(projectId, previousProjectId, operatorNote),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["protected-trust-checkpoint", projectId] });
+    },
+  });
+}
+
 export function useExportTrustAnchorAdvancements() {
   return useMutation({
     mutationFn: (projectId: string) => api.exportTrustAnchorAdvancements(projectId),

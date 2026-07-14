@@ -76,6 +76,7 @@ pub fn run() {
             commands::report::verify_trust_anchor_advancements,
             commands::report::get_protected_trust_checkpoint_status,
             commands::report::seal_protected_trust_checkpoint,
+            commands::report::rebind_protected_project_identity,
             commands::report::import_signer_trust_policy,
             // Git
             commands::git::get_repo_info,

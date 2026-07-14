@@ -82,6 +82,9 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   );
   await expect(page.getByRole("button", { name: "Export signed trust policy" })).toBeDisabled();
   await page.getByLabel("Keychain signing identity").fill("Preview recovery signer");
+  await expect(
+    page.getByText(/On a fresh device, the original Keychain identity is not assumed/i),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Export signed trust policy" })).toBeEnabled();
   await page.getByLabel("Verify recovery policy JSON").setInputFiles({
     name: "unauthorized-signer-trust-policy.json",
@@ -208,6 +211,64 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
     expect(layout.mainWidth).toBeGreaterThan(300);
     expect(layout.mainScrollWidth).toBe(layout.mainWidth);
   }
+
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  const blocking = accessibility.violations.filter(
+    (violation) => violation.impact === "critical" || violation.impact === "serious",
+  );
+  expect(blocking).toEqual([]);
+});
+
+test("@a11y protected project identity blocks silent database re-identification", async ({
+  page,
+}) => {
+  const codebasePath = `/preview/protected-identity-${Date.now()}`;
+  await page.goto("/");
+  await page.getByRole("button", { name: "New Project" }).click();
+  await page.getByLabel("Project Name").fill("Protected Identity Original");
+  await page.getByLabel("Codebase Path").fill(codebasePath);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("link", { name: /Protected Identity Original/ }).click();
+  const originalProjectId = page.url().match(/\/project\/([^/]+)/)?.[1];
+  expect(originalProjectId).toBeTruthy();
+  await page.getByRole("link", { name: "Reports" }).click();
+  await page
+    .getByLabel("Protected checkpoint review note")
+    .fill("Reviewed original project identity and empty trust baseline");
+  await page
+    .getByLabel(/I reviewed the current trust decisions, recovery authorities, and receipt state/i)
+    .check();
+  await page.getByRole("button", { name: "Seal reviewed state in macOS Keychain" }).click();
+  await expect(page.getByText(/Protected checkpoint: Protected state matches/i)).toBeVisible();
+
+  await page.getByRole("link", { name: "Protected Identity Original" }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Yes, delete" }).click();
+  await page.getByRole("button", { name: "New Project" }).click();
+  await page.getByLabel("Project Name").fill("Protected Identity Replacement");
+  await page.getByLabel("Codebase Path").fill(codebasePath);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("link", { name: /Protected Identity Replacement/ }).click();
+  await page.getByRole("link", { name: "Reports" }).click();
+
+  await expect(
+    page.getByRole("status", { name: /Protected checkpoint: Protected project identity changed/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/Dangerous project identity recovery/i)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Seal reviewed state in macOS Keychain" }),
+  ).toBeDisabled();
+  const rebind = page.getByRole("button", { name: "Rebind and seal reviewed current state" });
+  await expect(rebind).toBeDisabled();
+  await page.getByLabel("Type the previous protected project ID").fill(originalProjectId!);
+  await page
+    .getByLabel("Independent recovery review note")
+    .fill("Matched encrypted backup inventory REC-17 before accepting replacement database");
+  await page.getByLabel(/I reviewed the current trust and recovery state/i).check();
+  await expect(rebind).toBeEnabled();
+  await rebind.click();
+  await expect(page.getByText(/Protected checkpoint: Protected state matches/i)).toBeVisible();
+  await expect(page.getByText(/identity rebound and current trust state sealed/i)).toBeVisible();
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   const blocking = accessibility.violations.filter(

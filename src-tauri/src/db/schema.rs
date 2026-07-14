@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-const CURRENT_VERSION: i32 = 11;
+const CURRENT_VERSION: i32 = 12;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -57,6 +57,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 11 {
             migrate_v11(&tx)?;
         }
+        if version < 12 {
+            migrate_v12(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -66,6 +69,21 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+fn migrate_v12(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE protected_project_identity_configuration (
+            project_id TEXT PRIMARY KEY NOT NULL,
+            locator_digest TEXT NOT NULL,
+            configured_at TEXT NOT NULL,
+            keychain_service TEXT NOT NULL,
+            binding_schema TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );
+        CREATE UNIQUE INDEX idx_protected_project_identity_locator
+            ON protected_project_identity_configuration(locator_digest);",
+    )
 }
 
 fn migrate_v11(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -504,6 +522,8 @@ mod tests {
             .expect("replay and destination revision ledger");
         conn.prepare("SELECT configured_at, keychain_service, checkpoint_schema FROM protected_trust_checkpoint_configuration")
             .expect("protected checkpoint configuration marker");
+        conn.prepare("SELECT locator_digest, keychain_service, binding_schema FROM protected_project_identity_configuration")
+            .expect("protected project identity marker");
     }
 
     #[test]
@@ -569,12 +589,68 @@ mod tests {
     }
 
     #[test]
+    fn version_eleven_upgrade_preserves_checkpoint_marker_without_inventing_identity_trust() {
+        let conn = Connection::open_in_memory().expect("database");
+        conn.execute_batch(
+            "CREATE TABLE schema_version (version INTEGER NOT NULL);
+             INSERT INTO schema_version VALUES (11);",
+        )
+        .expect("version table");
+        for migration in [
+            migrate_v1,
+            migrate_v2,
+            migrate_v3,
+            migrate_v4,
+            migrate_v5,
+            migrate_v6,
+            migrate_v7,
+            migrate_v8,
+            migrate_v9,
+            migrate_v10,
+            migrate_v11,
+        ] {
+            migration(&conn).expect("legacy migration");
+        }
+        conn.execute(
+            "INSERT INTO projects VALUES ('project', 'Project', '/tmp/project', 'now', 'now')",
+            [],
+        )
+        .expect("project");
+        conn.execute(
+            "INSERT INTO protected_trust_checkpoint_configuration
+             VALUES ('project', 'now', 'checkpoint-service', 'checkpoint-schema')",
+            [],
+        )
+        .expect("legacy checkpoint marker");
+
+        run_migrations(&conn).expect("upgrade");
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM protected_trust_checkpoint_configuration",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM protected_project_identity_configuration",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+            0
+        );
+    }
+
+    #[test]
     fn future_schema_and_interrupted_migration_fail_closed() {
         let future = Connection::open_in_memory().expect("future database");
         future
             .execute_batch(
                 "CREATE TABLE schema_version (version INTEGER NOT NULL);
-                 INSERT INTO schema_version VALUES (12);",
+                 INSERT INTO schema_version VALUES (13);",
             )
             .expect("future version");
         assert!(run_migrations(&future).is_err());
@@ -583,7 +659,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
 
         let interrupted = Connection::open_in_memory().expect("interrupted database");
         interrupted
@@ -610,6 +686,44 @@ mod tests {
         assert_eq!(version, 9);
         assert!(interrupted
             .prepare("SELECT * FROM trust_policy_imports")
+            .is_err());
+
+        let interrupted_identity = Connection::open_in_memory().expect("interrupted identity");
+        interrupted_identity
+            .execute_batch(
+                "CREATE TABLE schema_version (version INTEGER NOT NULL);
+                 INSERT INTO schema_version VALUES (11);",
+            )
+            .expect("version eleven");
+        for migration in [
+            migrate_v1,
+            migrate_v2,
+            migrate_v3,
+            migrate_v4,
+            migrate_v5,
+            migrate_v6,
+            migrate_v7,
+            migrate_v8,
+            migrate_v9,
+            migrate_v10,
+            migrate_v11,
+        ] {
+            migration(&interrupted_identity).expect("legacy migration");
+        }
+        interrupted_identity
+            .execute_batch(
+                "CREATE TABLE protected_project_identity_configuration (sentinel TEXT NOT NULL);",
+            )
+            .expect("injected partial identity target");
+        assert!(run_migrations(&interrupted_identity).is_err());
+        let version: i32 = interrupted_identity
+            .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 11);
+        assert!(interrupted_identity
+            .prepare("SELECT locator_digest FROM protected_project_identity_configuration")
             .is_err());
     }
 }

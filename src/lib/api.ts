@@ -42,6 +42,7 @@ interface MockState {
   recoveryAuthorities: RecoveryAuthorityRecord[];
   trustAnchorAdvancements: TrustAnchorAdvancement[];
   protectedTrustCheckpoints: Record<string, ProtectedTrustCheckpointStatus>;
+  protectedProjectIdentities: Record<string, string>;
   settings: AppSettings;
 }
 
@@ -57,6 +58,7 @@ const mockState: MockState = {
   recoveryAuthorities: [],
   trustAnchorAdvancements: [],
   protectedTrustCheckpoints: {},
+  protectedProjectIdentities: {},
   settings: {
     api_key: "",
     default_framework: "jest",
@@ -221,6 +223,22 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         updated_at: createdAt,
       };
       mockState.projects.push(project);
+      const protectedProjectId = mockState.protectedProjectIdentities[project.codebase_path];
+      if (protectedProjectId && protectedProjectId !== project.id) {
+        mockState.protectedTrustCheckpoints[project.id] = {
+          status: "project_identity_mismatch",
+          storage: "os_keychain",
+          trust_history_event_count: 0,
+          recovery_authority_count: 0,
+          import_receipt_count: 0,
+          receipt_scope_count: 0,
+          protected_project_id: protectedProjectId,
+          canonical_codebase_path: project.codebase_path,
+          diagnostics: [
+            "This canonical codebase location is protected for a different project identity",
+          ],
+        };
+      }
       return project as T;
     }
     case "list_projects":
@@ -878,9 +896,42 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         )
           ? 1
           : 0,
+        protected_project_id: projectId,
+        canonical_codebase_path: mockState.projects.find((project) => project.id === projectId)
+          ?.codebase_path,
         diagnostics: ["Current trust state matches the macOS Keychain checkpoint"],
       };
       mockState.protectedTrustCheckpoints[projectId] = checkpoint;
+      const project = mockState.projects.find((candidate) => candidate.id === projectId);
+      if (project) mockState.protectedProjectIdentities[project.codebase_path] = projectId;
+      return checkpoint as T;
+    }
+    case "rebind_protected_project_identity": {
+      const projectId = String(args.project_id);
+      const existing = mockState.protectedTrustCheckpoints[projectId];
+      if (
+        !existing?.protected_project_id ||
+        existing.protected_project_id !== String(args.previous_project_id)
+      ) {
+        throw new Error("The previous protected project identity confirmation does not match");
+      }
+      const checkpoint: ProtectedTrustCheckpointStatus = {
+        ...(existing ?? {
+          storage: "os_keychain",
+          trust_history_event_count: 0,
+          recovery_authority_count: 0,
+          import_receipt_count: 0,
+          receipt_scope_count: 0,
+        }),
+        status: "protected_match",
+        protected_project_id: projectId,
+        sealed_at: now(),
+        operator_note: String(args.operator_note),
+        diagnostics: ["Current project identity and trust state match the macOS Keychain bindings"],
+      };
+      mockState.protectedTrustCheckpoints[projectId] = checkpoint;
+      const project = mockState.projects.find((candidate) => candidate.id === projectId);
+      if (project) mockState.protectedProjectIdentities[project.codebase_path] = projectId;
       return checkpoint as T;
     }
     default:
@@ -1123,6 +1174,17 @@ export const getProtectedTrustCheckpointStatus = (projectId: string) =>
 export const sealProtectedTrustCheckpoint = (projectId: string, operatorNote: string) =>
   invoke<ProtectedTrustCheckpointStatus>("seal_protected_trust_checkpoint", {
     project_id: projectId,
+    operator_note: operatorNote,
+  });
+
+export const rebindProtectedProjectIdentity = (
+  projectId: string,
+  previousProjectId: string,
+  operatorNote: string,
+) =>
+  invoke<ProtectedTrustCheckpointStatus>("rebind_protected_project_identity", {
+    project_id: projectId,
+    previous_project_id: previousProjectId,
     operator_note: operatorNote,
   });
 

@@ -23,6 +23,8 @@ const MAX_PACKAGE_TEXT_BYTES: usize = 16_384;
 const MAX_EVIDENCE_ALIGNMENTS: usize = 1_000;
 const MAX_EVIDENCE_ITEMS_PER_ALIGNMENT: usize = 1_000;
 const FRESHNESS_WINDOW_SECONDS: i64 = 86_400;
+const PROJECT_IDENTITY_KEYRING_SERVICE: &str = "com.speccompanion.protected-project-identity.v1";
+const PROJECT_IDENTITY_SCHEMA: &str = "speccompanion.protected-project-identity.v1";
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -267,6 +269,17 @@ struct ProtectedTrustCheckpoint {
     receipt_scopes: Vec<ProtectedReceiptScope>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProtectedProjectIdentityBinding {
+    schema: String,
+    project_id: String,
+    canonical_codebase_path: String,
+    locator_digest: String,
+    bound_at: String,
+    operator_note: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ProtectedTrustCheckpointStatus {
     pub status: String,
@@ -277,6 +290,9 @@ pub struct ProtectedTrustCheckpointStatus {
     pub recovery_authority_count: usize,
     pub import_receipt_count: usize,
     pub receipt_scope_count: usize,
+    pub protected_project_id: Option<String>,
+    pub canonical_codebase_path: Option<String>,
+    pub locator_digest: Option<String>,
     pub diagnostics: Vec<String>,
 }
 
@@ -1613,7 +1629,11 @@ pub fn seal_protected_trust_checkpoint(
     let existing = protected_checkpoint_status(&conn, &project_id);
     if matches!(
         existing.status.as_str(),
-        "rollback_or_deletion" | "mismatch" | "local_invalid" | "unknown"
+        "rollback_or_deletion"
+            | "project_identity_mismatch"
+            | "mismatch"
+            | "local_invalid"
+            | "unknown"
     ) {
         return Err(AppError::InvalidInput(format!(
             "Protected checkpoint cannot be replaced while status is {}",
@@ -1621,6 +1641,15 @@ pub fn seal_protected_trust_checkpoint(
         )));
     }
     let checkpoint = build_protected_trust_checkpoint(&conn, &project_id, note)?;
+    let (canonical_codebase_path, locator_digest) = project_identity_locator(&conn, &project_id)?;
+    let identity_binding = ProtectedProjectIdentityBinding {
+        schema: PROJECT_IDENTITY_SCHEMA.into(),
+        project_id: project_id.clone(),
+        canonical_codebase_path,
+        locator_digest: locator_digest.clone(),
+        bound_at: checkpoint.sealed_at.clone(),
+        operator_note: note.into(),
+    };
     let encoded = serde_json::to_vec(&checkpoint)?;
     let entry = keyring::Entry::new(TRUST_CHECKPOINT_KEYRING_SERVICE, &project_id)
         .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?;
@@ -1629,7 +1658,17 @@ pub fn seal_protected_trust_checkpoint(
             "Could not store protected trust checkpoint: {error}"
         ))
     })?;
-    conn.execute(
+    let identity_entry = keyring::Entry::new(PROJECT_IDENTITY_KEYRING_SERVICE, &locator_digest)
+        .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?;
+    identity_entry
+        .set_secret(&serde_json::to_vec(&identity_binding)?)
+        .map_err(|error| {
+            AppError::General(format!(
+                "Could not store protected project identity: {error}; the trust checkpoint remains identity-unbound and trust use is blocked"
+            ))
+        })?;
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
         "INSERT INTO protected_trust_checkpoint_configuration
          (project_id, configured_at, keychain_service, checkpoint_schema)
          VALUES (?1, ?2, ?3, ?4)
@@ -1641,11 +1680,115 @@ pub fn seal_protected_trust_checkpoint(
             TRUST_CHECKPOINT_SCHEMA
         ],
     )?;
+    tx.execute(
+        "INSERT INTO protected_project_identity_configuration
+         (project_id, locator_digest, configured_at, keychain_service, binding_schema)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(project_id) DO UPDATE SET
+           locator_digest = excluded.locator_digest,
+           configured_at = excluded.configured_at,
+           keychain_service = excluded.keychain_service,
+           binding_schema = excluded.binding_schema",
+        rusqlite::params![
+            project_id,
+            locator_digest,
+            checkpoint.sealed_at,
+            PROJECT_IDENTITY_KEYRING_SERVICE,
+            PROJECT_IDENTITY_SCHEMA
+        ],
+    )?;
+    tx.commit()?;
     Ok(assess_protected_trust_checkpoint(
         &conn,
         &project_id,
         &checkpoint,
     ))
+}
+
+#[tauri::command]
+pub fn rebind_protected_project_identity(
+    state: State<'_, Database>,
+    project_id: String,
+    previous_project_id: String,
+    operator_note: String,
+) -> Result<ProtectedTrustCheckpointStatus, AppError> {
+    let note = operator_note.trim();
+    if note.is_empty() || note.len() > 500 {
+        return Err(AppError::InvalidInput(
+            "A rebind review note between 1 and 500 characters is required".into(),
+        ));
+    }
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    let (canonical_codebase_path, locator_digest, binding) =
+        load_protected_project_identity(&conn, &project_id)
+            .map_err(|status| AppError::InvalidInput(status.diagnostics.join(" ")))?;
+    let binding = binding.ok_or_else(|| {
+        AppError::InvalidInput(
+            "No previous protected project identity exists for this codebase location".into(),
+        )
+    })?;
+    if binding.project_id == project_id || binding.project_id != previous_project_id.trim() {
+        return Err(AppError::InvalidInput(
+            "The previous protected project identity confirmation does not match".into(),
+        ));
+    }
+    let checkpoint = build_protected_trust_checkpoint(&conn, &project_id, note)?;
+    let rebound = ProtectedProjectIdentityBinding {
+        schema: PROJECT_IDENTITY_SCHEMA.into(),
+        project_id: project_id.clone(),
+        canonical_codebase_path,
+        locator_digest: locator_digest.clone(),
+        bound_at: checkpoint.sealed_at.clone(),
+        operator_note: note.into(),
+    };
+    keyring::Entry::new(TRUST_CHECKPOINT_KEYRING_SERVICE, &project_id)
+        .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?
+        .set_secret(&serde_json::to_vec(&checkpoint)?)
+        .map_err(|error| {
+            AppError::General(format!("Could not store rebound checkpoint: {error}"))
+        })?;
+    keyring::Entry::new(PROJECT_IDENTITY_KEYRING_SERVICE, &locator_digest)
+        .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?
+        .set_secret(&serde_json::to_vec(&rebound)?)
+        .map_err(|error| {
+            AppError::General(format!("Could not store rebound project identity: {error}"))
+        })?;
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "INSERT INTO protected_trust_checkpoint_configuration
+         (project_id, configured_at, keychain_service, checkpoint_schema)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(project_id) DO UPDATE SET configured_at = excluded.configured_at",
+        rusqlite::params![
+            project_id,
+            checkpoint.sealed_at,
+            TRUST_CHECKPOINT_KEYRING_SERVICE,
+            TRUST_CHECKPOINT_SCHEMA
+        ],
+    )?;
+    tx.execute(
+        "INSERT INTO protected_project_identity_configuration
+         (project_id, locator_digest, configured_at, keychain_service, binding_schema)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(project_id) DO UPDATE SET
+           locator_digest = excluded.locator_digest,
+           configured_at = excluded.configured_at,
+           keychain_service = excluded.keychain_service,
+           binding_schema = excluded.binding_schema",
+        rusqlite::params![
+            project_id,
+            locator_digest,
+            checkpoint.sealed_at,
+            PROJECT_IDENTITY_KEYRING_SERVICE,
+            PROJECT_IDENTITY_SCHEMA
+        ],
+    )?;
+    tx.commit()?;
+    Ok(protected_checkpoint_status(&conn, &project_id))
 }
 
 fn export_trust_anchor_advancement_receipts(
@@ -1783,14 +1926,159 @@ fn protected_checkpoint_error(status: &str, diagnostic: String) -> ProtectedTrus
         recovery_authority_count: 0,
         import_receipt_count: 0,
         receipt_scope_count: 0,
+        protected_project_id: None,
+        canonical_codebase_path: None,
+        locator_digest: None,
         diagnostics: vec![diagnostic],
     }
+}
+
+fn project_identity_status(
+    status: &str,
+    diagnostic: String,
+    project_id: Option<String>,
+    canonical_codebase_path: Option<String>,
+    locator_digest: Option<String>,
+) -> ProtectedTrustCheckpointStatus {
+    let mut result = protected_checkpoint_error(status, diagnostic);
+    result.protected_project_id = project_id;
+    result.canonical_codebase_path = canonical_codebase_path;
+    result.locator_digest = locator_digest;
+    result
+}
+
+fn project_identity_locator(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<(String, String), AppError> {
+    let stored_path = conn
+        .query_row(
+            "SELECT codebase_path FROM projects WHERE id = ?1",
+            [project_id],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|_| AppError::NotFound(format!("Project not found: {project_id}")))?;
+    let canonical = std::fs::canonicalize(&stored_path).map_err(|error| {
+        AppError::InvalidInput(format!(
+            "Cannot verify protected project identity because the codebase path is unavailable: {error}"
+        ))
+    })?;
+    let canonical_path = canonical.to_string_lossy().to_string();
+    let locator_digest = sha256_hex(canonical_path.as_bytes());
+    Ok((canonical_path, locator_digest))
+}
+
+fn protected_project_identity_was_configured(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    locator_digest: &str,
+) -> bool {
+    conn.query_row(
+        "SELECT 1 FROM protected_project_identity_configuration
+         WHERE project_id = ?1
+           AND locator_digest = ?2
+           AND keychain_service = ?3
+           AND binding_schema = ?4",
+        rusqlite::params![
+            project_id,
+            locator_digest,
+            PROJECT_IDENTITY_KEYRING_SERVICE,
+            PROJECT_IDENTITY_SCHEMA
+        ],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
+fn load_protected_project_identity(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<(String, String, Option<ProtectedProjectIdentityBinding>), ProtectedTrustCheckpointStatus>
+{
+    let (canonical_path, locator_digest) = project_identity_locator(conn, project_id)
+        .map_err(|error| project_identity_status("unknown", error.to_string(), None, None, None))?;
+    let entry = keyring::Entry::new(PROJECT_IDENTITY_KEYRING_SERVICE, &locator_digest).map_err(
+        |error| {
+            project_identity_status(
+                "unknown",
+                format!("Protected project identity is unavailable: {error}"),
+                None,
+                Some(canonical_path.clone()),
+                Some(locator_digest.clone()),
+            )
+        },
+    )?;
+    let secret = match entry.get_secret() {
+        Ok(secret) => secret,
+        Err(keyring::Error::NoEntry) => {
+            if protected_project_identity_was_configured(conn, project_id, &locator_digest) {
+                return Err(project_identity_status(
+                    "rollback_or_deletion",
+                    "The protected project identity was configured but its Keychain binding is missing; trust use remains blocked".into(),
+                    Some(project_id.into()),
+                    Some(canonical_path),
+                    Some(locator_digest),
+                ));
+            }
+            return Ok((canonical_path, locator_digest, None));
+        }
+        Err(error) => {
+            return Err(project_identity_status(
+                "unknown",
+                format!("Protected project identity is unavailable: {error}"),
+                None,
+                Some(canonical_path),
+                Some(locator_digest),
+            ))
+        }
+    };
+    let binding: ProtectedProjectIdentityBinding =
+        serde_json::from_slice(&secret).map_err(|error| {
+            project_identity_status(
+                "mismatch",
+                format!("Protected project identity record is malformed: {error}"),
+                None,
+                Some(canonical_path.clone()),
+                Some(locator_digest.clone()),
+            )
+        })?;
+    if binding.schema != PROJECT_IDENTITY_SCHEMA
+        || binding.project_id.trim().is_empty()
+        || binding.canonical_codebase_path != canonical_path
+        || binding.locator_digest != locator_digest
+        || binding.operator_note.trim().is_empty()
+    {
+        return Err(project_identity_status(
+            "mismatch",
+            "Protected project identity contract is invalid".into(),
+            Some(binding.project_id),
+            Some(canonical_path),
+            Some(locator_digest),
+        ));
+    }
+    Ok((canonical_path, locator_digest, Some(binding)))
 }
 
 fn protected_checkpoint_status(
     conn: &rusqlite::Connection,
     project_id: &str,
 ) -> ProtectedTrustCheckpointStatus {
+    let (canonical_path, locator_digest, identity_binding) =
+        match load_protected_project_identity(conn, project_id) {
+            Ok(identity) => identity,
+            Err(status) => return status,
+        };
+    if let Some(binding) = identity_binding.as_ref() {
+        if binding.project_id != project_id {
+            return project_identity_status(
+                "project_identity_mismatch",
+                "This canonical codebase location is protected for a different project identity; trust use remains blocked until an explicit reviewed rebind".into(),
+                Some(binding.project_id.clone()),
+                Some(canonical_path),
+                Some(locator_digest),
+            );
+        }
+    }
     let entry = match keyring::Entry::new(TRUST_CHECKPOINT_KEYRING_SERVICE, project_id) {
         Ok(entry) => entry,
         Err(error) => {
@@ -1800,7 +2088,19 @@ fn protected_checkpoint_status(
     let secret = match entry.get_secret() {
         Ok(secret) => secret,
         Err(keyring::Error::NoEntry) => {
-            return missing_protected_checkpoint_status(conn, project_id)
+            if identity_binding.is_some() {
+                return project_identity_status(
+                    "rollback_or_deletion",
+                    "The protected project identity exists but its trust checkpoint is missing; trust use remains blocked".into(),
+                    Some(project_id.into()),
+                    Some(canonical_path),
+                    Some(locator_digest),
+                );
+            }
+            let mut status = missing_protected_checkpoint_status(conn, project_id);
+            status.canonical_codebase_path = Some(canonical_path);
+            status.locator_digest = Some(locator_digest);
+            return status;
         }
         Err(error) => {
             return protected_checkpoint_error(
@@ -1818,7 +2118,22 @@ fn protected_checkpoint_status(
             )
         }
     };
-    assess_protected_trust_checkpoint(conn, project_id, &checkpoint)
+    if identity_binding.is_none() {
+        let mut status = assess_protected_trust_checkpoint(conn, project_id, &checkpoint);
+        status.status = "identity_unbound".into();
+        status.canonical_codebase_path = Some(canonical_path);
+        status.locator_digest = Some(locator_digest);
+        status.diagnostics = vec![
+            "The trust checkpoint predates protected project identity binding; review and reseal before trust use"
+                .into(),
+        ];
+        return status;
+    }
+    let mut status = assess_protected_trust_checkpoint(conn, project_id, &checkpoint);
+    status.protected_project_id = Some(project_id.into());
+    status.canonical_codebase_path = Some(canonical_path);
+    status.locator_digest = Some(locator_digest);
+    status
 }
 
 fn missing_protected_checkpoint_status(
@@ -1841,6 +2156,9 @@ fn missing_protected_checkpoint_status(
             recovery_authority_count: 0,
             import_receipt_count: 0,
             receipt_scope_count: 0,
+            protected_project_id: None,
+            canonical_codebase_path: None,
+            locator_digest: None,
             diagnostics: vec![
                 "No protected checkpoint exists; only local consistency is available".into(),
             ],
@@ -1967,6 +2285,9 @@ fn assess_protected_trust_checkpoint(
         recovery_authority_count: checkpoint.recovery_authority_count,
         import_receipt_count: checkpoint.import_receipt_count,
         receipt_scope_count: checkpoint.receipt_scopes.len(),
+        protected_project_id: Some(checkpoint.project_id.clone()),
+        canonical_codebase_path: None,
+        locator_digest: None,
         diagnostics,
     };
     let valid_digest =
@@ -3167,6 +3488,138 @@ mod tests {
     }
 
     #[test]
+    fn fresh_device_recovery_never_inherits_keychain_or_package_authority() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        schema::run_migrations(&conn).unwrap();
+        let source = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Source device".into(),
+                codebase_path: "/tmp/cross-device-source".into(),
+            },
+        )
+        .unwrap();
+        let destination = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Fresh destination device".into(),
+                codebase_path: "/tmp/cross-device-destination".into(),
+            },
+        )
+        .unwrap();
+        let recovered_fingerprint = "9".repeat(64);
+        upsert_signer_trust(
+            &conn,
+            &source.id,
+            &recovered_fingerprint,
+            "Recovered release signer",
+            "trusted",
+            "source-device operator record",
+        )
+        .unwrap();
+        let history = verify_trust_history_integrity(&conn, &source.id);
+        let event = conn
+            .query_row(
+                "SELECT id, key_fingerprint, signer_identity, status, provenance, recorded_at,
+                        previous_digest, event_digest
+                 FROM signer_trust_history WHERE project_id = ?1",
+                [&source.id],
+                |row| {
+                    Ok(PortableTrustHistoryEvent {
+                        id: row.get(0)?,
+                        key_fingerprint: row.get(1)?,
+                        signer_identity: row.get(2)?,
+                        status: row.get(3)?,
+                        provenance: row.get(4)?,
+                        recorded_at: row.get(5)?,
+                        previous_digest: row.get(6)?,
+                        event_digest: row.get(7)?,
+                    })
+                },
+            )
+            .unwrap();
+        let recovery_key = SigningKey::from_bytes(&[29_u8; 32]);
+        let recovery_fingerprint = sha256_hex(&recovery_key.verifying_key().to_bytes());
+        let package = export_signed_trust_policy(
+            TrustPolicyPayload {
+                schema: TRUST_POLICY_SCHEMA.into(),
+                source_project_id: source.id,
+                source_project_name: source.name,
+                exported_at: Utc::now().to_rfc3339(),
+                source_history_head_digest: history.head_digest.unwrap(),
+                source_history_event_count: history.event_count,
+                proof_base_head_digest: String::new(),
+                proof_base_event_count: 0,
+                history_proof: vec![event],
+                policies: vec![PortableSignerPolicy {
+                    key_fingerprint: recovered_fingerprint.clone(),
+                    signer_identity: "Recovered release signer".into(),
+                    status: "trusted".into(),
+                    provenance: "source-device operator record".into(),
+                }],
+            },
+            "Portable recovery signer",
+            &recovery_key,
+        )
+        .unwrap();
+        let verification = verify_trust_policy(&package);
+        assert_eq!(verification.status, "valid_untrusted");
+        let bundle: SignedTrustPolicyBundle = serde_json::from_str(&package).unwrap();
+        let destination_revision = destination_policy_revision(&conn, &destination.id).unwrap();
+        let unauthorized = import_authorized_trust_policy(
+            &conn,
+            &destination.id,
+            &bundle,
+            &recovery_fingerprint,
+            verification.payload_sha256.as_deref().unwrap(),
+            &destination_revision,
+            std::slice::from_ref(&recovered_fingerprint),
+            "package presented on fresh device",
+        );
+        assert!(unauthorized
+            .unwrap_err()
+            .to_string()
+            .contains("not an authorized recovery authority"));
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM signer_trust WHERE project_id = ?1",
+                [&destination.id],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+            0
+        );
+
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO recovery_authorities
+             (project_id, key_fingerprint, signer_identity, status, provenance, created_at, updated_at)
+             VALUES (?1, ?2, 'Portable recovery signer', 'authorized',
+                     'independent destination enrollment REC-17', ?3, ?3)",
+            rusqlite::params![destination.id, recovery_fingerprint, now],
+        )
+        .unwrap();
+        let imported = import_authorized_trust_policy(
+            &conn,
+            &destination.id,
+            &bundle,
+            &recovery_fingerprint,
+            verification.payload_sha256.as_deref().unwrap(),
+            &destination_revision,
+            std::slice::from_ref(&recovered_fingerprint),
+            "matched independent destination recovery record REC-17",
+        )
+        .unwrap();
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0].status, "trusted");
+        assert!(imported[0]
+            .provenance
+            .contains("recovered from signed policy"));
+        assert!(imported[0].provenance.contains("independent destination"));
+    }
+
+    #[test]
     fn signer_trust_is_project_scoped_and_history_is_append_only() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
@@ -4028,5 +4481,60 @@ mod tests {
         let missing = missing_protected_checkpoint_status(&conn, &project.id);
         assert_eq!(missing.status, "rollback_or_deletion");
         assert!(missing.diagnostics[0].contains("trust use remains blocked"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn protected_project_identity_blocks_database_replacement_with_new_project_id() {
+        let root = std::env::temp_dir().join(format!(
+            "speccompanion-protected-identity-{}",
+            Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        schema::run_migrations(&conn).unwrap();
+        let original = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Original protected project".into(),
+                codebase_path: root.to_string_lossy().to_string(),
+            },
+        )
+        .unwrap();
+        let (canonical_path, locator_digest) =
+            project_identity_locator(&conn, &original.id).unwrap();
+        let binding = ProtectedProjectIdentityBinding {
+            schema: PROJECT_IDENTITY_SCHEMA.into(),
+            project_id: original.id.clone(),
+            canonical_codebase_path: canonical_path,
+            locator_digest: locator_digest.clone(),
+            bound_at: Utc::now().to_rfc3339(),
+            operator_note: "original project identity reviewed".into(),
+        };
+        let entry = keyring::Entry::new(PROJECT_IDENTITY_KEYRING_SERVICE, &locator_digest).unwrap();
+        entry
+            .set_secret(&serde_json::to_vec(&binding).unwrap())
+            .unwrap();
+
+        queries::delete_project(&conn, &original.id).unwrap();
+        let replacement = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Attacker-controlled replacement".into(),
+                codebase_path: root.to_string_lossy().to_string(),
+            },
+        )
+        .unwrap();
+        let status = protected_checkpoint_status(&conn, &replacement.id);
+        assert_eq!(status.status, "project_identity_mismatch");
+        assert_eq!(
+            status.protected_project_id.as_deref(),
+            Some(original.id.as_str())
+        );
+        assert!(ensure_protected_checkpoint_allows_trust_use(&conn, &replacement.id).is_err());
+
+        entry.delete_credential().unwrap();
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -1,4 +1,7 @@
 {
-  "buildMs": 2741,
-  "capturedAt": "2026-04-12T09:47:53.521Z"
+  "buildMs": 4395,
+  "samplesMs": [4395, 6207, 2823],
+  "aggregation": "median",
+  "capturedAt": "2026-07-14T08:05:30.847Z",
+  "command": "npm_execpath run build"
 }

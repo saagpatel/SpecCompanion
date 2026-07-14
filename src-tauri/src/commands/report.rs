@@ -3,6 +3,7 @@ use crate::db::Database;
 use crate::errors::AppError;
 use crate::models::report::{AlignmentReport, AlignmentReportWithEvidence};
 use crate::services::alignment;
+use crate::utils::lowercase_hex;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
@@ -2850,7 +2851,7 @@ fn trust_history_digest(fields: &[&str]) -> String {
         hasher.update((field.len() as u64).to_be_bytes());
         hasher.update(field.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    lowercase_hex(hasher.finalize())
 }
 
 fn append_trust_history(
@@ -3323,7 +3324,7 @@ fn verify_evidence_bundle_at(
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    lowercase_hex(Sha256::digest(bytes))
 }
 
 fn escape_csv(s: &str) -> String {
@@ -3347,6 +3348,23 @@ mod tests {
     use crate::db::{queries, schema};
     use crate::models::project::CreateProjectRequest;
     use crate::models::report::AlignmentReport;
+
+    #[test]
+    fn persisted_trust_history_digest_matches_sha2_0_10_golden() {
+        assert_eq!(
+            trust_history_digest(&[
+                "",
+                "event",
+                "project",
+                "fingerprint",
+                "identity",
+                "trusted",
+                "operator approval",
+                "2026-07-11T00:00:00Z",
+            ]),
+            "99d411b4ea9baf8ec4daa42bbeb4a20903e317abc7d4d11637dac59547018c70"
+        );
+    }
 
     fn report() -> AlignmentReportWithEvidence {
         AlignmentReportWithEvidence {

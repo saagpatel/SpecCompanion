@@ -5,7 +5,7 @@ description = "A desktop app for managing technical specs and validating code al
 authors = ["you"]
 license = "MIT"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.95"
 
 [lib]
 name = "spec_companion_lib"

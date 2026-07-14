@@ -7,7 +7,7 @@ use crate::utils::lowercase_hex;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use rand_core::OsRng;
+use getrandom::{rand_core::UnwrapErr, SysRng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -863,6 +863,10 @@ fn rotate_signer_trust_records(
     ])
 }
 
+fn generate_signing_key() -> SigningKey {
+    SigningKey::generate(&mut UnwrapErr(SysRng))
+}
+
 #[tauri::command]
 pub fn create_signing_identity(signer_identity: String) -> Result<SigningIdentityInfo, AppError> {
     let identity = signer_identity.trim();
@@ -871,7 +875,7 @@ pub fn create_signing_identity(signer_identity: String) -> Result<SigningIdentit
             "Signer identity must be between 1 and 120 characters".into(),
         ));
     }
-    let key = SigningKey::generate(&mut OsRng);
+    let key = generate_signing_key();
     let entry = keyring::Entry::new(SIGNING_KEYRING_SERVICE, identity)
         .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?;
     match entry.get_secret() {
@@ -3348,6 +3352,15 @@ mod tests {
     use crate::db::{queries, schema};
     use crate::models::project::CreateProjectRequest;
     use crate::models::report::AlignmentReport;
+
+    #[test]
+    fn signing_key_generation_uses_compatible_system_rng() {
+        let key = generate_signing_key();
+        let message = b"spec-companion signing identity compatibility";
+        let signature = key.sign(message);
+
+        assert!(key.verifying_key().verify(message, &signature).is_ok());
+    }
 
     #[test]
     fn persisted_trust_history_digest_matches_sha2_0_10_golden() {

@@ -23,6 +23,8 @@ import {
   useTrustAnchorAdvancementIntegrity,
   useRecoveryAuthorities,
   useSetRecoveryAuthority,
+  useProtectedTrustCheckpoint,
+  useSealProtectedTrustCheckpoint,
 } from "../hooks/useReports";
 import { CoverageGauge } from "../components/report/CoverageGauge";
 import { AlignmentChart } from "../components/report/AlignmentChart";
@@ -60,10 +62,21 @@ const evidenceStatusLabel = (status: string) =>
     unsupported: "Unsupported evidence contract",
   })[status] ?? status;
 
+const protectedCheckpointStatusLabel = (status: string) =>
+  ({
+    not_configured: "Not configured; local consistency only",
+    protected_match: "Protected state matches",
+    changed_since_checkpoint: "Changed since protected checkpoint",
+    rollback_or_deletion: "Rollback or deletion detected",
+    mismatch: "Protected prefix mismatch",
+    local_invalid: "Local consistency invalid",
+    unknown: "Protected status unknown",
+  })[status] ?? status;
+
 export function Reports() {
   const { projectId } = useParams<{ projectId: string }>();
   const { data: project } = useProject(projectId);
-  const { data: reports, isError: reportsError } = useReports(projectId);
+  const { data: reports, isError: reportsError, error: reportsErrorDetail } = useReports(projectId);
   const generateReport = useGenerateAlignmentReport(projectId ?? "");
   const exportReport = useExportReport();
   const verifyBundle = useVerifyEvidenceBundle(projectId);
@@ -97,7 +110,14 @@ export function Reports() {
   const trustAnchorAdvancements = useTrustAnchorAdvancements(projectId);
   const exportTrustAnchorAdvancements = useExportTrustAnchorAdvancements();
   const trustAnchorAdvancementIntegrity = useTrustAnchorAdvancementIntegrity(projectId);
+  const protectedCheckpoint = useProtectedTrustCheckpoint(projectId);
+  const sealProtectedCheckpoint = useSealProtectedTrustCheckpoint(projectId ?? "");
+  const [checkpointReviewNote, setCheckpointReviewNote] = useState("");
+  const [checkpointReviewed, setCheckpointReviewed] = useState(false);
   const [selectedReportId, setSelectedReportId] = useState<string | undefined>();
+  const protectedTrustUseAllowed =
+    protectedCheckpoint.data &&
+    ["not_configured", "protected_match"].includes(protectedCheckpoint.data.status);
 
   const {
     data: report,
@@ -173,7 +193,7 @@ export function Reports() {
         <div className="border-danger/30 bg-danger/5 text-danger mb-4 rounded-lg border p-4 text-sm">
           {generateReport.isError
             ? `Failed to generate report: ${String(generateReport.error)}`
-            : `Failed to load reports.`}
+            : `Failed to load reports: ${String(reportsErrorDetail)}`}
         </div>
       )}
 
@@ -307,6 +327,122 @@ export function Reports() {
           locally consistent digest chain. This detects accidental or unrecomputed changes, not a
           database attacker who can rewrite the complete chain.
         </p>
+        <div className="border-border mt-4 rounded-lg border p-3">
+          <h4 className="text-sm font-medium">macOS Keychain protected checkpoint</h4>
+          <p className="text-text-muted mt-1 text-xs">
+            An explicit seal anchors the reviewed trust-history head, recovery-authority state,
+            recovery-import receipts, and checkpoint-receipt scopes outside SQLite. It can detect a
+            database-only rollback, deletion, or replacement of sealed state. It does not prove
+            package authorship, organizational authority, trusted time, or safety after Keychain
+            compromise.
+          </p>
+          {protectedCheckpoint.isLoading && (
+            <p role="status" className="text-text-muted mt-2 text-xs">
+              Checking the protected checkpoint…
+            </p>
+          )}
+          {protectedCheckpoint.isError && (
+            <p role="alert" className="text-danger mt-2 text-xs">
+              Protected checkpoint status is unknown. Protected trust must not be assumed.{" "}
+              {String(protectedCheckpoint.error)}
+            </p>
+          )}
+          {protectedCheckpoint.data && (
+            <div
+              role="status"
+              aria-label={`Protected checkpoint: ${protectedCheckpointStatusLabel(
+                protectedCheckpoint.data.status,
+              )}. ${protectedCheckpoint.data.diagnostics.join(" ")}`}
+              className={`mt-2 text-xs ${
+                ["rollback_or_deletion", "mismatch", "local_invalid", "unknown"].includes(
+                  protectedCheckpoint.data.status,
+                )
+                  ? "text-danger"
+                  : protectedCheckpoint.data.status === "protected_match"
+                    ? "text-success"
+                    : "text-warning"
+              }`}
+            >
+              <p>
+                Protected checkpoint:{" "}
+                <strong>{protectedCheckpointStatusLabel(protectedCheckpoint.data.status)}</strong>.
+              </p>
+              <p>{protectedCheckpoint.data.diagnostics.join(" ")}</p>
+              {protectedCheckpoint.data.sealed_at && (
+                <p>
+                  Sealed {new Date(protectedCheckpoint.data.sealed_at).toLocaleString()} after
+                  review: {protectedCheckpoint.data.operator_note}
+                </p>
+              )}
+              <p>
+                Sealed coverage: {protectedCheckpoint.data.trust_history_event_count} trust
+                decisions, {protectedCheckpoint.data.recovery_authority_count} recovery authorities,{" "}
+                {protectedCheckpoint.data.import_receipt_count} imports, and{" "}
+                {protectedCheckpoint.data.receipt_scope_count} receipt scopes.
+              </p>
+            </div>
+          )}
+          <label htmlFor="checkpoint-review-note" className="mt-3 block text-xs">
+            Protected checkpoint review note
+          </label>
+          <input
+            id="checkpoint-review-note"
+            value={checkpointReviewNote}
+            onChange={(event) => setCheckpointReviewNote(event.target.value)}
+            maxLength={500}
+            placeholder="What independent records did you review before sealing?"
+            className="bg-surface border-border mt-1 w-full rounded border px-3 py-2 text-sm"
+          />
+          <label className="mt-2 flex items-start gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={checkpointReviewed}
+              onChange={(event) => setCheckpointReviewed(event.target.checked)}
+            />
+            <span>
+              I reviewed the current trust decisions, recovery authorities, and receipt state. I
+              understand this seal protects only this reviewed state.
+            </span>
+          </label>
+          <button
+            type="button"
+            disabled={
+              !checkpointReviewNote.trim() ||
+              !checkpointReviewed ||
+              sealProtectedCheckpoint.isPending ||
+              !protectedCheckpoint.data ||
+              ["rollback_or_deletion", "mismatch", "local_invalid", "unknown"].includes(
+                protectedCheckpoint.data.status,
+              )
+            }
+            aria-describedby="protected-checkpoint-help"
+            onClick={() =>
+              sealProtectedCheckpoint.mutate(checkpointReviewNote, {
+                onSuccess: () => {
+                  setCheckpointReviewNote("");
+                  setCheckpointReviewed(false);
+                },
+              })
+            }
+            className="text-primary-light mt-2 text-sm hover:underline disabled:opacity-50"
+          >
+            Seal reviewed state in macOS Keychain
+          </button>
+          <p id="protected-checkpoint-help" className="text-text-muted mt-1 text-xs">
+            Sealing is blocked until review is confirmed. A detected rollback, deletion, invalid
+            local chain, or protected-prefix mismatch cannot be overwritten from this screen.
+          </p>
+          {sealProtectedCheckpoint.isError && (
+            <p role="alert" className="text-danger mt-2 text-xs">
+              Protected checkpoint was not sealed. Existing Keychain state was preserved.
+            </p>
+          )}
+          {sealProtectedCheckpoint.isSuccess && (
+            <p role="status" className="text-success mt-2 text-xs">
+              Reviewed trust state sealed in macOS Keychain.
+            </p>
+          )}
+        </div>
         {(trustPolicies.isLoading || trustHistory.isLoading || trustHistoryIntegrity.isLoading) && (
           <p role="status" className="text-text-muted mt-3 text-sm">
             Loading signer trust…
@@ -505,7 +641,9 @@ export function Reports() {
           <h4 className="text-sm font-medium">Portable recovery policy</h4>
           <p className="text-text-muted mt-1 text-xs">
             Exports are signed. A destination-enrolled recovery authority is required before a
-            package can change trust. Signature validity alone never grants that authority.
+            package can change trust. Signature validity alone never grants that authority. When a
+            protected checkpoint exists, exports, recovery imports, and checkpoint advancement are
+            blocked until current state matches a reviewed Keychain seal.
           </p>
           <label htmlFor="policy-signer-identity" className="mt-2 block text-xs">
             Keychain signing identity
@@ -521,6 +659,7 @@ export function Reports() {
             disabled={
               !policySignerIdentity.trim() ||
               !trustPolicies.data?.length ||
+              !protectedTrustUseAllowed ||
               exportTrustPolicy.isPending
             }
             onClick={() =>
@@ -732,6 +871,7 @@ export function Reports() {
                     verifyTrustPolicy.data.recovery_authority_status !== "authorized" ||
                     !verifyTrustPolicy.data.destination_revision ||
                     verifyTrustPolicy.data.replay_status === "already_imported" ||
+                    !protectedTrustUseAllowed ||
                     verifyTrustPolicy.data.conflicts.some(
                       (conflict) =>
                         conflict.action !== "preserve" &&
@@ -761,6 +901,7 @@ export function Reports() {
                       recoveryFingerprint.trim().toLowerCase() !==
                         verifyTrustPolicy.data.key_fingerprint.toLowerCase() ||
                       verifyTrustPolicy.data.recovery_authority_status !== "authorized" ||
+                      !protectedTrustUseAllowed ||
                       !recoveryProvenance.trim() ||
                       advanceTrustAnchor.isPending
                     }

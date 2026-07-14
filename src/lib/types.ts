@@ -303,6 +303,25 @@ export interface TrustAnchorAdvancementIntegrity {
   diagnostics: string[];
 }
 
+export interface ProtectedTrustCheckpointStatus {
+  status:
+    | "not_configured"
+    | "protected_match"
+    | "changed_since_checkpoint"
+    | "rollback_or_deletion"
+    | "mismatch"
+    | "local_invalid"
+    | "unknown";
+  storage: "os_keychain";
+  sealed_at?: string;
+  operator_note?: string;
+  trust_history_event_count: number;
+  recovery_authority_count: number;
+  import_receipt_count: number;
+  receipt_scope_count: number;
+  diagnostics: string[];
+}
+
 export interface SigningIdentityInfo {
   signer_identity: string;
   key_fingerprint: string;

@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-const CURRENT_VERSION: i32 = 10;
+const CURRENT_VERSION: i32 = 11;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -54,6 +54,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 10 {
             migrate_v10(&tx)?;
         }
+        if version < 11 {
+            migrate_v11(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -63,6 +66,18 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+fn migrate_v11(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE protected_trust_checkpoint_configuration (
+            project_id TEXT PRIMARY KEY NOT NULL,
+            configured_at TEXT NOT NULL,
+            keychain_service TEXT NOT NULL,
+            checkpoint_schema TEXT NOT NULL,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        );",
+    )
 }
 
 fn migrate_v10(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -487,6 +502,8 @@ mod tests {
             .expect("destination recovery authorities");
         conn.prepare("SELECT destination_revision_before, destination_revision_after FROM trust_policy_imports")
             .expect("replay and destination revision ledger");
+        conn.prepare("SELECT configured_at, keychain_service, checkpoint_schema FROM protected_trust_checkpoint_configuration")
+            .expect("protected checkpoint configuration marker");
     }
 
     #[test]
@@ -557,7 +574,7 @@ mod tests {
         future
             .execute_batch(
                 "CREATE TABLE schema_version (version INTEGER NOT NULL);
-                 INSERT INTO schema_version VALUES (11);",
+                 INSERT INTO schema_version VALUES (12);",
             )
             .expect("future version");
         assert!(run_migrations(&future).is_err());
@@ -566,7 +583,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
 
         let interrupted = Connection::open_in_memory().expect("interrupted database");
         interrupted

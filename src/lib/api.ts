@@ -20,6 +20,7 @@ import type {
   TrustPolicyVerification,
   TrustAnchorAdvancement,
   TrustAnchorAdvancementIntegrity,
+  ProtectedTrustCheckpointStatus,
   AppSettings,
   EvidenceRecord,
   LinkRepositoryTestRequest,
@@ -40,6 +41,7 @@ interface MockState {
   signerTrustHistory: SignerTrustHistoryRecord[];
   recoveryAuthorities: RecoveryAuthorityRecord[];
   trustAnchorAdvancements: TrustAnchorAdvancement[];
+  protectedTrustCheckpoints: Record<string, ProtectedTrustCheckpointStatus>;
   settings: AppSettings;
 }
 
@@ -54,6 +56,7 @@ const mockState: MockState = {
   signerTrustHistory: [],
   recoveryAuthorities: [],
   trustAnchorAdvancements: [],
+  protectedTrustCheckpoints: {},
   settings: {
     api_key: "",
     default_framework: "jest",
@@ -63,6 +66,17 @@ const mockState: MockState = {
     python_environments: {},
   },
 };
+
+function markProtectedCheckpointChanged(projectId: string) {
+  const checkpoint = mockState.protectedTrustCheckpoints[projectId];
+  if (checkpoint?.status === "protected_match") {
+    mockState.protectedTrustCheckpoints[projectId] = {
+      ...checkpoint,
+      status: "changed_since_checkpoint",
+      diagnostics: ["Current trust state changed after the protected checkpoint"],
+    };
+  }
+}
 
 let mockId = 0;
 
@@ -604,6 +618,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           item.project_id !== record.project_id || item.key_fingerprint !== record.key_fingerprint,
       );
       mockState.recoveryAuthorities.push(record);
+      markProtectedCheckpointChanged(record.project_id);
       return record as T;
     }
     case "list_signer_trust_history":
@@ -642,6 +657,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         previous_digest: "",
         event_digest: "preview-digest",
       });
+      markProtectedCheckpointChanged(record.project_id);
       return record as T;
     }
     case "rotate_signer_trust": {
@@ -679,6 +695,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
           event_digest: `preview-digest-${record.key_fingerprint}`,
         });
       }
+      markProtectedCheckpointChanged(String(args.project_id));
       return updates as T;
     }
     case "export_signer_trust_policy":
@@ -767,6 +784,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         previous_digest: "preview-digest",
         event_digest: "preview-recovery-digest",
       });
+      markProtectedCheckpointChanged(String(args.project_id));
       return [recovered] as T;
     }
     case "advance_trust_anchor_witness": {
@@ -789,6 +807,7 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         receipt_digest: "d".repeat(64),
       };
       mockState.trustAnchorAdvancements.push(advancement);
+      markProtectedCheckpointChanged(String(args.project_id));
       return advancement as T;
     }
     case "list_trust_anchor_advancements":
@@ -828,13 +847,58 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
         diagnostics: [],
       } as T;
     }
+    case "get_protected_trust_checkpoint_status":
+      return (mockState.protectedTrustCheckpoints[String(args.project_id)] ?? {
+        status: "not_configured",
+        storage: "os_keychain",
+        trust_history_event_count: 0,
+        recovery_authority_count: 0,
+        import_receipt_count: 0,
+        receipt_scope_count: 0,
+        diagnostics: ["No protected checkpoint exists; only local consistency is available"],
+      }) as T;
+    case "seal_protected_trust_checkpoint": {
+      const projectId = String(args.project_id);
+      const checkpoint: ProtectedTrustCheckpointStatus = {
+        status: "protected_match",
+        storage: "os_keychain",
+        sealed_at: now(),
+        operator_note: String(args.operator_note),
+        trust_history_event_count: mockState.signerTrustHistory.filter(
+          (event) => event.project_id === projectId,
+        ).length,
+        recovery_authority_count: mockState.recoveryAuthorities.filter(
+          (authority) => authority.project_id === projectId,
+        ).length,
+        import_receipt_count: mockState.signerTrust.filter(
+          (policy) => policy.project_id === projectId && policy.provenance.startsWith("recovered:"),
+        ).length,
+        receipt_scope_count: mockState.trustAnchorAdvancements.some(
+          (receipt) => receipt.project_id === projectId,
+        )
+          ? 1
+          : 0,
+        diagnostics: ["Current trust state matches the macOS Keychain checkpoint"],
+      };
+      mockState.protectedTrustCheckpoints[projectId] = checkpoint;
+      return checkpoint as T;
+    }
     default:
       throw new Error(`Unsupported browser preview command: ${command}`);
   }
 }
 
 function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
-  return isTauriRuntime() ? tauriInvoke<T>(command, args) : mockInvoke<T>(command, args);
+  if (!isTauriRuntime()) return mockInvoke<T>(command, args);
+  const tauriArgs = args
+    ? Object.fromEntries(
+        Object.entries(args).map(([key, value]) => [
+          key.replace(/_([a-z])/g, (_match, letter: string) => letter.toUpperCase()),
+          value,
+        ]),
+      )
+    : undefined;
+  return tauriInvoke<T>(command, tauriArgs);
 }
 
 // Project commands
@@ -1049,6 +1113,17 @@ export const exportTrustAnchorAdvancements = (projectId: string) =>
 export const verifyTrustAnchorAdvancements = (projectId: string) =>
   invoke<TrustAnchorAdvancementIntegrity>("verify_trust_anchor_advancements", {
     project_id: projectId,
+  });
+
+export const getProtectedTrustCheckpointStatus = (projectId: string) =>
+  invoke<ProtectedTrustCheckpointStatus>("get_protected_trust_checkpoint_status", {
+    project_id: projectId,
+  });
+
+export const sealProtectedTrustCheckpoint = (projectId: string, operatorNote: string) =>
+  invoke<ProtectedTrustCheckpointStatus>("seal_protected_trust_checkpoint", {
+    project_id: projectId,
+    operator_note: operatorNote,
   });
 
 export const createSigningIdentity = (signerIdentity: string) =>

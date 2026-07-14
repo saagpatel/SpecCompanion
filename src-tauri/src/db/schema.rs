@@ -1,3 +1,4 @@
+use crate::utils::lowercase_hex;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
@@ -132,7 +133,7 @@ fn advancement_receipt_digest(fields: &[&str]) -> String {
         hasher.update((field.len() as u64).to_be_bytes());
         hasher.update(field.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    lowercase_hex(hasher.finalize())
 }
 
 fn migrate_v9(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -321,7 +322,7 @@ fn history_digest(
         hasher.update((field.len() as u64).to_be_bytes());
         hasher.update(field.as_bytes());
     }
-    format!("{:x}", hasher.finalize())
+    lowercase_hex(hasher.finalize())
 }
 
 fn migrate_v5(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -485,6 +486,25 @@ fn migrate_v1(conn: &Connection) -> Result<(), rusqlite::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn persisted_advancement_receipt_digest_matches_sha2_0_10_golden() {
+        assert_eq!(
+            advancement_receipt_digest(&[
+                "project",
+                "source",
+                "signer",
+                "old",
+                "1",
+                "new",
+                "2",
+                "payload",
+                "verified locally",
+                "2026-07-11T00:00:00Z",
+            ]),
+            "ab7bede687f40bd2c46e75897df656cb46562cd6fa6fd47f28dc7666f9f8aa7d"
+        );
+    }
 
     #[test]
     fn fresh_database_reaches_evidence_schema() {

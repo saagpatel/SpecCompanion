@@ -1,5 +1,6 @@
 use crate::errors::AppError;
 use crate::models::test::ExecutionControls;
+use crate::utils::lowercase_hex;
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -666,7 +667,7 @@ fn python_environment_fingerprint(
             }
         }
     }
-    Ok(format!("sha256:{:x}", hasher.finalize()))
+    Ok(format!("sha256:{}", lowercase_hex(hasher.finalize())))
 }
 
 fn hash_file_into(hasher: &mut Sha256, path: &Path, limit: u64) -> Result<(), String> {

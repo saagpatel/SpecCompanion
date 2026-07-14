@@ -10,6 +10,18 @@ permissions:
   contents: read
 
 jobs:
+  msrv:
+    name: msrv
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: msrv-1.88.0
+      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+
   rust-tests:
     name: rust-tests
     runs-on: macos-latest

@@ -173,6 +173,26 @@ test("@a11y executable evidence workflow keeps placeholder tests UNKNOWN", async
   await expect(page.getByText(/platform=macos/i).first()).toBeVisible();
   await expect(page.getByText(/tautology is non-probative/i).first()).toBeVisible();
 
+  await expect(
+    page.getByText(/Protected checkpoint: Not configured; local consistency only/i),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Seal reviewed state in macOS Keychain" }),
+  ).toBeDisabled();
+  await page
+    .getByLabel("Protected checkpoint review note")
+    .fill("Reviewed recovery runbook SEC-51 and current trust decisions");
+  await page
+    .getByLabel(/I reviewed the current trust decisions, recovery authorities, and receipt state/i)
+    .check();
+  await page.getByRole("button", { name: "Seal reviewed state in macOS Keychain" }).click();
+  await expect(page.getByText(/Protected checkpoint: Protected state matches/i)).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: /Protected checkpoint: Protected state matches/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/sealed in macOS Keychain/i)).toBeVisible();
+  await expect(page.getByText(/does not prove package authorship/i)).toBeVisible();
+
   if (testInfo.project.name === "mobile") {
     const layout = await page.evaluate(() => {
       const main = document.querySelector("main");

@@ -64,6 +64,7 @@ export function useSetSignerTrust(projectId: string) {
       queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history-integrity", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["protected-trust-checkpoint", projectId] });
     },
   });
 }
@@ -100,6 +101,7 @@ export function useSetRecoveryAuthority(projectId: string) {
     }) => api.setRecoveryAuthority(projectId, fingerprint, identity, status, provenance),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["recovery-authorities", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["protected-trust-checkpoint", projectId] });
     },
   });
 }
@@ -145,6 +147,7 @@ export function useRotateSignerTrust(projectId: string) {
       queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history-integrity", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["protected-trust-checkpoint", projectId] });
     },
   });
 }
@@ -193,6 +196,7 @@ export function useImportSignerTrustPolicy(projectId: string) {
       queryClient.invalidateQueries({ queryKey: ["signer-trust", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history", projectId] });
       queryClient.invalidateQueries({ queryKey: ["signer-trust-history-integrity", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["protected-trust-checkpoint", projectId] });
     },
   });
 }
@@ -217,6 +221,7 @@ export function useAdvanceTrustAnchorWitness(projectId: string) {
       queryClient.invalidateQueries({
         queryKey: ["trust-anchor-advancement-integrity", projectId],
       });
+      queryClient.invalidateQueries({ queryKey: ["protected-trust-checkpoint", projectId] });
     },
   });
 }
@@ -234,6 +239,24 @@ export function useTrustAnchorAdvancementIntegrity(projectId: string | undefined
     queryKey: ["trust-anchor-advancement-integrity", projectId],
     queryFn: () => api.verifyTrustAnchorAdvancements(projectId!),
     enabled: !!projectId,
+  });
+}
+
+export function useProtectedTrustCheckpoint(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ["protected-trust-checkpoint", projectId],
+    queryFn: () => api.getProtectedTrustCheckpointStatus(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useSealProtectedTrustCheckpoint(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (operatorNote: string) => api.sealProtectedTrustCheckpoint(projectId, operatorNote),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["protected-trust-checkpoint", projectId] });
+    },
   });
 }
 

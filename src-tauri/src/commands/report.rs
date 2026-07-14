@@ -140,7 +140,7 @@ pub struct SigningIdentityInfo {
     pub storage: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PortableSignerPolicy {
     key_fingerprint: String,
@@ -242,6 +242,44 @@ pub struct TrustAnchorAdvancementIntegrity {
     pub diagnostics: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProtectedReceiptScope {
+    source_project_id: String,
+    package_signer_fingerprint: String,
+    receipt_count: usize,
+    receipt_digest: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProtectedTrustCheckpoint {
+    schema: String,
+    project_id: String,
+    sealed_at: String,
+    operator_note: String,
+    trust_history_event_count: usize,
+    trust_history_head_digest: String,
+    recovery_authority_count: usize,
+    recovery_authority_digest: String,
+    import_receipt_count: usize,
+    import_receipt_digest: String,
+    receipt_scopes: Vec<ProtectedReceiptScope>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProtectedTrustCheckpointStatus {
+    pub status: String,
+    pub storage: String,
+    pub sealed_at: Option<String>,
+    pub operator_note: Option<String>,
+    pub trust_history_event_count: usize,
+    pub recovery_authority_count: usize,
+    pub import_receipt_count: usize,
+    pub receipt_scope_count: usize,
+    pub diagnostics: Vec<String>,
+}
+
 #[derive(Serialize)]
 struct TrustAnchorAdvancementExport {
     schema: String,
@@ -268,6 +306,8 @@ pub struct TrustPolicyConflict {
 }
 
 const SIGNING_KEYRING_SERVICE: &str = "com.speccompanion.evidence-signing.v1";
+const TRUST_CHECKPOINT_KEYRING_SERVICE: &str = "com.speccompanion.trust-checkpoint.v1";
+const TRUST_CHECKPOINT_SCHEMA: &str = "speccompanion.protected-trust-checkpoint.v1";
 
 #[tauri::command]
 pub fn generate_alignment_report(
@@ -438,6 +478,20 @@ pub fn verify_evidence_bundle(
             result.diagnostics.extend(integrity.diagnostics);
             return result;
         }
+        let protected = protected_checkpoint_status(&conn, &project_id);
+        if !matches!(
+            protected.status.as_str(),
+            "not_configured" | "protected_match"
+        ) {
+            result.trust_status = "unknown".into();
+            result.trust_provenance = None;
+            result.diagnostics.push(format!(
+                "Project trust was ignored because protected checkpoint status is {}",
+                protected.status
+            ));
+            result.diagnostics.extend(protected.diagnostics);
+            return result;
+        }
         let policy = conn.query_row(
             "SELECT status, provenance FROM signer_trust WHERE project_id = ?1 AND key_fingerprint = ?2",
             rusqlite::params![project_id, fingerprint],
@@ -481,6 +535,7 @@ pub fn set_signer_trust(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
+    ensure_protected_checkpoint_not_compromised(&conn, &project_id)?;
     upsert_signer_trust(
         &conn,
         &project_id,
@@ -578,6 +633,7 @@ pub fn set_recovery_authority(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
+    ensure_protected_checkpoint_not_compromised(&conn, &project_id)?;
     let now = Utc::now().to_rfc3339();
     let fingerprint = key_fingerprint.to_lowercase();
     conn.execute(
@@ -708,6 +764,7 @@ pub fn rotate_signer_trust(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
+    ensure_protected_checkpoint_not_compromised(&conn, &project_id)?;
     rotate_signer_trust_records(
         &conn,
         &project_id,
@@ -867,6 +924,7 @@ pub fn export_signer_trust_policy(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     let project = queries::get_project(&conn, &project_id)?;
+    ensure_protected_checkpoint_allows_trust_use(&conn, &project_id)?;
     let history = verify_trust_history_integrity(&conn, &project_id);
     if history.status != "verified" {
         return Err(AppError::InvalidInput(format!(
@@ -1211,6 +1269,7 @@ pub fn import_signer_trust_policy(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
+    ensure_protected_checkpoint_allows_trust_use(&conn, &project_id)?;
     import_authorized_trust_policy(
         &conn,
         &project_id,
@@ -1344,6 +1403,7 @@ pub fn advance_trust_anchor_witness(
         .lock()
         .map_err(|error| AppError::General(error.to_string()))?;
     queries::get_project(&conn, &project_id)?;
+    ensure_protected_checkpoint_allows_trust_use(&conn, &project_id)?;
     let authority_status = conn
         .query_row(
             "SELECT status FROM recovery_authorities
@@ -1513,6 +1573,81 @@ pub fn verify_trust_anchor_advancements(
     verify_trust_anchor_advancement_integrity(&conn, &project_id)
 }
 
+#[tauri::command]
+pub fn get_protected_trust_checkpoint_status(
+    state: State<'_, Database>,
+    project_id: String,
+) -> ProtectedTrustCheckpointStatus {
+    let conn = match state.conn.lock() {
+        Ok(conn) => conn,
+        Err(error) => {
+            return protected_checkpoint_error(
+                "unknown",
+                format!("Protected checkpoint verification is unavailable: {error}"),
+            )
+        }
+    };
+    if queries::get_project(&conn, &project_id).is_err() {
+        return protected_checkpoint_error("unknown", "Destination project is unavailable".into());
+    }
+    protected_checkpoint_status(&conn, &project_id)
+}
+
+#[tauri::command]
+pub fn seal_protected_trust_checkpoint(
+    state: State<'_, Database>,
+    project_id: String,
+    operator_note: String,
+) -> Result<ProtectedTrustCheckpointStatus, AppError> {
+    let note = operator_note.trim();
+    if note.is_empty() || note.len() > 500 {
+        return Err(AppError::InvalidInput(
+            "A checkpoint review note between 1 and 500 characters is required".into(),
+        ));
+    }
+    let conn = state
+        .conn
+        .lock()
+        .map_err(|error| AppError::General(error.to_string()))?;
+    queries::get_project(&conn, &project_id)?;
+    let existing = protected_checkpoint_status(&conn, &project_id);
+    if matches!(
+        existing.status.as_str(),
+        "rollback_or_deletion" | "mismatch" | "local_invalid" | "unknown"
+    ) {
+        return Err(AppError::InvalidInput(format!(
+            "Protected checkpoint cannot be replaced while status is {}",
+            existing.status
+        )));
+    }
+    let checkpoint = build_protected_trust_checkpoint(&conn, &project_id, note)?;
+    let encoded = serde_json::to_vec(&checkpoint)?;
+    let entry = keyring::Entry::new(TRUST_CHECKPOINT_KEYRING_SERVICE, &project_id)
+        .map_err(|error| AppError::General(format!("Keychain unavailable: {error}")))?;
+    entry.set_secret(&encoded).map_err(|error| {
+        AppError::General(format!(
+            "Could not store protected trust checkpoint: {error}"
+        ))
+    })?;
+    conn.execute(
+        "INSERT INTO protected_trust_checkpoint_configuration
+         (project_id, configured_at, keychain_service, checkpoint_schema)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(project_id) DO NOTHING",
+        rusqlite::params![
+            project_id,
+            checkpoint.sealed_at,
+            TRUST_CHECKPOINT_KEYRING_SERVICE,
+            TRUST_CHECKPOINT_SCHEMA
+        ],
+    )?;
+    Ok(assess_protected_trust_checkpoint(
+        &conn,
+        &project_id,
+        &checkpoint,
+    ))
+}
+
 fn export_trust_anchor_advancement_receipts(
     conn: &rusqlite::Connection,
     project_id: &str,
@@ -1636,6 +1771,413 @@ fn verify_trust_anchor_advancement_integrity(
         scope_count,
         diagnostics: Vec::new(),
     })
+}
+
+fn protected_checkpoint_error(status: &str, diagnostic: String) -> ProtectedTrustCheckpointStatus {
+    ProtectedTrustCheckpointStatus {
+        status: status.into(),
+        storage: "os_keychain".into(),
+        sealed_at: None,
+        operator_note: None,
+        trust_history_event_count: 0,
+        recovery_authority_count: 0,
+        import_receipt_count: 0,
+        receipt_scope_count: 0,
+        diagnostics: vec![diagnostic],
+    }
+}
+
+fn protected_checkpoint_status(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> ProtectedTrustCheckpointStatus {
+    let entry = match keyring::Entry::new(TRUST_CHECKPOINT_KEYRING_SERVICE, project_id) {
+        Ok(entry) => entry,
+        Err(error) => {
+            return protected_checkpoint_error("unknown", format!("Keychain unavailable: {error}"))
+        }
+    };
+    let secret = match entry.get_secret() {
+        Ok(secret) => secret,
+        Err(keyring::Error::NoEntry) => {
+            return missing_protected_checkpoint_status(conn, project_id)
+        }
+        Err(error) => {
+            return protected_checkpoint_error(
+                "unknown",
+                format!("Protected checkpoint is unavailable: {error}"),
+            )
+        }
+    };
+    let checkpoint: ProtectedTrustCheckpoint = match serde_json::from_slice(&secret) {
+        Ok(checkpoint) => checkpoint,
+        Err(error) => {
+            return protected_checkpoint_error(
+                "mismatch",
+                format!("Protected checkpoint record is malformed: {error}"),
+            )
+        }
+    };
+    assess_protected_trust_checkpoint(conn, project_id, &checkpoint)
+}
+
+fn missing_protected_checkpoint_status(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> ProtectedTrustCheckpointStatus {
+    if protected_checkpoint_was_configured(conn, project_id) {
+        protected_checkpoint_error(
+            "rollback_or_deletion",
+            "The protected checkpoint was previously configured but its Keychain record is missing; trust use remains blocked"
+                .into(),
+        )
+    } else {
+        ProtectedTrustCheckpointStatus {
+            status: "not_configured".into(),
+            storage: "os_keychain".into(),
+            sealed_at: None,
+            operator_note: None,
+            trust_history_event_count: 0,
+            recovery_authority_count: 0,
+            import_receipt_count: 0,
+            receipt_scope_count: 0,
+            diagnostics: vec![
+                "No protected checkpoint exists; only local consistency is available".into(),
+            ],
+        }
+    }
+}
+
+fn protected_checkpoint_was_configured(conn: &rusqlite::Connection, project_id: &str) -> bool {
+    conn.query_row(
+        "SELECT 1 FROM protected_trust_checkpoint_configuration
+         WHERE project_id = ?1
+           AND keychain_service = ?2
+           AND checkpoint_schema = ?3",
+        rusqlite::params![
+            project_id,
+            TRUST_CHECKPOINT_KEYRING_SERVICE,
+            TRUST_CHECKPOINT_SCHEMA
+        ],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
+fn ensure_protected_checkpoint_allows_trust_use(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<(), AppError> {
+    let status = protected_checkpoint_status(conn, project_id);
+    if matches!(status.status.as_str(), "not_configured" | "protected_match") {
+        Ok(())
+    } else {
+        Err(AppError::InvalidInput(format!(
+            "Trust operation blocked because protected checkpoint status is {}; review and reseal locally consistent changes first",
+            status.status
+        )))
+    }
+}
+
+fn ensure_protected_checkpoint_not_compromised(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<(), AppError> {
+    let status = protected_checkpoint_status(conn, project_id);
+    if matches!(
+        status.status.as_str(),
+        "not_configured" | "protected_match" | "changed_since_checkpoint"
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::InvalidInput(format!(
+            "Trust mutation blocked because protected checkpoint status is {}",
+            status.status
+        )))
+    }
+}
+
+fn build_protected_trust_checkpoint(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    operator_note: &str,
+) -> Result<ProtectedTrustCheckpoint, AppError> {
+    let history = verify_trust_history_integrity(conn, project_id);
+    if history.status != "verified" {
+        return Err(AppError::InvalidInput(format!(
+            "Cannot seal protected checkpoint because trust history is {}",
+            history.status
+        )));
+    }
+    let receipt_integrity = verify_trust_anchor_advancement_integrity(conn, project_id)?;
+    if !matches!(receipt_integrity.status.as_str(), "verified" | "empty") {
+        return Err(AppError::InvalidInput(format!(
+            "Cannot seal protected checkpoint because receipt history is {}",
+            receipt_integrity.status
+        )));
+    }
+    let (recovery_authority_count, recovery_authority_digest) =
+        recovery_authority_state_digest(conn, project_id)?;
+    let (import_receipt_count, import_receipt_digest) =
+        import_receipt_state_digest(conn, project_id, None)?;
+    let receipts = list_trust_anchor_advancement_receipts(conn, project_id)?;
+    let mut receipt_scopes = Vec::<ProtectedReceiptScope>::new();
+    for receipt in receipts {
+        if let Some(scope) = receipt_scopes.iter_mut().find(|scope| {
+            scope.source_project_id == receipt.source_project_id
+                && scope.package_signer_fingerprint == receipt.package_signer_fingerprint
+        }) {
+            scope.receipt_count += 1;
+            scope.receipt_digest = receipt.receipt_digest;
+        } else {
+            receipt_scopes.push(ProtectedReceiptScope {
+                source_project_id: receipt.source_project_id,
+                package_signer_fingerprint: receipt.package_signer_fingerprint,
+                receipt_count: 1,
+                receipt_digest: receipt.receipt_digest,
+            });
+        }
+    }
+    Ok(ProtectedTrustCheckpoint {
+        schema: TRUST_CHECKPOINT_SCHEMA.into(),
+        project_id: project_id.into(),
+        sealed_at: Utc::now().to_rfc3339(),
+        operator_note: operator_note.into(),
+        trust_history_event_count: history.event_count,
+        trust_history_head_digest: history.head_digest.unwrap_or_default(),
+        recovery_authority_count,
+        recovery_authority_digest,
+        import_receipt_count,
+        import_receipt_digest,
+        receipt_scopes,
+    })
+}
+
+fn assess_protected_trust_checkpoint(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    checkpoint: &ProtectedTrustCheckpoint,
+) -> ProtectedTrustCheckpointStatus {
+    let base = |status: &str, diagnostics: Vec<String>| ProtectedTrustCheckpointStatus {
+        status: status.into(),
+        storage: "os_keychain".into(),
+        sealed_at: Some(checkpoint.sealed_at.clone()),
+        operator_note: Some(checkpoint.operator_note.clone()),
+        trust_history_event_count: checkpoint.trust_history_event_count,
+        recovery_authority_count: checkpoint.recovery_authority_count,
+        import_receipt_count: checkpoint.import_receipt_count,
+        receipt_scope_count: checkpoint.receipt_scopes.len(),
+        diagnostics,
+    };
+    let valid_digest =
+        |value: &str| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit());
+    let mut scopes = HashSet::new();
+    if checkpoint.schema != TRUST_CHECKPOINT_SCHEMA
+        || checkpoint.project_id != project_id
+        || checkpoint.operator_note.trim().is_empty()
+        || !valid_digest(&checkpoint.recovery_authority_digest)
+        || !valid_digest(&checkpoint.import_receipt_digest)
+        || (checkpoint.trust_history_event_count == 0
+            && !checkpoint.trust_history_head_digest.is_empty())
+        || (checkpoint.trust_history_event_count > 0
+            && !valid_digest(&checkpoint.trust_history_head_digest))
+        || checkpoint.receipt_scopes.iter().any(|scope| {
+            scope.receipt_count == 0
+                || !valid_digest(&scope.receipt_digest)
+                || !scopes.insert((
+                    scope.source_project_id.clone(),
+                    scope.package_signer_fingerprint.clone(),
+                ))
+        })
+    {
+        return base(
+            "mismatch",
+            vec!["Protected checkpoint contract is invalid".into()],
+        );
+    }
+    let history = verify_trust_history_integrity(conn, project_id);
+    let receipts = match verify_trust_anchor_advancement_integrity(conn, project_id) {
+        Ok(receipts) => receipts,
+        Err(error) => return base("unknown", vec![error.to_string()]),
+    };
+    if history.status != "verified" || !matches!(receipts.status.as_str(), "verified" | "empty") {
+        return base(
+            "local_invalid",
+            vec!["Local trust or receipt consistency is invalid".into()],
+        );
+    }
+    if history.event_count < checkpoint.trust_history_event_count {
+        return base(
+            "rollback_or_deletion",
+            vec!["Trust history is shorter than the protected checkpoint".into()],
+        );
+    }
+    if checkpoint.trust_history_event_count > 0 {
+        let protected_position =
+            i64::try_from(checkpoint.trust_history_event_count - 1).unwrap_or(i64::MAX);
+        let digest = conn.query_row(
+            "SELECT event_digest FROM signer_trust_history WHERE project_id = ?1
+             ORDER BY rowid LIMIT 1 OFFSET ?2",
+            rusqlite::params![project_id, protected_position],
+            |row| row.get::<_, String>(0),
+        );
+        if !matches!(digest, Ok(ref value) if value == &checkpoint.trust_history_head_digest) {
+            return base(
+                "mismatch",
+                vec!["Trust history no longer contains the protected chain head".into()],
+            );
+        }
+    }
+    let (authority_count, authority_digest) =
+        match recovery_authority_state_digest(conn, project_id) {
+            Ok(value) => value,
+            Err(error) => return base("unknown", vec![error.to_string()]),
+        };
+    if authority_count < checkpoint.recovery_authority_count {
+        return base(
+            "rollback_or_deletion",
+            vec!["Recovery-authority state is shorter than the protected checkpoint".into()],
+        );
+    }
+    let (import_count, _) = match import_receipt_state_digest(conn, project_id, None) {
+        Ok(value) => value,
+        Err(error) => return base("unknown", vec![error.to_string()]),
+    };
+    if import_count < checkpoint.import_receipt_count {
+        return base(
+            "rollback_or_deletion",
+            vec!["Recovery import receipts are shorter than the protected checkpoint".into()],
+        );
+    }
+    let (_, protected_import_prefix) = match import_receipt_state_digest(
+        conn,
+        project_id,
+        Some(checkpoint.import_receipt_count),
+    ) {
+        Ok(value) => value,
+        Err(error) => return base("unknown", vec![error.to_string()]),
+    };
+    if protected_import_prefix != checkpoint.import_receipt_digest {
+        return base(
+            "mismatch",
+            vec!["Recovery import receipt history no longer matches the protected prefix".into()],
+        );
+    }
+    let current_receipts = match list_trust_anchor_advancement_receipts(conn, project_id) {
+        Ok(receipts) => receipts,
+        Err(error) => return base("unknown", vec![error.to_string()]),
+    };
+    for protected_scope in &checkpoint.receipt_scopes {
+        let scoped = current_receipts
+            .iter()
+            .filter(|receipt| {
+                receipt.source_project_id == protected_scope.source_project_id
+                    && receipt.package_signer_fingerprint
+                        == protected_scope.package_signer_fingerprint
+            })
+            .collect::<Vec<_>>();
+        if scoped.len() < protected_scope.receipt_count {
+            return base(
+                "rollback_or_deletion",
+                vec!["A protected checkpoint-receipt scope is missing or shorter".into()],
+            );
+        }
+        if scoped[protected_scope.receipt_count - 1].receipt_digest
+            != protected_scope.receipt_digest
+        {
+            return base(
+                "mismatch",
+                vec!["A protected checkpoint-receipt prefix was replaced".into()],
+            );
+        }
+    }
+    let current = match build_protected_trust_checkpoint(conn, project_id, "comparison") {
+        Ok(current) => current,
+        Err(error) => return base("unknown", vec![error.to_string()]),
+    };
+    let exact = history.event_count == checkpoint.trust_history_event_count
+        && history.head_digest.as_deref().unwrap_or_default()
+            == checkpoint.trust_history_head_digest
+        && authority_count == checkpoint.recovery_authority_count
+        && authority_digest == checkpoint.recovery_authority_digest
+        && import_count == checkpoint.import_receipt_count
+        && current.receipt_scopes == checkpoint.receipt_scopes;
+    if exact {
+        base(
+            "protected_match",
+            vec!["Current trust state matches the macOS Keychain checkpoint".into()],
+        )
+    } else {
+        base(
+            "changed_since_checkpoint",
+            vec![
+                "Current locally consistent trust state changed after the protected checkpoint; review and reseal before treating it as protected"
+                    .into(),
+            ],
+        )
+    }
+}
+
+fn recovery_authority_state_digest(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<(usize, String), AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT key_fingerprint, signer_identity, status, provenance, created_at, updated_at
+         FROM recovery_authorities WHERE project_id = ?1 ORDER BY key_fingerprint",
+    )?;
+    let rows = stmt
+        .query_map([project_id], |row| {
+            Ok([
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+            ])
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut fields = vec!["recovery-authorities".to_string(), project_id.into()];
+    for row in &rows {
+        fields.extend(row.iter().cloned());
+    }
+    Ok((
+        rows.len(),
+        trust_history_digest(&fields.iter().map(String::as_str).collect::<Vec<_>>()),
+    ))
+}
+
+fn import_receipt_state_digest(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+    limit: Option<usize>,
+) -> Result<(usize, String), AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT payload_sha256, package_signer_fingerprint, destination_revision_before,
+                destination_revision_after, imported_at
+         FROM trust_policy_imports WHERE project_id = ?1 ORDER BY rowid",
+    )?;
+    let all_rows = stmt
+        .query_map([project_id], |row| {
+            Ok([
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ])
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let take = limit.unwrap_or(all_rows.len()).min(all_rows.len());
+    let mut fields = vec!["trust-policy-imports".to_string(), project_id.into()];
+    for row in all_rows.iter().take(take) {
+        fields.extend(row.iter().cloned());
+    }
+    Ok((
+        take,
+        trust_history_digest(&fields.iter().map(String::as_str).collect::<Vec<_>>()),
+    ))
 }
 
 fn load_signing_key(identity: &str) -> Result<SigningKey, AppError> {
@@ -3241,5 +3783,250 @@ mod tests {
         let projection = verify_trust_history_integrity(&conn, &project.id);
         assert_eq!(projection.status, "invalid");
         assert!(projection.diagnostics[0].contains("does not match history"));
+    }
+
+    #[test]
+    fn protected_checkpoint_detects_recomputed_history_and_complete_deletion() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        schema::run_migrations(&conn).unwrap();
+        let project = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Protected".into(),
+                codebase_path: "/tmp/protected".into(),
+            },
+        )
+        .unwrap();
+        let fingerprint = "d".repeat(64);
+        upsert_signer_trust(
+            &conn,
+            &project.id,
+            &fingerprint,
+            "Release",
+            "trusted",
+            "reviewed ceremony",
+        )
+        .unwrap();
+        let checkpoint =
+            build_protected_trust_checkpoint(&conn, &project.id, "review ticket SEC-51").unwrap();
+        assert_eq!(
+            assess_protected_trust_checkpoint(&conn, &project.id, &checkpoint).status,
+            "protected_match"
+        );
+
+        let (id, recorded_at): (String, String) = conn
+            .query_row(
+                "SELECT id, recorded_at FROM signer_trust_history WHERE project_id = ?1",
+                [&project.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        let forged_digest = trust_history_digest(&[
+            "",
+            &id,
+            &project.id,
+            &fingerprint,
+            "Release",
+            "trusted",
+            "database attacker rewrite",
+            &recorded_at,
+        ]);
+        conn.execute(
+            "UPDATE signer_trust_history SET provenance = ?1, event_digest = ?2
+             WHERE project_id = ?3",
+            rusqlite::params!["database attacker rewrite", forged_digest, &project.id],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE signer_trust SET provenance = 'database attacker rewrite'
+             WHERE project_id = ?1",
+            [&project.id],
+        )
+        .unwrap();
+        assert_eq!(
+            verify_trust_history_integrity(&conn, &project.id).status,
+            "verified"
+        );
+        let recomputed = assess_protected_trust_checkpoint(&conn, &project.id, &checkpoint);
+        assert_eq!(recomputed.status, "mismatch");
+        assert!(recomputed.diagnostics[0].contains("protected chain head"));
+
+        conn.execute(
+            "DELETE FROM signer_trust WHERE project_id = ?1",
+            [&project.id],
+        )
+        .unwrap();
+        conn.execute(
+            "DELETE FROM signer_trust_history WHERE project_id = ?1",
+            [&project.id],
+        )
+        .unwrap();
+        assert_eq!(
+            verify_trust_history_integrity(&conn, &project.id).status,
+            "verified"
+        );
+        let deleted = assess_protected_trust_checkpoint(&conn, &project.id, &checkpoint);
+        assert_eq!(deleted.status, "rollback_or_deletion");
+    }
+
+    #[test]
+    fn protected_checkpoint_marks_reviewable_forward_changes_without_claiming_protection() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        schema::run_migrations(&conn).unwrap();
+        let project = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Forward".into(),
+                codebase_path: "/tmp/forward".into(),
+            },
+        )
+        .unwrap();
+        let checkpoint =
+            build_protected_trust_checkpoint(&conn, &project.id, "empty baseline reviewed")
+                .unwrap();
+        upsert_signer_trust(
+            &conn,
+            &project.id,
+            &"e".repeat(64),
+            "Release",
+            "trusted",
+            "new reviewed decision",
+        )
+        .unwrap();
+        let changed = assess_protected_trust_checkpoint(&conn, &project.id, &checkpoint);
+        assert_eq!(changed.status, "changed_since_checkpoint");
+        assert!(changed.diagnostics[0].contains("review and reseal"));
+
+        let foreign = ProtectedTrustCheckpoint {
+            project_id: "different-project".into(),
+            ..checkpoint
+        };
+        assert_eq!(
+            assess_protected_trust_checkpoint(&conn, &project.id, &foreign).status,
+            "mismatch"
+        );
+    }
+
+    #[test]
+    fn protected_checkpoint_detects_recovery_authority_and_import_receipt_deletion() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        schema::run_migrations(&conn).unwrap();
+        let project = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Recovery protected".into(),
+                codebase_path: "/tmp/recovery-protected".into(),
+            },
+        )
+        .unwrap();
+        let now = Utc::now().to_rfc3339();
+        upsert_signer_trust(
+            &conn,
+            &project.id,
+            &"e".repeat(64),
+            "Release signer",
+            "trusted",
+            "reviewed trust decision",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO recovery_authorities
+             (project_id, key_fingerprint, signer_identity, status, provenance, created_at, updated_at)
+             VALUES (?1, ?2, 'Recovery signer', 'authorized', 'offline ceremony', ?3, ?3)",
+            rusqlite::params![project.id, "f".repeat(64), now],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO trust_policy_imports
+             (project_id, payload_sha256, package_signer_fingerprint,
+              destination_revision_before, destination_revision_after, imported_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                project.id,
+                "a".repeat(64),
+                "f".repeat(64),
+                "b".repeat(64),
+                "c".repeat(64),
+                now
+            ],
+        )
+        .unwrap();
+        let checkpoint =
+            build_protected_trust_checkpoint(&conn, &project.id, "recovery records reviewed")
+                .unwrap();
+        assert_eq!(
+            assess_protected_trust_checkpoint(&conn, &project.id, &checkpoint).status,
+            "protected_match"
+        );
+
+        conn.execute(
+            "DELETE FROM trust_policy_imports WHERE project_id = ?1",
+            [&project.id],
+        )
+        .unwrap();
+        assert_eq!(
+            assess_protected_trust_checkpoint(&conn, &project.id, &checkpoint).status,
+            "rollback_or_deletion"
+        );
+
+        conn.execute(
+            "INSERT INTO trust_policy_imports
+             (project_id, payload_sha256, package_signer_fingerprint,
+              destination_revision_before, destination_revision_after, imported_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                project.id,
+                "a".repeat(64),
+                "f".repeat(64),
+                "b".repeat(64),
+                "c".repeat(64),
+                now
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "DELETE FROM recovery_authorities WHERE project_id = ?1",
+            [&project.id],
+        )
+        .unwrap();
+        assert_eq!(
+            assess_protected_trust_checkpoint(&conn, &project.id, &checkpoint).status,
+            "rollback_or_deletion"
+        );
+    }
+
+    #[test]
+    fn protected_checkpoint_configuration_marker_prevents_silent_downgrade() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        schema::run_migrations(&conn).unwrap();
+        let project = queries::create_project(
+            &conn,
+            &CreateProjectRequest {
+                name: "Downgrade marker".into(),
+                codebase_path: "/tmp/downgrade-marker".into(),
+            },
+        )
+        .unwrap();
+        assert!(!protected_checkpoint_was_configured(&conn, &project.id));
+        conn.execute(
+            "INSERT INTO protected_trust_checkpoint_configuration
+             (project_id, configured_at, keychain_service, checkpoint_schema)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                project.id,
+                Utc::now().to_rfc3339(),
+                TRUST_CHECKPOINT_KEYRING_SERVICE,
+                TRUST_CHECKPOINT_SCHEMA
+            ],
+        )
+        .unwrap();
+        assert!(protected_checkpoint_was_configured(&conn, &project.id));
+        let missing = missing_protected_checkpoint_status(&conn, &project.id);
+        assert_eq!(missing.status, "rollback_or_deletion");
+        assert!(missing.diagnostics[0].contains("trust use remains blocked"));
     }
 }

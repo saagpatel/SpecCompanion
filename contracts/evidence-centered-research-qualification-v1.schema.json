@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "ClaimQualificationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "admissible_contradiction_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Admissible Contradiction Refs",
+          "type": "array"
+        },
+        "admissible_support_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Admissible Support Refs",
+          "type": "array"
+        },
+        "admissible_weakening_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Admissible Weakening Refs",
+          "type": "array"
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "excluded_evidence": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Excluded Evidence",
+          "type": "object"
+        },
+        "state": {
+          "enum": [
+            "supported",
+            "weakened",
+            "contested",
+            "contradicted",
+            "unknown"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id",
+        "state"
+      ],
+      "title": "ClaimQualificationV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/ClaimQualificationV1"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "package_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Package Digest",
+      "type": "string"
+    },
+    "protocol_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Protocol Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "evidence-centered.research-qualification.v1",
+      "default": "evidence-centered.research-qualification.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "strongest_supported_claim": {
+      "anyOf": [
+        {
+          "enum": [
+            "observation",
+            "inference",
+            "hypothesis",
+            "causal",
+            "decision"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Strongest Supported Claim"
+    },
+    "unknowns": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Unknowns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "package_digest",
+    "protocol_digest",
+    "claims",
+    "strongest_supported_claim"
+  ],
+  "title": "ResearchQualificationV1",
+  "type": "object"
+}

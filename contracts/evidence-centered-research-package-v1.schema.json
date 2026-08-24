@@ -1,0 +1,796 @@
+{
+  "$defs": {
+    "CausalIdentificationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "design": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Design"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "identified",
+            "not_identified",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "CausalIdentificationV1",
+      "type": "object"
+    },
+    "ClaimEvidenceLinkV1": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "minLength": 1,
+          "title": "Evidence Ref",
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "relationship": {
+          "enum": [
+            "supports",
+            "weakens",
+            "contradicts"
+          ],
+          "title": "Relationship",
+          "type": "string"
+        },
+        "requires_denominator": {
+          "default": false,
+          "title": "Requires Denominator",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_ref",
+        "relationship",
+        "rationale"
+      ],
+      "title": "ClaimEvidenceLinkV1",
+      "type": "object"
+    },
+    "DenominatorV1": {
+      "additionalProperties": false,
+      "properties": {
+        "missing_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missing Reason"
+        },
+        "unit": {
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "unit"
+      ],
+      "title": "DenominatorV1",
+      "type": "object"
+    },
+    "ProductExtensionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Artifact Digest",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "native_schema_version": {
+          "minLength": 1,
+          "title": "Native Schema Version",
+          "type": "string"
+        },
+        "product_id": {
+          "minLength": 1,
+          "title": "Product Id",
+          "type": "string"
+        },
+        "subject_data_included": {
+          "const": false,
+          "default": false,
+          "title": "Subject Data Included",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "product_id",
+        "native_schema_version",
+        "artifact_digest"
+      ],
+      "title": "ProductExtensionV1",
+      "type": "object"
+    },
+    "ResearchClaimV1": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "minLength": 1,
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "claim_type": {
+          "enum": [
+            "observation",
+            "inference",
+            "hypothesis",
+            "causal",
+            "decision"
+          ],
+          "title": "Claim Type",
+          "type": "string"
+        },
+        "declared_epistemic_status": {
+          "enum": [
+            "verified_fact",
+            "research_supported_judgment",
+            "inference",
+            "speculation",
+            "unknown"
+          ],
+          "title": "Declared Epistemic Status",
+          "type": "string"
+        },
+        "evidence_links": {
+          "items": {
+            "$ref": "#/$defs/ClaimEvidenceLinkV1"
+          },
+          "title": "Evidence Links",
+          "type": "array"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "statement": {
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id",
+        "statement",
+        "claim_type",
+        "declared_epistemic_status"
+      ],
+      "title": "ResearchClaimV1",
+      "type": "object"
+    },
+    "ResearchConclusionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Claim Refs",
+          "type": "array"
+        },
+        "conclusion_id": {
+          "minLength": 1,
+          "title": "Conclusion Id",
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "strongest_claim_type": {
+          "enum": [
+            "observation",
+            "inference",
+            "hypothesis",
+            "causal",
+            "decision"
+          ],
+          "title": "Strongest Claim Type",
+          "type": "string"
+        },
+        "unknowns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unknowns",
+          "type": "array"
+        }
+      },
+      "required": [
+        "conclusion_id",
+        "claim_refs",
+        "statement",
+        "strongest_claim_type"
+      ],
+      "title": "ResearchConclusionV1",
+      "type": "object"
+    },
+    "ResearchEvidenceV1": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "minLength": 1,
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "evidence_type": {
+          "enum": [
+            "observation",
+            "result",
+            "artifact",
+            "test",
+            "synthesis"
+          ],
+          "title": "Evidence Type",
+          "type": "string"
+        },
+        "freshness": {
+          "enum": [
+            "current",
+            "stale",
+            "unknown"
+          ],
+          "title": "Freshness",
+          "type": "string"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "method_ref": {
+          "minLength": 1,
+          "title": "Method Ref",
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "result_binding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResultBindingV1"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "available",
+            "missing",
+            "retracted",
+            "irreproducible"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "evidence_type",
+        "source_refs",
+        "method_ref",
+        "observed_at",
+        "freshness",
+        "status"
+      ],
+      "title": "ResearchEvidenceV1",
+      "type": "object"
+    },
+    "ResearchMethodV1": {
+      "additionalProperties": false,
+      "properties": {
+        "causal_identification": {
+          "$ref": "#/$defs/CausalIdentificationV1"
+        },
+        "denominator": {
+          "$ref": "#/$defs/DenominatorV1"
+        },
+        "executed_at": {
+          "format": "date-time",
+          "title": "Executed At",
+          "type": "string"
+        },
+        "frozen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frozen At"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "method_id": {
+          "minLength": 1,
+          "title": "Method Id",
+          "type": "string"
+        },
+        "method_type": {
+          "enum": [
+            "observation",
+            "experiment",
+            "quasi_experiment",
+            "simulation",
+            "synthesis",
+            "measurement",
+            "other"
+          ],
+          "title": "Method Type",
+          "type": "string"
+        },
+        "power_status": {
+          "enum": [
+            "adequate",
+            "underpowered",
+            "unknown",
+            "not_applicable"
+          ],
+          "title": "Power Status",
+          "type": "string"
+        },
+        "preregistration_digest": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preregistration Digest"
+        },
+        "protocol_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Protocol Digest",
+          "type": "string"
+        },
+        "transformations": {
+          "items": {
+            "$ref": "#/$defs/TransformationV1"
+          },
+          "title": "Transformations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "method_id",
+        "method_type",
+        "protocol_digest",
+        "executed_at",
+        "denominator",
+        "power_status",
+        "causal_identification"
+      ],
+      "title": "ResearchMethodV1",
+      "type": "object"
+    },
+    "ResearchRevisionV1": {
+      "additionalProperties": false,
+      "properties": {
+        "changed_at": {
+          "format": "date-time",
+          "title": "Changed At",
+          "type": "string"
+        },
+        "changed_fields": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Changed Fields",
+          "type": "array"
+        },
+        "object_ref": {
+          "minLength": 1,
+          "title": "Object Ref",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "revision_id": {
+          "minLength": 1,
+          "title": "Revision Id",
+          "type": "string"
+        },
+        "supersedes_revision_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes Revision Id"
+        }
+      },
+      "required": [
+        "revision_id",
+        "object_ref",
+        "changed_at",
+        "reason",
+        "changed_fields"
+      ],
+      "title": "ResearchRevisionV1",
+      "type": "object"
+    },
+    "ResearchSourceV1": {
+      "additionalProperties": false,
+      "properties": {
+        "content_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "freshness": {
+          "enum": [
+            "current",
+            "stale",
+            "unknown"
+          ],
+          "title": "Freshness",
+          "type": "string"
+        },
+        "locator": {
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "source_id": {
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_type": {
+          "enum": [
+            "primary",
+            "secondary",
+            "dataset",
+            "standard",
+            "software",
+            "testimony",
+            "other"
+          ],
+          "title": "Source Type",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "active",
+            "retracted",
+            "superseded",
+            "unavailable"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "state_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State Reason"
+        },
+        "version_id": {
+          "minLength": 1,
+          "title": "Version Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "source_type",
+        "locator",
+        "version_id",
+        "content_digest",
+        "observed_at",
+        "freshness",
+        "state"
+      ],
+      "title": "ResearchSourceV1",
+      "type": "object"
+    },
+    "ResultBindingV1": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Artifact Digest",
+          "type": "string"
+        },
+        "code_revision": {
+          "minLength": 1,
+          "title": "Code Revision",
+          "type": "string"
+        },
+        "environment_digest": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Environment Digest"
+        },
+        "result_id": {
+          "minLength": 1,
+          "title": "Result Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result_id",
+        "artifact_digest",
+        "code_revision"
+      ],
+      "title": "ResultBindingV1",
+      "type": "object"
+    },
+    "TransformationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "implementation_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Implementation Digest",
+          "type": "string"
+        },
+        "input_refs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Input Refs",
+          "type": "array"
+        },
+        "output_ref": {
+          "minLength": 1,
+          "title": "Output Ref",
+          "type": "string"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "transformation_id": {
+          "minLength": 1,
+          "title": "Transformation Id",
+          "type": "string"
+        },
+        "validity": {
+          "enum": [
+            "valid",
+            "invalid",
+            "unknown"
+          ],
+          "title": "Validity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transformation_id",
+        "input_refs",
+        "output_ref",
+        "implementation_digest",
+        "validity"
+      ],
+      "title": "TransformationV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/ResearchClaimV1"
+      },
+      "minItems": 1,
+      "title": "Claims",
+      "type": "array"
+    },
+    "conclusions": {
+      "items": {
+        "$ref": "#/$defs/ResearchConclusionV1"
+      },
+      "title": "Conclusions",
+      "type": "array"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/ResearchEvidenceV1"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/ProductExtensionV1"
+      },
+      "title": "Extensions",
+      "type": "array"
+    },
+    "methods": {
+      "items": {
+        "$ref": "#/$defs/ResearchMethodV1"
+      },
+      "minItems": 1,
+      "title": "Methods",
+      "type": "array"
+    },
+    "package_id": {
+      "minLength": 1,
+      "title": "Package Id",
+      "type": "string"
+    },
+    "privacy_tier": {
+      "enum": [
+        "P0",
+        "P1"
+      ],
+      "title": "Privacy Tier",
+      "type": "string"
+    },
+    "reviewed": {
+      "default": false,
+      "title": "Reviewed",
+      "type": "boolean"
+    },
+    "revision_id": {
+      "minLength": 1,
+      "title": "Revision Id",
+      "type": "string"
+    },
+    "revisions": {
+      "items": {
+        "$ref": "#/$defs/ResearchRevisionV1"
+      },
+      "title": "Revisions",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "evidence-centered.research-package.v1",
+      "default": "evidence-centered.research-package.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/ResearchSourceV1"
+      },
+      "minItems": 1,
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "package_id",
+    "revision_id",
+    "created_at",
+    "privacy_tier",
+    "sources",
+    "methods",
+    "claims"
+  ],
+  "title": "ResearchPackageV1",
+  "type": "object"
+}

@@ -1,0 +1,13 @@
+{
+  "schema_version": "evidence-centered.research-contract-binding.v4",
+  "contract_schema_version": "evidence-centered.research-package.v2",
+  "contract_schema_sha256": "sha256:4cff2030f2ccfb64937d8db5453f16510b30bc1db48a882d161a8b6944ae3ceb",
+  "qualification_schema_version": "evidence-centered.research-qualification.v3",
+  "qualification_schema_sha256": "sha256:b723896f3de554eeb4591b0ab5ab35e1225b5e3351347ba2ed3fa2c23fe51a63",
+  "frozen_protocol_sha256": "sha256:8f02f2cb6c55dfc2c33d0a7cd4fbcbd1fa596269cb01c4849b6e3a8a84cce42a",
+  "fixture_sha256": "sha256:b4cc78db4f0ff31cce0a7ecb90f630abb835788a11b0880e8868bce86af94b49",
+  "canonical_owner": "human-ai-frontier-lab",
+  "adapter": "src-tauri/src/models/research.rs",
+  "adoption_proof": "The v4 fixture is schema-validated, lifecycle-verified against durable local authority trust, population-validated, independently requalified, and canonical JSON is round-tripped.",
+  "native_semantics": "Authenticated lifecycle and population semantics are independently requalified; embedded trust is non-authoritative and local revocation wins. Shared supported research remains PARTIAL until native requirement and test proof independently earns VERIFIED."
+}

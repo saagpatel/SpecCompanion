@@ -138,6 +138,53 @@ export interface AlignmentReport {
 
 export type AlignmentClassification = "VERIFIED" | "PARTIAL" | "FAILED" | "UNKNOWN";
 
+export type ResearchClaimState =
+  | "supported"
+  | "weakened"
+  | "contested"
+  | "contradicted"
+  | "unknown";
+
+export interface ResearchClaimQualification {
+  claim_id: string;
+  state: ResearchClaimState;
+  excluded_evidence: Record<string, string[]>;
+}
+
+export interface ResearchConclusionQualification {
+  conclusion_id: string;
+  state: ResearchClaimState;
+  referenced_claim_states: Record<string, ResearchClaimState>;
+  reasons: string[];
+}
+
+export interface ResearchLifecycleQualification {
+  source_id: string;
+  authority_id: string;
+  state: "authenticated" | "revoked_authority" | "unknown_authority";
+  reasons: string[];
+}
+
+export interface ResearchAdapterLoss {
+  path: string;
+  reason: string;
+  retained_in_canonical_package: boolean;
+}
+
+export interface ResearchPackageInspection {
+  schema_version: string;
+  package_id: string;
+  revision_id: string;
+  schema_digest: string;
+  package_digest: string;
+  canonical_package: unknown;
+  qualification: ResearchClaimQualification[];
+  conclusion_qualification: ResearchConclusionQualification[];
+  source_lifecycle: ResearchLifecycleQualification[];
+  alignment_projection: Record<string, AlignmentClassification>;
+  losses: ResearchAdapterLoss[];
+}
+
 export interface EvidenceRecord {
   id: string;
   kind: "requirement" | "implementation" | "test" | "assertion" | "execution" | "diagnostic";

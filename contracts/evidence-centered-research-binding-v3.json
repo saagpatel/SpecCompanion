@@ -1,0 +1,12 @@
+{
+  "schema_version": "evidence-centered.research-contract-binding.v3",
+  "contract_schema_version": "evidence-centered.research-package.v2",
+  "contract_schema_sha256": "sha256:4cff2030f2ccfb64937d8db5453f16510b30bc1db48a882d161a8b6944ae3ceb",
+  "qualification_schema_version": "evidence-centered.research-qualification.v3",
+  "qualification_schema_sha256": "sha256:b723896f3de554eeb4591b0ab5ab35e1225b5e3351347ba2ed3fa2c23fe51a63",
+  "frozen_protocol_sha256": "sha256:d172e5394289755fdcea73e37b5b428c36dbd744e5d89951340bbcdbbb7bebfd",
+  "fixture_sha256": "sha256:290a8d56b49fc51efba7cb787789d97ddcedfee05ff6ba675c7330bc230c6eef",
+  "canonical_owner": "human-ai-frontier-lab",
+  "adapter": "src-tauri/src/models/research.rs",
+  "native_semantics": "Authenticated lifecycle and population semantics are independently requalified; shared supported research remains PARTIAL until native requirement and test proof independently earns VERIFIED."
+}

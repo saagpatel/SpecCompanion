@@ -78,6 +78,10 @@ pub fn run() {
             commands::report::seal_protected_trust_checkpoint,
             commands::report::rebind_protected_project_identity,
             commands::report::import_signer_trust_policy,
+            // Evidence-centered research exchange
+            commands::research::inspect_research_package,
+            commands::research::export_canonical_research_package,
+            commands::research::set_research_authority_trust,
             // Git
             commands::git::get_repo_info,
             commands::git::get_changed_files,

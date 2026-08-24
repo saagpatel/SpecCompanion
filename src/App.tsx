@@ -9,6 +9,7 @@ import { SpecView } from "./pages/SpecView";
 import { TestGeneration } from "./pages/TestGeneration";
 import { TestExecution } from "./pages/TestExecution";
 import { Reports } from "./pages/Reports";
+import { ResearchExchange } from "./pages/ResearchExchange";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +30,7 @@ function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/research" element={<ResearchExchange />} />
               <Route path="/project/:projectId" element={<ProjectView />} />
               <Route path="/project/:projectId/spec/:specId" element={<SpecView />} />
               <Route path="/project/:projectId/generate" element={<TestGeneration />} />

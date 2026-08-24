@@ -26,6 +26,7 @@ import type {
   LinkRepositoryTestRequest,
   RepositoryTestCandidate,
   PythonRuntimeStatus,
+  ResearchPackageInspection,
 } from "./types";
 
 type InvokeArgs = Record<string, unknown>;
@@ -298,6 +299,11 @@ async function mockInvoke<T>(command: string, args: InvokeArgs = {}): Promise<T>
     }
     case "read_file_content":
       throw new Error("Use the browser file picker in web preview");
+    case "inspect_research_package":
+    case "export_canonical_research_package":
+      throw new Error(
+        "Cryptographic research-package inspection requires the desktop runtime; browser preview does not infer a result.",
+      );
     case "generate_tests": {
       const request = args.request as GenerateTestsRequest;
       const tests = request.requirement_ids
@@ -978,6 +984,13 @@ export const deleteSpec = (id: string) => invoke<void>("delete_spec", { id });
 export const reparseSpec = (id: string) => invoke<Requirement[]>("reparse_spec", { id });
 
 export const readFileContent = (path: string) => invoke<string>("read_file_content", { path });
+
+// Evidence-centered research exchange commands
+export const inspectResearchPackage = (raw: string) =>
+  invoke<ResearchPackageInspection>("inspect_research_package", { raw });
+
+export const exportCanonicalResearchPackage = (raw: string) =>
+  invoke<string>("export_canonical_research_package", { raw });
 
 // Test generation commands
 export const generateTests = (req: GenerateTestsRequest) =>

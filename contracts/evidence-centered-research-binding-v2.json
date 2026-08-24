@@ -1,0 +1,12 @@
+{
+  "schema_version": "evidence-centered.research-contract-binding.v2",
+  "contract_schema_version": "evidence-centered.research-package.v1",
+  "contract_schema_sha256": "sha256:ab1702392cdd3c3b0d465f52de5114d5f4aad8e1e47730c10fca53fc7622360c",
+  "qualification_schema_version": "evidence-centered.research-qualification.v2",
+  "qualification_schema_sha256": "sha256:3a77d8ef5b41ba089aa696d1234cf756f2fc5c2c3af56cc087ad5328a75538ed",
+  "frozen_protocol_sha256": "sha256:5eb7bfdd7a16bb556364bace050e16ddd9fd46956df35833ea87da48be2f49d2",
+  "fixture_sha256": "sha256:8102d3c7b04368c80741fefffde1a0a95f378254f5e2cd2d978b6395e99c145d",
+  "canonical_owner": "human-ai-frontier-lab",
+  "adapter": "src-tauri/src/models/research.rs",
+  "native_semantics": "Requirement alignment remains VERIFIED/PARTIAL/FAILED/UNKNOWN; shared supported research maps to PARTIAL unless native proof independently qualifies it, and unsupported conclusions remain UNKNOWN."
+}

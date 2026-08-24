@@ -1,0 +1,251 @@
+{
+  "schema_version": "evidence-centered.research-package.v1",
+  "package_id": "ecrp-adversarial-fixture",
+  "revision_id": "rev-1",
+  "created_at": "2026-08-23T15:30:00Z",
+  "privacy_tier": "P0",
+  "reviewed": false,
+  "sources": [
+    {
+      "source_id": "source-current",
+      "source_type": "dataset",
+      "locator": "fixture://current-study",
+      "version_id": "v1",
+      "content_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "observed_at": "2026-08-23T12:00:00Z",
+      "freshness": "current",
+      "state": "active",
+      "state_reason": null
+    },
+    {
+      "source_id": "source-conflict",
+      "source_type": "primary",
+      "locator": "fixture://conflicting-study",
+      "version_id": "v2",
+      "content_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "observed_at": "2026-08-23T12:05:00Z",
+      "freshness": "current",
+      "state": "active",
+      "state_reason": null
+    },
+    {
+      "source_id": "source-retracted",
+      "source_type": "primary",
+      "locator": "fixture://retracted-study",
+      "version_id": "v1-retracted",
+      "content_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "observed_at": "2026-08-23T12:10:00Z",
+      "freshness": "current",
+      "state": "retracted",
+      "state_reason": "publisher retraction notice"
+    },
+    {
+      "source_id": "source-stale",
+      "source_type": "standard",
+      "locator": "fixture://stale-standard",
+      "version_id": "2019",
+      "content_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "observed_at": "2019-01-01T00:00:00Z",
+      "freshness": "stale",
+      "state": "superseded",
+      "state_reason": "newer standard version exists"
+    }
+  ],
+  "methods": [
+    {
+      "method_id": "method-observation",
+      "method_type": "observation",
+      "protocol_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "preregistration_digest": null,
+      "frozen_at": null,
+      "executed_at": "2026-08-23T12:20:00Z",
+      "denominator": {"value": 120, "unit": "records", "missing_reason": null},
+      "power_status": "adequate",
+      "transformations": [
+        {
+          "transformation_id": "transform-valid",
+          "input_refs": ["source-current"],
+          "output_ref": "result-support",
+          "implementation_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "validity": "valid",
+          "rationale": null
+        }
+      ],
+      "causal_identification": {"status": "not_identified", "design": null, "assumptions": [], "limitations": ["observational design"]},
+      "limitations": []
+    },
+    {
+      "method_id": "method-experiment",
+      "method_type": "experiment",
+      "protocol_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "preregistration_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "frozen_at": "2026-08-22T10:00:00Z",
+      "executed_at": "2026-08-23T12:25:00Z",
+      "denominator": {"value": 80, "unit": "trials", "missing_reason": null},
+      "power_status": "adequate",
+      "transformations": [],
+      "causal_identification": {"status": "identified", "design": "randomized synthetic fixture", "assumptions": ["assignment integrity"], "limitations": ["synthetic only"]},
+      "limitations": ["synthetic fixture"]
+    },
+    {
+      "method_id": "method-underpowered",
+      "method_type": "experiment",
+      "protocol_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "preregistration_digest": null,
+      "frozen_at": null,
+      "executed_at": "2026-08-23T12:30:00Z",
+      "denominator": {"value": 12, "unit": "trials", "missing_reason": null},
+      "power_status": "underpowered",
+      "transformations": [],
+      "causal_identification": {"status": "unknown", "design": null, "assumptions": [], "limitations": []},
+      "limitations": ["insufficient power"]
+    },
+    {
+      "method_id": "method-missing-denominator",
+      "method_type": "synthesis",
+      "protocol_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "preregistration_digest": null,
+      "frozen_at": null,
+      "executed_at": "2026-08-23T12:35:00Z",
+      "denominator": {"value": null, "unit": "studies", "missing_reason": "source report omitted the denominator"},
+      "power_status": "unknown",
+      "transformations": [],
+      "causal_identification": {"status": "not_identified", "design": null, "assumptions": [], "limitations": []},
+      "limitations": ["missing denominator"]
+    },
+    {
+      "method_id": "method-invalid-transform",
+      "method_type": "measurement",
+      "protocol_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "preregistration_digest": null,
+      "frozen_at": null,
+      "executed_at": "2026-08-23T12:40:00Z",
+      "denominator": {"value": 50, "unit": "records", "missing_reason": null},
+      "power_status": "adequate",
+      "transformations": [
+        {
+          "transformation_id": "transform-invalid",
+          "input_refs": ["source-current"],
+          "output_ref": "result-invalid",
+          "implementation_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+          "validity": "invalid",
+          "rationale": "unit conversion used the wrong scale"
+        }
+      ],
+      "causal_identification": {"status": "not_identified", "design": null, "assumptions": [], "limitations": []},
+      "limitations": ["invalid transformation"]
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "evidence-support",
+      "evidence_type": "result",
+      "source_refs": ["source-current"],
+      "method_ref": "method-observation",
+      "result_binding": {"result_id": "result-support", "artifact_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777", "code_revision": "fixture-rev-1", "environment_digest": null},
+      "observed_at": "2026-08-23T12:45:00Z",
+      "freshness": "current",
+      "status": "available",
+      "limitations": []
+    },
+    {
+      "evidence_id": "evidence-contradict",
+      "evidence_type": "result",
+      "source_refs": ["source-conflict"],
+      "method_ref": "method-experiment",
+      "result_binding": {"result_id": "result-contradict", "artifact_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888", "code_revision": "fixture-rev-2", "environment_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"},
+      "observed_at": "2026-08-23T12:50:00Z",
+      "freshness": "current",
+      "status": "available",
+      "limitations": ["conflicting result"]
+    },
+    {
+      "evidence_id": "evidence-retracted",
+      "evidence_type": "result",
+      "source_refs": ["source-retracted"],
+      "method_ref": "method-observation",
+      "result_binding": {"result_id": "result-retracted", "artifact_digest": "sha256:1212121212121212121212121212121212121212121212121212121212121212", "code_revision": "fixture-rev-3", "environment_digest": null},
+      "observed_at": "2026-08-23T12:55:00Z",
+      "freshness": "current",
+      "status": "available",
+      "limitations": []
+    },
+    {
+      "evidence_id": "evidence-stale",
+      "evidence_type": "artifact",
+      "source_refs": ["source-stale"],
+      "method_ref": "method-observation",
+      "result_binding": {"result_id": "result-stale", "artifact_digest": "sha256:1313131313131313131313131313131313131313131313131313131313131313", "code_revision": "fixture-rev-4", "environment_digest": null},
+      "observed_at": "2019-01-01T00:00:00Z",
+      "freshness": "stale",
+      "status": "available",
+      "limitations": []
+    },
+    {
+      "evidence_id": "evidence-underpowered",
+      "evidence_type": "result",
+      "source_refs": ["source-current"],
+      "method_ref": "method-underpowered",
+      "result_binding": {"result_id": "result-underpowered", "artifact_digest": "sha256:1414141414141414141414141414141414141414141414141414141414141414", "code_revision": "fixture-rev-5", "environment_digest": null},
+      "observed_at": "2026-08-23T13:00:00Z",
+      "freshness": "current",
+      "status": "available",
+      "limitations": ["underpowered"]
+    },
+    {
+      "evidence_id": "evidence-missing-denominator",
+      "evidence_type": "synthesis",
+      "source_refs": ["source-current"],
+      "method_ref": "method-missing-denominator",
+      "result_binding": {"result_id": "result-missing-denominator", "artifact_digest": "sha256:1515151515151515151515151515151515151515151515151515151515151515", "code_revision": "fixture-rev-6", "environment_digest": null},
+      "observed_at": "2026-08-23T13:05:00Z",
+      "freshness": "current",
+      "status": "available",
+      "limitations": ["denominator unavailable"]
+    },
+    {
+      "evidence_id": "evidence-invalid-transform",
+      "evidence_type": "result",
+      "source_refs": ["source-current"],
+      "method_ref": "method-invalid-transform",
+      "result_binding": {"result_id": "result-invalid-transform", "artifact_digest": "sha256:1616161616161616161616161616161616161616161616161616161616161616", "code_revision": "fixture-rev-7", "environment_digest": null},
+      "observed_at": "2026-08-23T13:10:00Z",
+      "freshness": "current",
+      "status": "available",
+      "limitations": ["invalid transformation"]
+    },
+    {
+      "evidence_id": "evidence-irreproducible",
+      "evidence_type": "result",
+      "source_refs": ["source-current"],
+      "method_ref": "method-observation",
+      "result_binding": {"result_id": "result-irreproducible", "artifact_digest": "sha256:1717171717171717171717171717171717171717171717171717171717171717", "code_revision": "fixture-rev-8", "environment_digest": null},
+      "observed_at": "2026-08-23T13:15:00Z",
+      "freshness": "current",
+      "status": "irreproducible",
+      "limitations": ["independent re-run failed"]
+    }
+  ],
+  "claims": [
+    {"claim_id": "claim-supported", "statement": "The current fixture contains the observed association.", "claim_type": "observation", "declared_epistemic_status": "research_supported_judgment", "evidence_links": [{"evidence_ref": "evidence-support", "relationship": "supports", "rationale": "adequate current result", "requires_denominator": true}], "limitations": []},
+    {"claim_id": "claim-contested", "statement": "The two qualified studies agree.", "claim_type": "inference", "declared_epistemic_status": "inference", "evidence_links": [{"evidence_ref": "evidence-support", "relationship": "supports", "rationale": "first study supports", "requires_denominator": true}, {"evidence_ref": "evidence-contradict", "relationship": "contradicts", "rationale": "second study contradicts", "requires_denominator": true}], "limitations": ["conflicting studies"]},
+    {"claim_id": "claim-retracted", "statement": "A retracted source supports this hypothesis.", "claim_type": "hypothesis", "declared_epistemic_status": "unknown", "evidence_links": [{"evidence_ref": "evidence-retracted", "relationship": "supports", "rationale": "historical link retained", "requires_denominator": false}], "limitations": []},
+    {"claim_id": "claim-stale", "statement": "A stale standard supports this hypothesis.", "claim_type": "hypothesis", "declared_epistemic_status": "unknown", "evidence_links": [{"evidence_ref": "evidence-stale", "relationship": "supports", "rationale": "historical link retained", "requires_denominator": false}], "limitations": []},
+    {"claim_id": "claim-underpowered", "statement": "The small experiment establishes the inference.", "claim_type": "inference", "declared_epistemic_status": "unknown", "evidence_links": [{"evidence_ref": "evidence-underpowered", "relationship": "supports", "rationale": "underpowered result", "requires_denominator": true}], "limitations": ["underpowered"]},
+    {"claim_id": "claim-missing-denominator", "statement": "The synthesis establishes prevalence.", "claim_type": "hypothesis", "declared_epistemic_status": "unknown", "evidence_links": [{"evidence_ref": "evidence-missing-denominator", "relationship": "supports", "rationale": "denominator required for prevalence", "requires_denominator": true}], "limitations": ["missing denominator"]},
+    {"claim_id": "claim-causal-overreach", "statement": "The observational association is causal.", "claim_type": "causal", "declared_epistemic_status": "unknown", "evidence_links": [{"evidence_ref": "evidence-support", "relationship": "supports", "rationale": "observational evidence only", "requires_denominator": true}], "limitations": ["causal design absent"]},
+    {"claim_id": "claim-invalid-transform", "statement": "The invalid transformation supports the inference.", "claim_type": "inference", "declared_epistemic_status": "unknown", "evidence_links": [{"evidence_ref": "evidence-invalid-transform", "relationship": "supports", "rationale": "transformation failed validation", "requires_denominator": true}], "limitations": []},
+    {"claim_id": "claim-unsupported", "statement": "No evidence is linked to this hypothesis.", "claim_type": "hypothesis", "declared_epistemic_status": "unknown", "evidence_links": [], "limitations": ["unsupported"]},
+    {"claim_id": "claim-irreproducible", "statement": "The irreproducible result supports the inference.", "claim_type": "inference", "declared_epistemic_status": "unknown", "evidence_links": [{"evidence_ref": "evidence-irreproducible", "relationship": "supports", "rationale": "failed independent reproduction", "requires_denominator": true}], "limitations": ["irreproducible"]},
+    {"claim_id": "claim-causal-supported", "statement": "The randomized synthetic fixture identifies the causal effect in the fixture.", "claim_type": "causal", "declared_epistemic_status": "research_supported_judgment", "evidence_links": [{"evidence_ref": "evidence-contradict", "relationship": "supports", "rationale": "identified synthetic experiment", "requires_denominator": true}], "limitations": ["synthetic fixture only"]}
+  ],
+  "revisions": [
+    {"revision_id": "rev-1", "object_ref": "package:ecrp-adversarial-fixture", "supersedes_revision_id": null, "changed_at": "2026-08-23T15:30:00Z", "reason": "initial frozen adversarial fixture", "changed_fields": ["sources", "methods", "evidence", "claims"]}
+  ],
+  "conclusions": [
+    {"conclusion_id": "conclusion-fixture", "claim_refs": ["claim-supported", "claim-contested", "claim-causal-supported"], "statement": "Only bounded synthetic observation and causal-fixture claims are supported; the cross-study inference remains contested.", "strongest_claim_type": "causal", "unknowns": ["scientific validity", "human acceptance"]}
+  ],
+  "extensions": [
+    {"product_id": "human-ai-frontier-lab", "native_schema_version": "frontier.evidence-record.v0", "artifact_digest": "sha256:1818181818181818181818181818181818181818181818181818181818181818", "subject_data_included": false, "data": {"fixture": true, "consent_records_included": false}}
+  ]
+}

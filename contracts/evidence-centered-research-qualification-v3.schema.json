@@ -1,0 +1,226 @@
+{
+  "$defs": {
+    "ClaimQualificationV1": {
+      "additionalProperties": false,
+      "properties": {
+        "admissible_contradiction_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Admissible Contradiction Refs",
+          "type": "array"
+        },
+        "admissible_support_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Admissible Support Refs",
+          "type": "array"
+        },
+        "admissible_weakening_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Admissible Weakening Refs",
+          "type": "array"
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "excluded_evidence": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Excluded Evidence",
+          "type": "object"
+        },
+        "state": {
+          "enum": [
+            "supported",
+            "weakened",
+            "contested",
+            "contradicted",
+            "unknown"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id",
+        "state"
+      ],
+      "title": "ClaimQualificationV1",
+      "type": "object"
+    },
+    "ConclusionQualificationV2": {
+      "additionalProperties": false,
+      "properties": {
+        "conclusion_id": {
+          "title": "Conclusion Id",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "referenced_claim_states": {
+          "additionalProperties": {
+            "enum": [
+              "supported",
+              "weakened",
+              "contested",
+              "contradicted",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "title": "Referenced Claim States",
+          "type": "object"
+        },
+        "state": {
+          "enum": [
+            "supported",
+            "weakened",
+            "contested",
+            "contradicted",
+            "unknown"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "conclusion_id",
+        "state",
+        "referenced_claim_states"
+      ],
+      "title": "ConclusionQualificationV2",
+      "type": "object"
+    },
+    "SourceLifecycleQualificationV3": {
+      "additionalProperties": false,
+      "properties": {
+        "authority_id": {
+          "title": "Authority Id",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "authenticated",
+            "revoked_authority",
+            "unknown_authority"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "authority_id",
+        "state"
+      ],
+      "title": "SourceLifecycleQualificationV3",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/ClaimQualificationV1"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "conclusions": {
+      "items": {
+        "$ref": "#/$defs/ConclusionQualificationV2"
+      },
+      "title": "Conclusions",
+      "type": "array"
+    },
+    "package_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Package Digest",
+      "type": "string"
+    },
+    "package_schema_version": {
+      "const": "evidence-centered.research-package.v2",
+      "title": "Package Schema Version",
+      "type": "string"
+    },
+    "protocol_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Protocol Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "evidence-centered.research-qualification.v3",
+      "default": "evidence-centered.research-qualification.v3",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_lifecycle": {
+      "items": {
+        "$ref": "#/$defs/SourceLifecycleQualificationV3"
+      },
+      "title": "Source Lifecycle",
+      "type": "array"
+    },
+    "strongest_supported_claim": {
+      "anyOf": [
+        {
+          "enum": [
+            "observation",
+            "inference",
+            "hypothesis",
+            "causal",
+            "decision"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Strongest Supported Claim"
+    },
+    "unknowns": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Unknowns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "package_schema_version",
+    "package_digest",
+    "protocol_digest",
+    "source_lifecycle",
+    "claims",
+    "conclusions",
+    "strongest_supported_claim"
+  ],
+  "title": "ResearchQualificationV3",
+  "type": "object"
+}

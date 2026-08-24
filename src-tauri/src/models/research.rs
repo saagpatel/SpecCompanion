@@ -1,14 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::models::report::AlignmentClassification;
 
-pub const CONTRACT_SCHEMA_VERSION: &str = "evidence-centered.research-package.v1";
-pub const CONTRACT_SCHEMA_SHA256: &str =
+pub const CONTRACT_SCHEMA_VERSION_V1: &str = "evidence-centered.research-package.v1";
+pub const CONTRACT_SCHEMA_SHA256_V1: &str =
     "sha256:ab1702392cdd3c3b0d465f52de5114d5f4aad8e1e47730c10fca53fc7622360c";
+pub const CONTRACT_SCHEMA_VERSION_V2: &str = "evidence-centered.research-package.v2";
+pub const CONTRACT_SCHEMA_SHA256_V2: &str =
+    "sha256:4cff2030f2ccfb64937d8db5453f16510b30bc1db48a882d161a8b6944ae3ceb";
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -36,6 +41,22 @@ pub struct ConclusionQualification {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceLifecycleState {
+    Authenticated,
+    RevokedAuthority,
+    UnknownAuthority,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct SourceLifecycleQualification {
+    pub source_id: String,
+    pub authority_id: String,
+    pub state: SourceLifecycleState,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct AdapterLoss {
     pub path: String,
     pub reason: String,
@@ -44,12 +65,15 @@ pub struct AdapterLoss {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ResearchPackageImport {
+    pub schema_version: String,
     pub package_id: String,
     pub revision_id: String,
     pub schema_digest: String,
+    pub package_digest: String,
     pub canonical_package: Value,
     pub qualification: Vec<ClaimQualification>,
     pub conclusion_qualification: Vec<ConclusionQualification>,
+    pub source_lifecycle: Vec<SourceLifecycleQualification>,
     pub alignment_projection: BTreeMap<String, AlignmentClassification>,
     pub losses: Vec<AdapterLoss>,
 }
@@ -57,10 +81,13 @@ pub struct ResearchPackageImport {
 pub fn import_research_package(raw: &str) -> Result<ResearchPackageImport, String> {
     let package: Value = serde_json::from_str(raw).map_err(|error| error.to_string())?;
     validate_package(&package)?;
+    let schema_version = text(&package, "schema_version")?.to_string();
     let package_id = text(&package, "package_id")?.to_string();
     let revision_id = text(&package, "revision_id")?.to_string();
+    let package_digest = research_package_digest(&package)?;
     let qualification = qualify_claims(&package)?;
     let conclusion_qualification = qualify_conclusions(&package, &qualification)?;
+    let source_lifecycle = qualify_source_lifecycle(&package)?;
     let alignment_projection = qualification
         .iter()
         .map(|claim| {
@@ -84,12 +111,19 @@ pub fn import_research_package(raw: &str) -> Result<ResearchPackageImport, Strin
         }))
         .collect();
     Ok(ResearchPackageImport {
+        schema_version: schema_version.clone(),
         package_id,
         revision_id,
-        schema_digest: CONTRACT_SCHEMA_SHA256.into(),
+        schema_digest: match schema_version.as_str() {
+            CONTRACT_SCHEMA_VERSION_V1 => CONTRACT_SCHEMA_SHA256_V1.into(),
+            CONTRACT_SCHEMA_VERSION_V2 => CONTRACT_SCHEMA_SHA256_V2.into(),
+            _ => return Err("unsupported evidence-centered research schema".into()),
+        },
+        package_digest,
         canonical_package: package,
         qualification,
         conclusion_qualification,
+        source_lifecycle,
         alignment_projection,
         losses,
     })
@@ -121,7 +155,11 @@ pub fn map_claim_state_to_alignment(state: &ResearchClaimState) -> AlignmentClas
 }
 
 fn validate_package(package: &Value) -> Result<(), String> {
-    if text(package, "schema_version")? != CONTRACT_SCHEMA_VERSION {
+    let schema_version = text(package, "schema_version")?;
+    if !matches!(
+        schema_version,
+        CONTRACT_SCHEMA_VERSION_V1 | CONTRACT_SCHEMA_VERSION_V2
+    ) {
         return Err("unsupported evidence-centered research schema".into());
     }
     if !matches!(text(package, "privacy_tier")?, "P0" | "P1") {
@@ -173,6 +211,171 @@ fn validate_package(package: &Value) -> Result<(), String> {
             }
         }
     }
+    if schema_version == CONTRACT_SCHEMA_VERSION_V2 {
+        validate_lifecycle_bindings(package, &sources)?;
+        validate_population_bindings(package, &methods)?;
+    }
+    Ok(())
+}
+
+fn validate_lifecycle_bindings(
+    package: &Value,
+    sources: &BTreeMap<String, &Value>,
+) -> Result<(), String> {
+    let authorities = index(array(package, "lifecycle_authorities")?, "authority_id")?;
+    let attestations = index(array(package, "lifecycle_attestations")?, "attestation_id")?;
+    let mut referenced = BTreeSet::new();
+
+    for (source_id, source) in sources {
+        let attestation_ref = text(source, "lifecycle_attestation_ref")?;
+        let attestation = attestations
+            .get(attestation_ref)
+            .ok_or_else(|| format!("source {source_id} has unknown lifecycle attestation"))?;
+        if text(attestation, "source_ref")? != source_id {
+            return Err(format!(
+                "attestation {attestation_ref} does not bind source {source_id}"
+            ));
+        }
+        let authority_ref = text(attestation, "authority_ref")?;
+        let authority = authorities
+            .get(authority_ref)
+            .ok_or_else(|| format!("attestation {attestation_ref} has unknown authority"))?;
+        if text(attestation, "asserted_state")? != text(source, "state")?
+            || text(attestation, "asserted_freshness")? != text(source, "freshness")?
+            || text(attestation, "version_id")? != text(source, "version_id")?
+            || text(attestation, "content_digest")? != text(source, "content_digest")?
+        {
+            return Err(format!(
+                "attestation {attestation_ref} does not bind source state"
+            ));
+        }
+        verify_lifecycle_attestation(attestation, authority)?;
+        referenced.insert(attestation_ref.to_string());
+    }
+    if referenced != attestations.keys().cloned().collect() {
+        return Err("every lifecycle attestation must bind exactly one source".into());
+    }
+    Ok(())
+}
+
+fn verify_lifecycle_attestation(attestation: &Value, authority: &Value) -> Result<(), String> {
+    let public_key_bytes = STANDARD
+        .decode(text(authority, "public_key_base64")?)
+        .map_err(|_| "lifecycle authority public key is not valid base64".to_string())?;
+    let fingerprint = format!(
+        "sha256:{}",
+        Sha256::digest(&public_key_bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    );
+    if fingerprint != text(authority, "public_key_fingerprint")? {
+        return Err("lifecycle authority fingerprint does not match public key".into());
+    }
+    let public_key: [u8; 32] = public_key_bytes
+        .try_into()
+        .map_err(|_| "lifecycle authority public key is not valid Ed25519".to_string())?;
+    let verifying_key = VerifyingKey::from_bytes(&public_key)
+        .map_err(|_| "lifecycle authority public key is not valid Ed25519".to_string())?;
+
+    let payload = lifecycle_payload(attestation)?;
+    let payload_bytes = serde_json::to_vec(&canonicalize(&payload)).map_err(|e| e.to_string())?;
+    let payload_digest = format!(
+        "sha256:{}",
+        Sha256::digest(&payload_bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    );
+    if payload_digest != text(attestation, "payload_digest")? {
+        return Err(format!(
+            "attestation {} payload digest does not match",
+            text(attestation, "attestation_id")?
+        ));
+    }
+    if text(attestation, "signature_algorithm")? != "Ed25519" {
+        return Err("unsupported lifecycle signature algorithm".into());
+    }
+    let signature_bytes = STANDARD
+        .decode(text(attestation, "signature_base64")?)
+        .map_err(|_| "lifecycle attestation signature is not valid base64".to_string())?;
+    let signature = Signature::from_slice(&signature_bytes)
+        .map_err(|_| "lifecycle attestation signature is not valid Ed25519".to_string())?;
+    verifying_key
+        .verify(&payload_bytes, &signature)
+        .map_err(|_| {
+            format!(
+                "attestation {} Ed25519 verification failed",
+                text(attestation, "attestation_id").unwrap_or("unknown")
+            )
+        })
+}
+
+fn lifecycle_payload(attestation: &Value) -> Result<Value, String> {
+    let mut payload = Map::new();
+    for key in [
+        "asserted_freshness",
+        "asserted_state",
+        "attestation_id",
+        "authority_ref",
+        "content_digest",
+        "issued_at",
+        "source_ref",
+        "version_id",
+    ] {
+        payload.insert(
+            key.into(),
+            attestation
+                .get(key)
+                .cloned()
+                .ok_or_else(|| format!("missing lifecycle attestation field {key}"))?,
+        );
+    }
+    Ok(Value::Object(payload))
+}
+
+fn validate_population_bindings(
+    _package: &Value,
+    methods: &BTreeMap<String, &Value>,
+) -> Result<(), String> {
+    let population_fields = [
+        "estimand",
+        "target_population",
+        "analysis_population",
+        "sampling_frame",
+        "sampling_method",
+    ];
+    for (method_id, method) in methods {
+        let population = method
+            .get("population_binding")
+            .ok_or_else(|| format!("method {method_id} lacks population binding"))?;
+        let mut missing: BTreeSet<String> = population_fields
+            .iter()
+            .filter(|field| population.get(**field).is_none_or(Value::is_null))
+            .map(|field| (*field).to_string())
+            .collect();
+        if text(population, "missingness_mechanism")? == "unknown" {
+            missing.insert("missingness_mechanism".into());
+        }
+        let declared: BTreeSet<String> = strings(array(population, "unknown_fields")?)?
+            .into_iter()
+            .collect();
+        if missing != declared {
+            return Err(format!(
+                "method {method_id} population unknown_fields do not match missing fields"
+            ));
+        }
+        if !declared.is_empty()
+            && population
+                .get("unknown_reason")
+                .and_then(Value::as_str)
+                .is_none_or(str::is_empty)
+        {
+            return Err(format!(
+                "method {method_id} unknown population fields require a reason"
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -180,6 +383,10 @@ fn qualify_claims(package: &Value) -> Result<Vec<ClaimQualification>, String> {
     let sources = index(array(package, "sources")?, "source_id")?;
     let methods = index(array(package, "methods")?, "method_id")?;
     let evidence = index(array(package, "evidence")?, "evidence_id")?;
+    let lifecycle: BTreeMap<_, _> = qualify_source_lifecycle(package)?
+        .into_iter()
+        .map(|item| (item.source_id, item.state))
+        .collect();
     let mut results = Vec::new();
     for claim in array(package, "claims")? {
         let mut support = 0;
@@ -190,7 +397,7 @@ fn qualify_claims(package: &Value) -> Result<Vec<ClaimQualification>, String> {
             let evidence_id = text(link, "evidence_ref")?;
             let item = evidence[evidence_id];
             let method = methods[text(item, "method_ref")?];
-            let reasons = exclusion_reasons(claim, link, item, method, &sources)?;
+            let reasons = exclusion_reasons(claim, link, item, method, &sources, &lifecycle)?;
             let relationship = text(link, "relationship")?;
             if !reasons.is_empty() {
                 if text(method, "power_status")? == "underpowered" && relationship == "supports" {
@@ -217,6 +424,40 @@ fn qualify_claims(package: &Value) -> Result<Vec<ClaimQualification>, String> {
             claim_id: text(claim, "claim_id")?.into(),
             state,
             excluded_evidence: excluded,
+        });
+    }
+    Ok(results)
+}
+
+fn qualify_source_lifecycle(package: &Value) -> Result<Vec<SourceLifecycleQualification>, String> {
+    if text(package, "schema_version")? == CONTRACT_SCHEMA_VERSION_V1 {
+        return Ok(Vec::new());
+    }
+    let authorities = index(array(package, "lifecycle_authorities")?, "authority_id")?;
+    let attestations = index(array(package, "lifecycle_attestations")?, "attestation_id")?;
+    let mut results = Vec::new();
+    for source in array(package, "sources")? {
+        let source_id = text(source, "source_id")?;
+        let attestation = attestations[text(source, "lifecycle_attestation_ref")?];
+        let authority_id = text(attestation, "authority_ref")?;
+        let authority = authorities[authority_id];
+        let (state, reasons) = match text(authority, "trust_status")? {
+            "trusted" => (SourceLifecycleState::Authenticated, Vec::new()),
+            "revoked" => (
+                SourceLifecycleState::RevokedAuthority,
+                vec!["lifecycle_authority:revoked".into()],
+            ),
+            "unknown" => (
+                SourceLifecycleState::UnknownAuthority,
+                vec!["lifecycle_authority:unknown".into()],
+            ),
+            _ => return Err("unknown lifecycle authority trust status".into()),
+        };
+        results.push(SourceLifecycleQualification {
+            source_id: source_id.into(),
+            authority_id: authority_id.into(),
+            state,
+            reasons,
         });
     }
     Ok(results)
@@ -326,6 +567,7 @@ fn exclusion_reasons(
     evidence: &Value,
     method: &Value,
     sources: &BTreeMap<String, &Value>,
+    lifecycle: &BTreeMap<String, SourceLifecycleState>,
 ) -> Result<Vec<String>, String> {
     let mut reasons = BTreeSet::new();
     if text(evidence, "status")? != "available" {
@@ -339,6 +581,17 @@ fn exclusion_reasons(
     }
     for source_ref in strings(array(evidence, "source_refs")?)? {
         let source = sources[source_ref.as_str()];
+        if let Some(state) = lifecycle.get(&source_ref) {
+            match state {
+                SourceLifecycleState::Authenticated => {}
+                SourceLifecycleState::RevokedAuthority => {
+                    reasons.insert(format!("source:{source_ref}:lifecycle:revoked_authority"));
+                }
+                SourceLifecycleState::UnknownAuthority => {
+                    reasons.insert(format!("source:{source_ref}:lifecycle:unknown_authority"));
+                }
+            }
+        }
         if text(source, "state")? != "active" {
             reasons.insert(format!(
                 "source:{source_ref}:state:{}",
@@ -368,6 +621,23 @@ fn exclusion_reasons(
             .is_none_or(Value::is_null)
     {
         reasons.insert("denominator:missing".into());
+    }
+    if link
+        .get("requires_population_binding")
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        let population = method
+            .get("population_binding")
+            .ok_or_else(|| "population binding is required".to_string())?;
+        for field in ["estimand", "analysis_population", "sampling_frame"] {
+            if population.get(field).is_none_or(Value::is_null) {
+                reasons.insert(format!("population_binding:{field}:unknown"));
+            }
+        }
+        if text(population, "missingness_mechanism")? == "unknown" {
+            reasons.insert("population_binding:missingness_mechanism:unknown".into());
+        }
     }
     let power = text(method, "power_status")?;
     let relationship = text(link, "relationship")?;
@@ -447,6 +717,14 @@ mod tests {
 
     const FIXTURE: &str =
         include_str!("../../../fixtures/evidence-centered-research/qualified-package-v2.json");
+    const FIXTURE_V3: &str =
+        include_str!("../../../fixtures/evidence-centered-research/qualified-package-v3.json");
+    const INVALID_SIGNATURE_V2: &str = include_str!(
+        "../../../fixtures/evidence-centered-research/invalid-lifecycle-signature-v2.json"
+    );
+    const INVALID_POPULATION_V2: &str = include_str!(
+        "../../../fixtures/evidence-centered-research/invalid-population-binding-v2.json"
+    );
 
     #[test]
     fn imports_requalifies_and_round_trips_the_shared_contract() {
@@ -501,5 +779,61 @@ mod tests {
             .losses
             .iter()
             .all(|loss| loss.retained_in_canonical_package));
+    }
+
+    #[test]
+    fn v2_package_authenticates_lifecycle_and_preserves_population_unknowns() {
+        let imported = import_research_package(FIXTURE_V3).expect("import v2 package fixture");
+        assert_eq!(imported.schema_version, CONTRACT_SCHEMA_VERSION_V2);
+        assert_eq!(imported.schema_digest, CONTRACT_SCHEMA_SHA256_V2);
+        let unknown_authority = imported
+            .source_lifecycle
+            .iter()
+            .find(|item| item.source_id == "source-unknown-authority")
+            .expect("unknown authority result");
+        assert_eq!(
+            unknown_authority.state,
+            SourceLifecycleState::UnknownAuthority
+        );
+        let unknown_claim = imported
+            .qualification
+            .iter()
+            .find(|item| item.claim_id == "claim-unknown-authority")
+            .expect("unknown authority claim");
+        assert_eq!(unknown_claim.state, ResearchClaimState::Unknown);
+        assert!(
+            unknown_claim.excluded_evidence["evidence-unknown-authority"]
+                .iter()
+                .any(|reason| reason
+                    == "source:source-unknown-authority:lifecycle:unknown_authority")
+        );
+        let missing_population = imported
+            .qualification
+            .iter()
+            .find(|item| item.claim_id == "claim-missing-denominator")
+            .expect("missing population claim");
+        assert!(
+            missing_population.excluded_evidence["evidence-missing-denominator"]
+                .iter()
+                .any(|reason| reason == "population_binding:analysis_population:unknown")
+        );
+        assert!(imported
+            .alignment_projection
+            .values()
+            .all(|state| state != &AlignmentClassification::Verified));
+    }
+
+    #[test]
+    fn v2_package_rejects_an_invalid_lifecycle_signature() {
+        let error = import_research_package(INVALID_SIGNATURE_V2)
+            .expect_err("invalid lifecycle signature must be rejected");
+        assert!(error.contains("Ed25519 verification failed"), "{error}");
+    }
+
+    #[test]
+    fn v2_package_rejects_an_invalid_population_unknown_declaration() {
+        let error = import_research_package(INVALID_POPULATION_V2)
+            .expect_err("invalid population unknown declaration must be rejected");
+        assert!(error.contains("population unknown_fields do not match missing fields"));
     }
 }

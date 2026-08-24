@@ -81,6 +81,7 @@ pub fn run() {
             // Evidence-centered research exchange
             commands::research::inspect_research_package,
             commands::research::export_canonical_research_package,
+            commands::research::set_research_authority_trust,
             // Git
             commands::git::get_repo_info,
             commands::git::get_changed_files,

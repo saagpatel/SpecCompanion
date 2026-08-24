@@ -2,7 +2,7 @@ use crate::utils::lowercase_hex;
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
-const CURRENT_VERSION: i32 = 12;
+const CURRENT_VERSION: i32 = 13;
 
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -61,6 +61,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         if version < 12 {
             migrate_v12(&tx)?;
         }
+        if version < 13 {
+            migrate_v13(&tx)?;
+        }
         tx.execute("DELETE FROM schema_version", [])?;
         tx.execute(
             "INSERT INTO schema_version (version) VALUES (?1)",
@@ -70,6 +73,17 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+fn migrate_v13(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE TABLE research_authority_trust (
+            key_fingerprint TEXT PRIMARY KEY NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('trusted', 'revoked')),
+            provenance TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );",
+    )
 }
 
 fn migrate_v12(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -544,6 +558,8 @@ mod tests {
             .expect("protected checkpoint configuration marker");
         conn.prepare("SELECT locator_digest, keychain_service, binding_schema FROM protected_project_identity_configuration")
             .expect("protected project identity marker");
+        conn.prepare("SELECT status, provenance FROM research_authority_trust")
+            .expect("research lifecycle authority trust store");
     }
 
     #[test]
@@ -670,7 +686,7 @@ mod tests {
         future
             .execute_batch(
                 "CREATE TABLE schema_version (version INTEGER NOT NULL);
-                 INSERT INTO schema_version VALUES (13);",
+                 INSERT INTO schema_version VALUES (14);",
             )
             .expect("future version");
         assert!(run_migrations(&future).is_err());
@@ -679,7 +695,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(version, 13);
+        assert_eq!(version, 14);
 
         let interrupted = Connection::open_in_memory().expect("interrupted database");
         interrupted

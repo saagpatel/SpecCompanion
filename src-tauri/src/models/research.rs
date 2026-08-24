@@ -78,16 +78,53 @@ pub struct ResearchPackageImport {
     pub losses: Vec<AdapterLoss>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct ResearchAuthorityTrustStore {
+    trusted_fingerprints: BTreeSet<String>,
+    revoked_fingerprints: BTreeSet<String>,
+}
+
+impl ResearchAuthorityTrustStore {
+    pub fn from_fingerprints(
+        trusted_fingerprints: impl IntoIterator<Item = String>,
+        revoked_fingerprints: impl IntoIterator<Item = String>,
+    ) -> Self {
+        Self {
+            trusted_fingerprints: trusted_fingerprints.into_iter().collect(),
+            revoked_fingerprints: revoked_fingerprints.into_iter().collect(),
+        }
+    }
+
+    fn status(&self, fingerprint: &str) -> SourceLifecycleState {
+        if self.revoked_fingerprints.contains(fingerprint) {
+            SourceLifecycleState::RevokedAuthority
+        } else if self.trusted_fingerprints.contains(fingerprint) {
+            SourceLifecycleState::Authenticated
+        } else {
+            SourceLifecycleState::UnknownAuthority
+        }
+    }
+}
+
+#[cfg(test)]
 pub fn import_research_package(raw: &str) -> Result<ResearchPackageImport, String> {
+    let local_store = ResearchAuthorityTrustStore::from_fingerprints([], []);
+    import_research_package_with_trust_store(raw, &local_store)
+}
+
+pub fn import_research_package_with_trust_store(
+    raw: &str,
+    trust_store: &ResearchAuthorityTrustStore,
+) -> Result<ResearchPackageImport, String> {
     let package: Value = serde_json::from_str(raw).map_err(|error| error.to_string())?;
     validate_package(&package)?;
     let schema_version = text(&package, "schema_version")?.to_string();
     let package_id = text(&package, "package_id")?.to_string();
     let revision_id = text(&package, "revision_id")?.to_string();
     let package_digest = research_package_digest(&package)?;
-    let qualification = qualify_claims(&package)?;
+    let qualification = qualify_claims(&package, trust_store)?;
     let conclusion_qualification = qualify_conclusions(&package, &qualification)?;
-    let source_lifecycle = qualify_source_lifecycle(&package)?;
+    let source_lifecycle = qualify_source_lifecycle(&package, trust_store)?;
     let alignment_projection = qualification
         .iter()
         .map(|claim| {
@@ -162,6 +199,7 @@ fn validate_package(package: &Value) -> Result<(), String> {
     ) {
         return Err("unsupported evidence-centered research schema".into());
     }
+    validate_declared_schema(package, schema_version)?;
     if !matches!(text(package, "privacy_tier")?, "P0" | "P1") {
         return Err("research package privacy tier must be P0 or P1".into());
     }
@@ -249,7 +287,7 @@ fn validate_lifecycle_bindings(
                 "attestation {attestation_ref} does not bind source state"
             ));
         }
-        verify_lifecycle_attestation(attestation, authority)?;
+        verify_lifecycle_attestation(attestation, authority, source)?;
         referenced.insert(attestation_ref.to_string());
     }
     if referenced != attestations.keys().cloned().collect() {
@@ -258,7 +296,11 @@ fn validate_lifecycle_bindings(
     Ok(())
 }
 
-fn verify_lifecycle_attestation(attestation: &Value, authority: &Value) -> Result<(), String> {
+fn verify_lifecycle_attestation(
+    attestation: &Value,
+    authority: &Value,
+    source: &Value,
+) -> Result<(), String> {
     let public_key_bytes = STANDARD
         .decode(text(authority, "public_key_base64")?)
         .map_err(|_| "lifecycle authority public key is not valid base64".to_string())?;
@@ -278,7 +320,7 @@ fn verify_lifecycle_attestation(attestation: &Value, authority: &Value) -> Resul
     let verifying_key = VerifyingKey::from_bytes(&public_key)
         .map_err(|_| "lifecycle authority public key is not valid Ed25519".to_string())?;
 
-    let payload = lifecycle_payload(attestation)?;
+    let payload = lifecycle_payload(attestation, source)?;
     let payload_bytes = serde_json::to_vec(&canonicalize(&payload)).map_err(|e| e.to_string())?;
     let payload_digest = format!(
         "sha256:{}",
@@ -311,7 +353,7 @@ fn verify_lifecycle_attestation(attestation: &Value, authority: &Value) -> Resul
         })
 }
 
-fn lifecycle_payload(attestation: &Value) -> Result<Value, String> {
+fn lifecycle_payload(attestation: &Value, source: &Value) -> Result<Value, String> {
     let mut payload = Map::new();
     for key in [
         "asserted_freshness",
@@ -331,7 +373,39 @@ fn lifecycle_payload(attestation: &Value) -> Result<Value, String> {
                 .ok_or_else(|| format!("missing lifecycle attestation field {key}"))?,
         );
     }
+    for (payload_key, source_key) in [
+        ("observed_at", "observed_at"),
+        ("source_locator", "locator"),
+        ("source_type", "source_type"),
+    ] {
+        payload.insert(
+            payload_key.into(),
+            source
+                .get(source_key)
+                .cloned()
+                .ok_or_else(|| format!("missing source identity field {source_key}"))?,
+        );
+    }
     Ok(Value::Object(payload))
+}
+
+fn validate_declared_schema(package: &Value, schema_version: &str) -> Result<(), String> {
+    let raw_schema = match schema_version {
+        CONTRACT_SCHEMA_VERSION_V1 => {
+            include_str!("../../../contracts/evidence-centered-research-package-v1.schema.json")
+        }
+        CONTRACT_SCHEMA_VERSION_V2 => {
+            include_str!("../../../contracts/evidence-centered-research-package-v2.schema.json")
+        }
+        _ => return Err("unsupported evidence-centered research schema".into()),
+    };
+    let schema: Value = serde_json::from_str(raw_schema)
+        .map_err(|error| format!("bundled research schema is invalid: {error}"))?;
+    let validator = jsonschema::validator_for(&schema)
+        .map_err(|error| format!("bundled research schema did not compile: {error}"))?;
+    validator
+        .validate(package)
+        .map_err(|error| format!("research package violates {schema_version}: {error}"))
 }
 
 fn validate_population_bindings(
@@ -379,11 +453,14 @@ fn validate_population_bindings(
     Ok(())
 }
 
-fn qualify_claims(package: &Value) -> Result<Vec<ClaimQualification>, String> {
+fn qualify_claims(
+    package: &Value,
+    trust_store: &ResearchAuthorityTrustStore,
+) -> Result<Vec<ClaimQualification>, String> {
     let sources = index(array(package, "sources")?, "source_id")?;
     let methods = index(array(package, "methods")?, "method_id")?;
     let evidence = index(array(package, "evidence")?, "evidence_id")?;
-    let lifecycle: BTreeMap<_, _> = qualify_source_lifecycle(package)?
+    let lifecycle: BTreeMap<_, _> = qualify_source_lifecycle(package, trust_store)?
         .into_iter()
         .map(|item| (item.source_id, item.state))
         .collect();
@@ -400,7 +477,7 @@ fn qualify_claims(package: &Value) -> Result<Vec<ClaimQualification>, String> {
             let reasons = exclusion_reasons(claim, link, item, method, &sources, &lifecycle)?;
             let relationship = text(link, "relationship")?;
             if !reasons.is_empty() {
-                if text(method, "power_status")? == "underpowered" && relationship == "supports" {
+                if reasons == ["power:underpowered:cannot_supports"] && relationship == "supports" {
                     weakening += 1;
                 }
                 excluded.insert(evidence_id.to_string(), reasons);
@@ -429,7 +506,10 @@ fn qualify_claims(package: &Value) -> Result<Vec<ClaimQualification>, String> {
     Ok(results)
 }
 
-fn qualify_source_lifecycle(package: &Value) -> Result<Vec<SourceLifecycleQualification>, String> {
+fn qualify_source_lifecycle(
+    package: &Value,
+    trust_store: &ResearchAuthorityTrustStore,
+) -> Result<Vec<SourceLifecycleQualification>, String> {
     if text(package, "schema_version")? == CONTRACT_SCHEMA_VERSION_V1 {
         return Ok(Vec::new());
     }
@@ -441,17 +521,19 @@ fn qualify_source_lifecycle(package: &Value) -> Result<Vec<SourceLifecycleQualif
         let attestation = attestations[text(source, "lifecycle_attestation_ref")?];
         let authority_id = text(attestation, "authority_ref")?;
         let authority = authorities[authority_id];
-        let (state, reasons) = match text(authority, "trust_status")? {
-            "trusted" => (SourceLifecycleState::Authenticated, Vec::new()),
-            "revoked" => (
+        let fingerprint = text(authority, "public_key_fingerprint")?;
+        let (state, reasons) = match trust_store.status(fingerprint) {
+            SourceLifecycleState::Authenticated => {
+                (SourceLifecycleState::Authenticated, Vec::new())
+            }
+            SourceLifecycleState::RevokedAuthority => (
                 SourceLifecycleState::RevokedAuthority,
-                vec!["lifecycle_authority:revoked".into()],
+                vec!["local_lifecycle_authority:revoked".into()],
             ),
-            "unknown" => (
+            SourceLifecycleState::UnknownAuthority => (
                 SourceLifecycleState::UnknownAuthority,
-                vec!["lifecycle_authority:unknown".into()],
+                vec!["local_lifecycle_authority:unknown".into()],
             ),
-            _ => return Err("unknown lifecycle authority trust status".into()),
         };
         results.push(SourceLifecycleQualification {
             source_id: source_id.into(),
@@ -717,13 +799,13 @@ mod tests {
 
     const FIXTURE: &str =
         include_str!("../../../fixtures/evidence-centered-research/qualified-package-v2.json");
-    const FIXTURE_V3: &str =
-        include_str!("../../../fixtures/evidence-centered-research/qualified-package-v3.json");
-    const INVALID_SIGNATURE_V2: &str = include_str!(
-        "../../../fixtures/evidence-centered-research/invalid-lifecycle-signature-v2.json"
+    const FIXTURE_V4: &str =
+        include_str!("../../../fixtures/evidence-centered-research/qualified-package-v4.json");
+    const INVALID_SIGNATURE_V4: &str = include_str!(
+        "../../../fixtures/evidence-centered-research/invalid-lifecycle-signature-v4.json"
     );
-    const INVALID_POPULATION_V2: &str = include_str!(
-        "../../../fixtures/evidence-centered-research/invalid-population-binding-v2.json"
+    const INVALID_POPULATION_V4: &str = include_str!(
+        "../../../fixtures/evidence-centered-research/invalid-population-binding-v4.json"
     );
 
     #[test]
@@ -782,8 +864,21 @@ mod tests {
     }
 
     #[test]
-    fn v2_package_authenticates_lifecycle_and_preserves_population_unknowns() {
-        let imported = import_research_package(FIXTURE_V3).expect("import v2 package fixture");
+    fn v2_package_uses_local_trust_and_preserves_population_unknowns() {
+        let fixture: Value = serde_json::from_str(FIXTURE_V4).expect("parse fixture");
+        let trusted_fingerprint = array(&fixture, "lifecycle_authorities")
+            .unwrap()
+            .iter()
+            .find(|authority| {
+                text(authority, "authority_id").unwrap() == "fixture-registry-trusted"
+            })
+            .and_then(|authority| authority.get("public_key_fingerprint"))
+            .and_then(Value::as_str)
+            .expect("trusted fixture fingerprint")
+            .to_string();
+        let trust_store = ResearchAuthorityTrustStore::from_fingerprints([trusted_fingerprint], []);
+        let imported = import_research_package_with_trust_store(FIXTURE_V4, &trust_store)
+            .expect("import v2 package fixture");
         assert_eq!(imported.schema_version, CONTRACT_SCHEMA_VERSION_V2);
         assert_eq!(imported.schema_digest, CONTRACT_SCHEMA_SHA256_V2);
         let unknown_authority = imported
@@ -824,16 +919,67 @@ mod tests {
     }
 
     #[test]
+    fn embedded_trusted_status_cannot_upgrade_local_unknown_authority() {
+        let imported = import_research_package(FIXTURE_V4).expect("import with empty local store");
+        assert!(imported.source_lifecycle.iter().all(|item| {
+            item.state == SourceLifecycleState::UnknownAuthority
+                && item.reasons == ["local_lifecycle_authority:unknown"]
+        }));
+        assert!(imported
+            .qualification
+            .iter()
+            .all(|claim| claim.state != ResearchClaimState::Supported));
+    }
+
+    #[test]
+    fn local_revocation_overrides_both_local_and_embedded_trust() {
+        let fixture: Value = serde_json::from_str(FIXTURE_V4).expect("parse fixture");
+        let fingerprint = array(&fixture, "lifecycle_authorities")
+            .unwrap()
+            .first()
+            .and_then(|authority| authority.get("public_key_fingerprint"))
+            .and_then(Value::as_str)
+            .expect("fixture fingerprint")
+            .to_string();
+        let trust_store =
+            ResearchAuthorityTrustStore::from_fingerprints([fingerprint.clone()], [fingerprint]);
+        let imported = import_research_package_with_trust_store(FIXTURE_V4, &trust_store)
+            .expect("import with locally revoked authority");
+        assert!(imported.source_lifecycle.iter().any(|item| {
+            item.state == SourceLifecycleState::RevokedAuthority
+                && item.reasons == ["local_lifecycle_authority:revoked"]
+        }));
+    }
+
+    #[test]
     fn v2_package_rejects_an_invalid_lifecycle_signature() {
-        let error = import_research_package(INVALID_SIGNATURE_V2)
+        let error = import_research_package(INVALID_SIGNATURE_V4)
             .expect_err("invalid lifecycle signature must be rejected");
         assert!(error.contains("Ed25519 verification failed"), "{error}");
     }
 
     #[test]
     fn v2_package_rejects_an_invalid_population_unknown_declaration() {
-        let error = import_research_package(INVALID_POPULATION_V2)
+        let error = import_research_package(INVALID_POPULATION_V4)
             .expect_err("invalid population unknown declaration must be rejected");
-        assert!(error.contains("population unknown_fields do not match missing fields"));
+        assert!(error.contains("unknown_fields"), "{error}");
+    }
+
+    #[test]
+    fn declared_schema_rejects_malformed_nested_result_binding() {
+        let mut package: Value = serde_json::from_str(FIXTURE).expect("parse fixture");
+        package["evidence"][0]["result_binding"] = serde_json::json!({});
+        let error = import_research_package(&package.to_string())
+            .expect_err("schema-invalid result binding must fail");
+        assert!(error.contains("violates evidence-centered.research-package.v1"));
+    }
+
+    #[test]
+    fn complete_source_identity_is_covered_by_signature() {
+        let mut package: Value = serde_json::from_str(FIXTURE_V4).expect("parse fixture");
+        package["sources"][0]["locator"] = Value::String("fixture://tampered".into());
+        let error = import_research_package(&package.to_string())
+            .expect_err("source identity tamper must fail");
+        assert!(error.contains("payload digest does not match"), "{error}");
     }
 }

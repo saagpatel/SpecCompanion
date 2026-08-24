@@ -74,8 +74,15 @@ export function ResearchExchange() {
         <label className="text-text block text-sm font-medium" htmlFor="research-package">
           Research package JSON
         </label>
+        <label
+          className="text-text-muted mt-3 block text-sm"
+          htmlFor="research-package-file"
+        >
+          Load from a JSON file
+        </label>
         <input
-          className="text-text-muted mt-3 block w-full text-sm"
+          id="research-package-file"
+          className="text-text-muted mt-2 block w-full text-sm"
           type="file"
           accept="application/json,.json"
           onChange={async (event) => {

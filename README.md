@@ -25,7 +25,8 @@ Built with Tauri v2 (Rust backend, React frontend). Runs locally, works offline,
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20.19+ or 22.12+ (CI uses Node 20)
+- pnpm 10 (`pnpm-lock.yaml` is the only lockfile)
 - Rust stable toolchain (`rustup`)
 - Tauri system dependencies: [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/)
 
@@ -34,7 +35,7 @@ Built with Tauri v2 (Rust backend, React frontend). Runs locally, works offline,
 ```bash
 git clone https://github.com/saagpatel/SpecCompanion
 cd SpecCompanion
-pnpm install
+pnpm install --frozen-lockfile
 ```
 
 ### Usage
@@ -94,7 +95,7 @@ are separate from native desktop packaging and human acceptance.
 | Frontend            | React, TypeScript, Tailwind CSS                |
 | Requirement parsing | Rust + `pulldown-cmark` (AST-based, not regex) |
 | Evidence slice      | JavaScript/TypeScript and Python               |
-| Test execution      | Bounded Rust subprocess runner (Jest, PyTest)  |
+| Test execution      | Bounded Rust subprocess runner (Jest, Vitest, PyTest, `unittest`) |
 | LLM integration     | Anthropic Claude API (optional)                |
 | Storage             | SQLite (local app data dir)                    |
 

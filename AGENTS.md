@@ -32,18 +32,22 @@ Portfolio truth currently marks this project as `active` with `boilerplate` cont
 | Desktop shell       | Tauri 2                                        |
 | Frontend            | React, TypeScript, Tailwind CSS                |
 | Requirement parsing | Rust + `pulldown-cmark` (AST-based, not regex) |
-| Test execution      | Rust subprocess runner (Jest, PyTest)          |
+| Evidence slice      | JavaScript/TypeScript and Python               |
+| Test generation     | Jest and PyTest (offline templates or Claude)  |
+| Test execution      | Bounded Rust subprocess runner (Jest, Vitest, PyTest, `unittest`) |
 | LLM integration     | Anthropic Claude API (optional)                |
 | Storage             | SQLite (local app data dir)                    |
 
 ## How To Run
 
-```
-npm install
-npm run tauri dev
+```bash
+pnpm install --frozen-lockfile   # pnpm-lock.yaml is the only lockfile; CI uses pnpm 10
+pnpm tauri dev
 ```
 
-Optionally set ANTHROPIC_API_KEY for Claude-assisted spec suggestions. App works fully offline without it.
+Node 20.19+ or 22.12+ (CI uses Node 20). For Claude-assisted test generation, enter an API key on the in-app Settings page; the app does not read an `ANTHROPIC_API_KEY` environment variable. Everything else works offline without a key.
+
+Verification: see the README Verification section and `.codex/verify.commands`. `pnpm test` runs the full UI gate, including `lhci autorun`, which uploads Lighthouse reports externally; use `pnpm ui:gate:static` and `cargo test --locked --manifest-path src-tauri/Cargo.toml` for offline checks.
 
 ## Known Risks
 

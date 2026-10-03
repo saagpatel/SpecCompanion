@@ -51,6 +51,30 @@ pnpm tauri dev
 5. Run selected generated or linked tests in the bounded local runner
 6. Review each classification and expand its evidence trail
 
+## Verification
+
+Use the repository root, Node 20+ and pnpm 10 (matching CI), plus Rust and
+[Tauri platform prerequisites](https://tauri.app/start/prerequisites/). Install
+with `pnpm install --frozen-lockfile --ignore-scripts` for an isolated audit;
+normal development installation runs Husky and may configure Git hooks.
+
+The [canonical full gate](.codex/verify.commands) and
+[verification contract](DOC-RECONCILIATION.md#verification-authority) are authoritative.
+For focused backend workflow changes use `pnpm workflow:smoke`; for the broader
+backend use `cargo test --locked --manifest-path src-tauri/Cargo.toml`.
+`pnpm ui:gate:static` runs frontend lint/typecheck, while `pnpm build:ui` also
+builds the UI. Rust check/format commands must target the nested manifest, for
+example `cargo check --locked --manifest-path src-tauri/Cargo.toml` and
+`cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`.
+
+For UI or report changes, install Chromium with `pnpm exec playwright install chromium`
+and run `pnpm ui:gate:regression` (visual/accessibility fixtures). Playwright starts
+its loopback browser-preview server; `pnpm ui:test:lighthouse` is the additional
+build/performance lane. `pnpm test` selects the complete UI gate, not Rust tests.
+Use disposable code/spec fixtures with no API key; do not select personal source
+trees or enable Claude generation for an offline smoke. Browser-preview fixtures
+are separate from native desktop packaging and human acceptance.
+
 ## Tech Stack
 
 | Layer               | Technology                                     |

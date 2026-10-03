@@ -53,7 +53,7 @@ pnpm tauri dev
 
 ## Verification
 
-Use the repository root, Node 20.19+ or 22.12+ and pnpm 10 (matching CI), plus Rust and
+Use the repository root, Node 20.x (at least 20.19) or Node 22.12+ and pnpm 10 (matching CI), plus Rust and
 [Tauri platform prerequisites](https://tauri.app/start/prerequisites/). Install
 with `pnpm install --frozen-lockfile --ignore-scripts` for an isolated audit;
 normal development installation runs Husky and may configure Git hooks.

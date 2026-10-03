@@ -53,7 +53,7 @@ pnpm tauri dev
 
 ## Verification
 
-Use the repository root, Node 20+ and pnpm 10 (matching CI), plus Rust and
+Use the repository root, Node 20.19+ or 22.12+ and pnpm 10 (matching CI), plus Rust and
 [Tauri platform prerequisites](https://tauri.app/start/prerequisites/). Install
 with `pnpm install --frozen-lockfile --ignore-scripts` for an isolated audit;
 normal development installation runs Husky and may configure Git hooks.
@@ -69,8 +69,19 @@ example `cargo check --locked --manifest-path src-tauri/Cargo.toml` and
 
 For UI or report changes, install Chromium with `pnpm exec playwright install chromium`
 and run `pnpm ui:gate:regression` (visual/accessibility fixtures). Playwright starts
-its loopback browser-preview server; `pnpm ui:test:lighthouse` is the additional
-build/performance lane. `pnpm test` selects the complete UI gate, not Rust tests.
+its loopback browser-preview server. For local Lighthouse checks, run:
+
+```bash
+pnpm build
+pnpm exec lhci collect --config=.lighthouserc.json
+pnpm exec lhci assert --config=.lighthouserc.json
+```
+
+These collect/assert steps keep reports local. `pnpm ui:test:lighthouse` uses
+`lhci autorun`, whose checked-in upload target is temporary public storage; it
+uploads reports externally. `pnpm test` includes that upload via the complete UI
+gate, so it requires explicit approval for the external operation and is not an
+offline smoke or a Rust test command.
 Use disposable code/spec fixtures with no API key; do not select personal source
 trees or enable Claude generation for an offline smoke. Browser-preview fixtures
 are separate from native desktop packaging and human acceptance.

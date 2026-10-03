@@ -14,6 +14,10 @@ Thank you for your interest in contributing!
 
 Open a [GitHub Issue](../../issues) with a clear description and steps to reproduce.
 
+## Verification
+
+Use the [README verification lanes](README.md#verification) and the linked canonical gate before opening a PR.
+
 ## Code Style
 
 Follow the existing conventions in the codebase.

@@ -175,6 +175,60 @@ fn rename() {
     assert_eq!(fingerprint("a  \nb\t"), fingerprint("a\nb"));
 }
 #[test]
+fn renamed_link_requires_reaudit() {
+    let l = link();
+    let mut passed = outcome(TestStatus::Passed);
+    passed.test_id = "renamed".into();
+    let identities = BTreeMap::from([(
+        "renamed".into(),
+        TestIdentity {
+            fingerprint: fingerprint("fn renamed() {\n    assert_eq!(actual(), expected());\n}"),
+            rename_hint: l.rename_hint.clone(),
+        },
+    )]);
+    let annotations = RequirementAnnotations {
+        links: vec![l],
+        ..Default::default()
+    };
+    let result = score_line_at_revision(
+        "R-001",
+        &revision("requirement"),
+        &annotations,
+        &[passed],
+        &identities,
+        &BTreeSet::new(),
+    );
+    assert_eq!(result.badge, Badge::Unproven);
+    assert_eq!(result.reasons, [Reason::TestChanged]);
+}
+
+#[test]
+fn rename_with_should_panic_does_not_match() {
+    for (old, new) in [
+        (
+            "#[test]\nfn old() { assert!(value); }",
+            "#[test]\n#[should_panic]\nfn new() { assert!(value); }",
+        ),
+        (
+            "#[test]\nfn old() { assert!(value); }",
+            "#[test]\n#[ignore]\nfn new() { assert!(value); }",
+        ),
+        ("def old(): assert value", "@mark\ndef new(): assert value"),
+    ] {
+        let mut l = link();
+        l.rename_hint = rename_hint(old);
+        let current = TestIdentity {
+            fingerprint: fingerprint(new),
+            rename_hint: rename_hint(new),
+        };
+        assert_eq!(
+            resolve_link_with_identities(&l, &[], &BTreeMap::from([("new".into(), current)])),
+            Resolution::Unresolved
+        );
+        assert_ne!(rename_hint(old), rename_hint(new));
+    }
+}
+#[test]
 fn history() {
     let d = tempfile::tempdir_in("target").unwrap();
     let h = History::new(d.path().join("history.jsonl"));
@@ -503,7 +557,7 @@ fn declaration_only_hint_cannot_resolve_rename() {
 
 #[test]
 fn rename_hint_keeps_code_on_declaration_line() {
-    for (old, renamed, changed, body) in [
+    for (old, renamed, changed, _body) in [
         (
             "fn old() { assert_eq!(f(), 1);\n}",
             "fn new() { assert_eq!(f(), 1);\n}",
@@ -536,7 +590,7 @@ fn rename_hint_keeps_code_on_declaration_line() {
         ),
     ] {
         let hint = rename_hint(old);
-        assert_eq!(hint, Some(fingerprint(body)));
+        assert!(hint.is_some());
         assert_eq!(hint, rename_hint(renamed));
         assert_ne!(hint, rename_hint(changed));
         let mut l = link();

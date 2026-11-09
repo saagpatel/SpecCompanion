@@ -37,6 +37,10 @@ pub struct TestEvidence {
     pub test_id: String,
     pub status: TestStatus,
     pub duration_ms: Option<u64>,
+    /// Only a current, accepted, resolved link can contribute a causal failure.
+    /// Legacy status files lack this provenance and must not imply admissibility.
+    #[serde(default)]
+    pub admissible: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LineStatus {
@@ -101,11 +105,17 @@ pub fn score_line_at_revision(
             .iter()
             .filter(|o| &o.test_id == resolved)
             .collect::<Vec<_>>();
+        let link_admissible = link.audit.is_accepted()
+            && !revision.is_empty()
+            && link.revision == revision
+            && link.audit.revision == revision
+            && matches!(resolution, Resolution::Exact | Resolution::Renamed { .. });
         for o in &matched {
             result.tests.push(TestEvidence {
                 test_id: o.test_id.clone(),
                 status: o.status,
                 duration_ms: o.duration_ms,
+                admissible: link_admissible,
             });
         }
         if resolution == Resolution::Unresolved {
@@ -121,11 +131,11 @@ pub fn score_line_at_revision(
         }
         match resolution {
             Resolution::Unresolved => continue,
-            Resolution::Changed => {
+            Resolution::Changed | Resolution::Renamed { .. } => {
                 reason(&mut result, Reason::TestChanged);
                 continue;
             }
-            Resolution::Exact | Resolution::Renamed { .. } => {}
+            Resolution::Exact => {}
         }
         admissible += 1;
         if link.audit.verdict == AuditVerdict::Challenged

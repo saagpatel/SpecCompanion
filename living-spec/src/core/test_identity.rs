@@ -41,7 +41,7 @@ pub fn fingerprint(source: &str) -> String {
         .join("\n");
     format!("sha256:{:x}", Sha256::digest(normalized.as_bytes()))
 }
-/// Strip only a recognized declaration, preserving code on its opening line.
+/// Normalize only a recognized test name, preserving the rest of the source.
 /// Unsupported signatures have no hint: guessing a body boundary can hide edits.
 pub fn rename_hint(source: &str) -> Option<String> {
     use regex::Regex;
@@ -52,16 +52,25 @@ pub fn rename_hint(source: &str) -> Option<String> {
     static HEADER: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(concat!(
             r#"(?x)\A\s*(?:"#,
-            r#"(?:\#\[[^\[\]"'\r\n]*\]\s*)*(?:async\s+)?fn\s+[A-Za-z_]\w*\s*\(\s*\)\s*\{"#,
-            r#"|(?:@[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\n\s*)*(?:async\s+)?def\s+[A-Za-z_]\w*\s*\(\s*(?:[A-Za-z_]\w*\s*(?:,\s*[A-Za-z_]\w*\s*)*,?\s*)?\)\s*:"#,
-            r#"|(?:it|test)(?:\.(?:only|skip))?\s*\(\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*(?:async\s+)?(?:\(\s*(?:[A-Za-z_]\w*\s*)?\)\s*=>|function(?:\s+[A-Za-z_]\w*)?\s*\(\s*\))\s*\{"#,
+            r#"(?:\#\[[^\[\]"'\r\n]*\]\s*)*(?:async\s+)?fn\s+(?P<rust>[A-Za-z_]\w*)\s*\(\s*\)\s*\{"#,
+            r#"|(?:@[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\n\s*)*(?:async\s+)?def\s+(?P<python>[A-Za-z_]\w*)\s*\(\s*(?:[A-Za-z_]\w*\s*(?:,\s*[A-Za-z_]\w*\s*)*,?\s*)?\)\s*:"#,
+            r#"|(?:it|test)(?:\.(?:only|skip))?\s*\(\s*(?P<js>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*(?:async\s+)?(?:\(\s*(?:[A-Za-z_]\w*\s*)?\)\s*=>|function(?:\s+[A-Za-z_]\w*)?\s*\(\s*\))\s*\{"#,
             r#")"#,
         ))
         .expect("bounded declaration regex")
     });
-    let header = HEADER.find(source)?;
-    let body = &source[header.end()..];
-    (!body.trim().is_empty()).then(|| fingerprint(body))
+    let captures = HEADER.captures(source)?;
+    let header = captures.get(0)?;
+    if source[header.end()..].trim().is_empty() {
+        return None;
+    }
+    let name = captures
+        .name("rust")
+        .or_else(|| captures.name("python"))
+        .or_else(|| captures.name("js"))?;
+    let mut normalized = source.to_owned();
+    normalized.replace_range(name.range(), "<test-name>");
+    Some(fingerprint(&normalized))
 }
 /// Compatibility entry point for digest-only callers. Renames require hints.
 pub fn resolve_link(

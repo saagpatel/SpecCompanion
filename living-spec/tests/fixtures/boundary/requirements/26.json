@@ -1,0 +1,135 @@
+{
+  "requirement": "R-026",
+  "text": "State is only idle, busy or done.",
+  "category": "domain",
+  "parse_result": "parsed",
+  "annotation": null,
+  "rejection_form": null,
+  "expected_bounds": [
+    {
+      "quantity": "State",
+      "kind": {
+        "type": "domain",
+        "allowed": [
+          "idle",
+          "busy",
+          "done"
+        ],
+        "closed": true
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "allowed-0",
+        "value": "idle",
+        "unit": null,
+        "expected": "accepted"
+      },
+      {
+        "position": "allowed-1",
+        "value": "busy",
+        "unit": null,
+        "expected": "accepted"
+      },
+      {
+        "position": "allowed-2",
+        "value": "done",
+        "unit": null,
+        "expected": "accepted"
+      },
+      {
+        "position": "invalid-variant",
+        "value": "idle ",
+        "unit": null,
+        "expected": "rejected"
+      },
+      {
+        "position": "invalid-unlisted",
+        "value": "__unlisted__",
+        "unit": null,
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "State",
+      "position": "allowed-0",
+      "value": "idle",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_26_0"
+    },
+    {
+      "quantity": "State",
+      "position": "allowed-1",
+      "value": "busy",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_26_1"
+    },
+    {
+      "quantity": "State",
+      "position": "allowed-2",
+      "value": "done",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_26_2"
+    },
+    {
+      "quantity": "State",
+      "position": "invalid-variant",
+      "value": "idle ",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_26_3"
+    },
+    {
+      "quantity": "State",
+      "position": "invalid-unlisted",
+      "value": "__unlisted__",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_26_4"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_26_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_26_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_26_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_26_3",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_26_4",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "requirement": "R-030",
+  "text": "Utilization is at most 12.5 percent.",
+  "category": "percent",
+  "parse_result": "needs_annotation",
+  "annotation": [
+    {
+      "quantity": "Utilization",
+      "kind": {
+        "type": "numeric",
+        "value": "12.5",
+        "unit": "percent",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "0.1",
+          "unit": "percent"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "rejection_form": "decimal-step",
+  "expected_bounds": [
+    {
+      "quantity": "Utilization",
+      "kind": {
+        "type": "numeric",
+        "value": "12.5",
+        "unit": "percent",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "0.1",
+          "unit": "percent"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "12.4",
+        "unit": "percent",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "12.5",
+        "unit": "percent",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "12.6",
+        "unit": "percent",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Utilization",
+      "position": "below",
+      "value": "12.4",
+      "unit": "percent",
+      "test_id": "libtest:boundary:cases.rs:fixture_30_0"
+    },
+    {
+      "quantity": "Utilization",
+      "position": "at",
+      "value": "12.5",
+      "unit": "percent",
+      "test_id": "libtest:boundary:cases.rs:fixture_30_1"
+    },
+    {
+      "quantity": "Utilization",
+      "position": "above",
+      "value": "12.6",
+      "unit": "percent",
+      "test_id": "libtest:boundary:cases.rs:fixture_30_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_30_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_30_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_30_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

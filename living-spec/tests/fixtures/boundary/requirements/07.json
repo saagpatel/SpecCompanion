@@ -1,0 +1,116 @@
+{
+  "requirement": "R-007",
+  "text": "Response is fast.",
+  "category": "time",
+  "parse_result": "needs_annotation",
+  "annotation": [
+    {
+      "quantity": "Response",
+      "kind": {
+        "type": "numeric",
+        "value": "500",
+        "unit": "ms",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "rejection_form": "fast",
+  "expected_bounds": [
+    {
+      "quantity": "Response",
+      "kind": {
+        "type": "numeric",
+        "value": "500",
+        "unit": "ms",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "499",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "500",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "501",
+        "unit": "ms",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Response",
+      "position": "below",
+      "value": "499",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_07_0"
+    },
+    {
+      "quantity": "Response",
+      "position": "at",
+      "value": "500",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_07_1"
+    },
+    {
+      "quantity": "Response",
+      "position": "above",
+      "value": "501",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_07_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_07_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_07_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_07_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

@@ -1,0 +1,163 @@
+{
+  "requirement": "R-005",
+  "text": "Lifetime is between 1 and 2 h inclusive.",
+  "category": "time",
+  "parse_result": "parsed",
+  "annotation": null,
+  "rejection_form": null,
+  "expected_bounds": [
+    {
+      "quantity": "Lifetime",
+      "kind": {
+        "type": "numeric",
+        "value": "1",
+        "unit": "h",
+        "op": {
+          "type": "range",
+          "lo": "1",
+          "hi": "2",
+          "inclusive_lo": true,
+          "inclusive_hi": true
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "edge-lo-below",
+        "value": "3599999",
+        "unit": "ms",
+        "expected": "rejected"
+      },
+      {
+        "position": "edge-lo-at",
+        "value": "3600000",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "edge-lo-above",
+        "value": "3600001",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "edge-hi-below",
+        "value": "7199999",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "edge-hi-at",
+        "value": "7200000",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "edge-hi-above",
+        "value": "7200001",
+        "unit": "ms",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Lifetime",
+      "position": "edge-lo-below",
+      "value": "3599999",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_05_0"
+    },
+    {
+      "quantity": "Lifetime",
+      "position": "edge-lo-at",
+      "value": "3600000",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_05_1"
+    },
+    {
+      "quantity": "Lifetime",
+      "position": "edge-lo-above",
+      "value": "3600001",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_05_2"
+    },
+    {
+      "quantity": "Lifetime",
+      "position": "edge-hi-below",
+      "value": "7199999",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_05_3"
+    },
+    {
+      "quantity": "Lifetime",
+      "position": "edge-hi-at",
+      "value": "7200000",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_05_4"
+    },
+    {
+      "quantity": "Lifetime",
+      "position": "edge-hi-above",
+      "value": "7200001",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_05_5"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_05_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_05_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_05_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_05_3",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_05_4",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_05_5",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

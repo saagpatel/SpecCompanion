@@ -1,0 +1,102 @@
+{
+  "requirement": "R-003",
+  "text": "Window is no more than 10 ms.",
+  "category": "time",
+  "parse_result": "parsed",
+  "annotation": null,
+  "rejection_form": null,
+  "expected_bounds": [
+    {
+      "quantity": "Window",
+      "kind": {
+        "type": "numeric",
+        "value": "10",
+        "unit": "ms",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "9",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "10",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "11",
+        "unit": "ms",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Window",
+      "position": "below",
+      "value": "9",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_03_0",
+      "test_body": "let timeout_ms = 10; assert!(timeout_ms > 0);"
+    },
+    {
+      "quantity": "Window",
+      "position": "at",
+      "value": "10",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_03_1",
+      "test_body": "let timeout_ms = 10; assert!(timeout_ms > 0);"
+    },
+    {
+      "quantity": "Window",
+      "position": "above",
+      "value": "11",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_03_2",
+      "test_body": "let timeout_ms = 10; assert!(timeout_ms > 0);"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_03_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_03_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_03_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "untested",
+      "untested",
+      "untested"
+    ]
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "requirement": "R-015",
+  "text": "Rate is at most 5 MB/s.",
+  "category": "size",
+  "parse_result": "needs_annotation",
+  "annotation": [
+    {
+      "quantity": "Rate",
+      "kind": {
+        "type": "numeric",
+        "value": "5",
+        "unit": "MB",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "B"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "rejection_form": "compound",
+  "expected_bounds": [
+    {
+      "quantity": "Rate",
+      "kind": {
+        "type": "numeric",
+        "value": "5",
+        "unit": "MB",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "B"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "4999999",
+        "unit": "B",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "5000000",
+        "unit": "B",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "5000001",
+        "unit": "B",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Rate",
+      "position": "below",
+      "value": "4999999",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_15_0"
+    },
+    {
+      "quantity": "Rate",
+      "position": "at",
+      "value": "5000000",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_15_1"
+    },
+    {
+      "quantity": "Rate",
+      "position": "above",
+      "value": "5000001",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_15_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_15_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_15_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_15_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

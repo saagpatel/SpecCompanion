@@ -1,0 +1,163 @@
+{
+  "requirement": "R-013",
+  "text": "Buffer is between 1 and 3 KiB exclusive.",
+  "category": "size",
+  "parse_result": "parsed",
+  "annotation": null,
+  "rejection_form": null,
+  "expected_bounds": [
+    {
+      "quantity": "Buffer",
+      "kind": {
+        "type": "numeric",
+        "value": "1",
+        "unit": "KiB",
+        "op": {
+          "type": "range",
+          "lo": "1",
+          "hi": "3",
+          "inclusive_lo": false,
+          "inclusive_hi": false
+        },
+        "step": {
+          "value": "1",
+          "unit": "B"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "edge-lo-below",
+        "value": "1023",
+        "unit": "B",
+        "expected": "rejected"
+      },
+      {
+        "position": "edge-lo-at",
+        "value": "1024",
+        "unit": "B",
+        "expected": "rejected"
+      },
+      {
+        "position": "edge-lo-above",
+        "value": "1025",
+        "unit": "B",
+        "expected": "accepted"
+      },
+      {
+        "position": "edge-hi-below",
+        "value": "3071",
+        "unit": "B",
+        "expected": "accepted"
+      },
+      {
+        "position": "edge-hi-at",
+        "value": "3072",
+        "unit": "B",
+        "expected": "rejected"
+      },
+      {
+        "position": "edge-hi-above",
+        "value": "3073",
+        "unit": "B",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Buffer",
+      "position": "edge-lo-below",
+      "value": "1023",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_13_0"
+    },
+    {
+      "quantity": "Buffer",
+      "position": "edge-lo-at",
+      "value": "1024",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_13_1"
+    },
+    {
+      "quantity": "Buffer",
+      "position": "edge-lo-above",
+      "value": "1025",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_13_2"
+    },
+    {
+      "quantity": "Buffer",
+      "position": "edge-hi-below",
+      "value": "3071",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_13_3"
+    },
+    {
+      "quantity": "Buffer",
+      "position": "edge-hi-at",
+      "value": "3072",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_13_4"
+    },
+    {
+      "quantity": "Buffer",
+      "position": "edge-hi-above",
+      "value": "3073",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_13_5"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_13_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_13_1",
+      "status": "failed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_13_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_13_3",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_13_4",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_13_5",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_fail",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

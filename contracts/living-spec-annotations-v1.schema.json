@@ -162,6 +162,7 @@
             },
             "override": {
               "type": "object",
+              "description": "A human decision is active only when test_id, fingerprint and revision all match the link; legacy unbound decisions are inactive history.",
               "required": [
                 "by",
                 "reason"
@@ -173,6 +174,15 @@
                 "reason": {
                   "type": "string",
                   "pattern": "\\S"
+                },
+                "test_id": {
+                  "type": "string"
+                },
+                "fingerprint": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "string"
                 }
               }
             }

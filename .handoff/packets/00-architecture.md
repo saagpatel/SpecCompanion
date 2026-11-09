@@ -99,6 +99,13 @@ Extra roots can be added with `--include PATH` (for a project newly revived but 
 
 ## Honesty rules (acceptance-relevant)
 
+- The auditor is a deterministic, best-effort static check aimed at lazy or accidental non-tests: placeholders,
+  irrelevant or tautological assertions, and unexecuted or unsupported shapes. Unsupported shapes are always
+  challenged. It is not a sandbox or a proof that a test is adversarially sound; a deliberately obfuscated test can
+  still mislead it. A green badge means "a passing test the auditor could relate to this line", never "proven correct".
+- A human audit override records its exact `test_id`, `fingerprint`, and requirement `revision`. Missing or differing
+  binding fields make the override inactive. Writes retain invalidated decisions in `audit.invalidated_overrides`
+  as history; neither re-auditing nor relinking transfers a decision to a new binding.
 - Never fabricate a test failure (qualified ≠ broken). Never hide an untested boundary or an unresolved link.
 - The Quantifier Map coverage view and edition must never use proof language. Forbidden words (case-insensitive,
   whole word) in any rendered coverage text: `proven`, `proof`, `proves`, `guaranteed`, `guarantee`, `always`,

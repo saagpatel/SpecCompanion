@@ -1,6 +1,9 @@
 use super::Exit;
 use crate::{
-    agents::{auditor, linker, test_index::TestIndex},
+    agents::{
+        auditor, linker,
+        test_index::{SourceResolution, TestIndex},
+    },
     core::{
         annotations::{Annotations, Audit, AuditVerdict, Link},
         spec::Spec,
@@ -51,6 +54,21 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     let (dir, root, write) = parse(args, true)?;
     let (spec, mut annotations) = load(dir)?;
     let index = TestIndex::build(root)?;
+    if write {
+        for (id, annotation) in &mut annotations.requirements {
+            let line = spec.lines.iter().find(|line| line.id == *id);
+            for old in &mut annotation.links {
+                old.retire_stale_override();
+                let unchanged = match (line, index.resolve(old)) {
+                    (Some(line), SourceResolution::Exact(_)) => old.revision == line.revision,
+                    _ => false,
+                };
+                if !unchanged {
+                    old.invalidate_override();
+                }
+            }
+        }
+    }
     for id in annotations.orphans(&spec) {
         println!("orphan annotation: {id}");
     }
@@ -98,6 +116,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             {
                 link.extra = old.extra.clone();
                 link.audit.extra = old.audit.extra.clone();
+                link.retire_stale_override();
                 *old = link;
             } else {
                 links.push(link);

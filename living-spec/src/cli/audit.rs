@@ -28,6 +28,12 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             let line = spec.lines.iter().find(|line| line.id == *id);
             let resolved = index.resolve(link);
             let mut current = link.clone();
+            current.retire_stale_override();
+            if !matches!(resolved, SourceResolution::Exact(_))
+                || line.is_none_or(|line| line.revision != current.revision)
+            {
+                current.invalidate_override();
+            }
             if let Some(line) = line {
                 current.revision = line.revision.clone();
             }
@@ -78,6 +84,10 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             challenged |= result.verdict == AuditVerdict::Challenged;
             print_audit(id, &current.test_id, &result);
             if let Some(document) = &mut document {
+                let extra = current.audit.extra;
+                current.audit = result;
+                current.audit.extra = extra;
+                current.retire_stale_override();
                 let saved = &mut document["requirements"][id]["links"][position];
                 saved["test_id"] = current.test_id.into();
                 saved["fingerprint"] = current.fingerprint.into();
@@ -85,9 +95,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                 if line.is_some() {
                     saved["revision"] = current.revision.into();
                 }
-                saved["audit"]["verdict"] = serde_json::to_value(result.verdict)?;
-                saved["audit"]["revision"] = result.revision.into();
-                saved["audit"]["notes"] = serde_json::to_value(result.notes)?;
+                saved["audit"] = serde_json::to_value(current.audit)?;
             }
         }
     }

@@ -110,6 +110,136 @@ test('real', () => { expect(export_timestamp(30)).toBe(30); });
 }
 
 #[test]
+fn js_block_comment_is_not_nested() {
+    let entry = indexed(
+        "test.js",
+        "test('export timestamp', () => {\n    /* /* */ return; // */\n    expect(export_timestamp(30)).toBe(30);\n});",
+    );
+    challenged_even_when_passed(&entry);
+
+    let rust = indexed(
+        "tests/export.rs",
+        "#[test]\nfn test_export_timestamp() { /* outer /* nested */ still comment */ assert_eq!(export_timestamp(30), 30); }",
+    );
+    let spec = Spec::parse("- [R-001] Export timestamp is 30.").unwrap();
+    let requirement = &spec.lines[0];
+    let mut link = Link {
+        test_id: rust.id.clone(),
+        fingerprint: rust.fingerprint.clone(),
+        rename_hint: Some(rust.rename_hint.clone()),
+        revision: requirement.revision.clone(),
+        explanation: "Review regression".into(),
+        proposed_by: "human".into(),
+        audit: Audit {
+            revision: requirement.revision.clone(),
+            verdict: AuditVerdict::Challenged,
+            notes: vec![],
+            extra: BTreeMap::new(),
+        },
+        extra: BTreeMap::new(),
+    };
+    link.audit = audit(requirement, &link, &rust);
+    assert_eq!(
+        link.audit.verdict,
+        AuditVerdict::Accepted,
+        "{:?}",
+        link.audit.notes
+    );
+}
+
+#[test]
+fn early_return_before_assertion_is_challenged() {
+    for (file, source) in [
+        (
+            "test.js",
+            "test('export timestamp', () => { return; expect(export_timestamp(30)).toBe(30); });",
+        ),
+        (
+            "test.js",
+            "test('export timestamp', () => { throw new Error('stop'); expect(export_timestamp(30)).toBe(30); });",
+        ),
+        (
+            "test.js",
+            "test('export timestamp', () => { expect(export_timestamp(process.exit(0))).toBe(30); });",
+        ),
+        (
+            "test_export.py",
+            "def test_export_timestamp():\n    return\n    assert export_timestamp(30) == 30\n",
+        ),
+        (
+            "tests/export.rs",
+            "#[test]\nfn test_export_timestamp() { return; assert_eq!(export_timestamp(30), 30); }",
+        ),
+        (
+            "tests/export.rs",
+            "#[test]\nfn test_export_timestamp() { std::process::exit(0); assert_eq!(export_timestamp(30), 30); }",
+        ),
+        (
+            "tests/export.rs",
+            "#[test]\nfn test_export_timestamp() { assert_eq!(export_timestamp(panic!(\"stop\")), 30); }",
+        ),
+    ] {
+        challenged_even_when_passed(&indexed(file, source));
+    }
+}
+
+#[test]
+fn unrelated_assertion_cannot_supply_required_number() {
+    let entry = indexed(
+        "test_export.py",
+        "def test_export_timestamp():\n    assert export_timestamp(30) == 30\n    assert unrelated(90) == 90\n",
+    );
+    let spec = Spec::parse("- [R-001] Export timestamps at 30 and 90.").unwrap();
+    let requirement = &spec.lines[0];
+    let mut link = Link {
+        test_id: entry.id.clone(),
+        fingerprint: entry.fingerprint.clone(),
+        rename_hint: Some(entry.rename_hint.clone()),
+        revision: requirement.revision.clone(),
+        explanation: "Review regression".into(),
+        proposed_by: "human".into(),
+        audit: Audit {
+            revision: requirement.revision.clone(),
+            verdict: AuditVerdict::Accepted,
+            notes: vec![],
+            extra: BTreeMap::new(),
+        },
+        extra: BTreeMap::new(),
+    };
+    link.audit = audit(requirement, &link, &entry);
+    assert_eq!(link.audit.verdict, AuditVerdict::Challenged);
+    assert!(link
+        .audit
+        .notes
+        .iter()
+        .any(|note| note.contains("required number")));
+
+    for source in [
+        "def test_export_timestamp():\n    assert export_timestamp(30) == 30\n    assert export_timestamp(90) == 90\n",
+        "def test_export_timestamp():\n    first = 30\n    second = 90\n    assert export_timestamp(first) == 30\n    assert export_timestamp(second) == 90\n",
+    ] {
+        let entry = indexed("test_export.py", source);
+        let mut link = Link {
+            test_id: entry.id.clone(),
+            fingerprint: entry.fingerprint.clone(),
+            rename_hint: Some(entry.rename_hint.clone()),
+            revision: requirement.revision.clone(),
+            explanation: "Review regression".into(),
+            proposed_by: "human".into(),
+            audit: Audit {
+                revision: requirement.revision.clone(),
+                verdict: AuditVerdict::Challenged,
+                notes: vec![],
+                extra: BTreeMap::new(),
+            },
+            extra: BTreeMap::new(),
+        };
+        link.audit = audit(requirement, &link, &entry);
+        assert_eq!(link.audit.verdict, AuditVerdict::Accepted, "{source}: {:?}", link.audit.notes);
+    }
+}
+
+#[test]
 fn irrefutable_rust_binding_patterns_pass_the_placeholder_gate() {
     for pattern in [
         "any_value",

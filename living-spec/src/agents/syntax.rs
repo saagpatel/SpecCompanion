@@ -42,16 +42,26 @@ fn scan(source: &str, python: bool, rust: bool, javascript: bool) -> Vec<Token> 
         }
         if !python && b[i..].starts_with(b"/*") {
             i += 2;
-            let mut depth = 1;
-            while i < b.len() && depth > 0 {
-                if b[i..].starts_with(b"/*") {
-                    depth += 1;
-                    i += 2;
-                } else if b[i..].starts_with(b"*/") {
-                    depth -= 1;
-                    i += 2;
-                } else {
+            if rust {
+                let mut depth = 1;
+                while i < b.len() && depth > 0 {
+                    if b[i..].starts_with(b"/*") {
+                        depth += 1;
+                        i += 2;
+                    } else if b[i..].starts_with(b"*/") {
+                        depth -= 1;
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                }
+            } else {
+                // JavaScript and TypeScript block comments end at the first */.
+                while i < b.len() && !b[i..].starts_with(b"*/") {
                     i += 1;
+                }
+                if i < b.len() {
+                    i += 2;
                 }
             }
             continue;

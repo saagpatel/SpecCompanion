@@ -608,10 +608,10 @@ fn human_overrides_require_authorship_and_reason_and_preserve_other_gates() {
         .unwrap();
         assert!(Annotations::load(&path).is_err());
     }
-    a.links[0].audit.extra.insert(
-        "override".into(),
-        serde_json::json!({"by":"human", "reason":"Reviewed the assertion limitation"}),
-    );
+    let reviewed = &a.links[0];
+    let decision = serde_json::json!({"by":"human", "reason":"Reviewed the assertion limitation",
+        "test_id":reviewed.test_id, "fingerprint":reviewed.fingerprint, "revision":reviewed.revision});
+    a.links[0].audit.extra.insert("override".into(), decision);
     let accepted = score(&a, &[outcome(TestStatus::Passed)], &[]);
     assert_eq!(accepted.badge, Badge::Proven);
     assert!(accepted.reasons.contains(&Reason::HumanOverride));

@@ -22,6 +22,9 @@ pub fn audit(requirement: &RequirementLine, link: &Link, entry: &TestEntry) -> A
         Language::Python => lex(&entry.body, true),
     };
     let analysis = assertions(&tokens, &entry.body, entry.language, entry.should_panic);
+    if let Some(shape) = early_exit(&tokens, entry.language) {
+        notes.push(format!("unsupported test shape: {shape}"));
+    }
     if entry.language == Language::Python && entry.decorated && !parametrize_only(&entry.source) {
         notes.push("unsupported test shape: Python decorator".into());
     }
@@ -36,11 +39,13 @@ pub fn audit(requirement: &RequirementLine, link: &Link, entry: &TestEntry) -> A
             notes.push("unsupported test shape: Assertions check unrelated values; no asserted expression derives from requirement terms.".into());
         }
         let numbers = numeric_tokens(&lex(&requirement.text, false));
-        let used = numeric_tokens(&analysis.inputs);
         if numbers.iter().any(|n| {
-            !used
-                .iter()
-                .any(|value| n == value || (n - value).abs() == 1.0)
+            !analysis.expressions.iter().any(|expression| {
+                relevant(expression, &expected)
+                    && numeric_tokens(expression)
+                        .iter()
+                        .any(|value| n == value || (n - value).abs() == 1.0)
+            })
         }) {
             notes.push("unsupported test shape: A required number is absent from assertions and call inputs, including adjacent values.".into());
         }
@@ -66,8 +71,35 @@ pub fn audit(requirement: &RequirementLine, link: &Link, entry: &TestEntry) -> A
 #[derive(Default)]
 struct Analysis {
     expressions: Vec<Vec<Token>>,
-    inputs: Vec<Token>,
     unsupported: Vec<String>,
+}
+
+fn early_exit(tokens: &[Token], language: Language) -> Option<&'static str> {
+    for (i, token) in tokens.iter().enumerate() {
+        if token.kind == Kind::Ident && matches!(token.text.as_str(), "return" | "throw" | "raise")
+        {
+            return Some("early return or exception can skip assertions");
+        }
+        if token.text == "panic" && tokens.get(i + 1).is_some_and(|t| t.text == "!") {
+            return Some("panic! outside the supported expected-panic call shape");
+        }
+        let is_process_exit = language == Language::JavaScript
+            && tokens.get(i..i + 3).is_some_and(|path| {
+                path[0].text == "process" && path[1].text == "." && path[2].text == "exit"
+            });
+        let is_rust_process_exit = language == Language::Rust
+            && tokens.get(i..i + 5).is_some_and(|path| {
+                path[0].text == "std"
+                    && path[1].text == "::"
+                    && path[2].text == "process"
+                    && path[3].text == "::"
+                    && path[4].text == "exit"
+            });
+        if is_process_exit || is_rust_process_exit {
+            return Some("process exit can skip assertions");
+        }
+    }
+    None
 }
 
 // Consume whole statements, never search an unknown token tree for assertions.
@@ -88,7 +120,6 @@ fn assertions(tokens: &[Token], source: &str, language: Language, should_panic: 
                     && computed(&value, language)
                     && direct_call_end(&value, 0, language) == Some(value.len() - 1)
                 {
-                    result.inputs.extend(value.clone());
                     result.expressions.push(value);
                 } else {
                     result.unsupported.push("pytest.raises subject".into());
@@ -142,7 +173,6 @@ fn assertions(tokens: &[Token], source: &str, language: Language, should_panic: 
                     && computed(&value, language)
                     && direct_call_end(&value, 0, language) == Some(value.len() - 1)
                 {
-                    result.inputs.extend(value.clone());
                     result.expressions.push(value);
                 } else {
                     result.unsupported.push("should_panic subject".into());
@@ -155,7 +185,6 @@ fn assertions(tokens: &[Token], source: &str, language: Language, should_panic: 
         } else {
             match assertion(statement, &bindings, language) {
                 Ok(Some(value)) => {
-                    result.inputs.extend(value.clone());
                     result.expressions.push(value);
                 }
                 Ok(None) => (), // Supported syntax, but no computed/independent assertion.

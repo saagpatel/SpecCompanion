@@ -5,7 +5,8 @@
   "required": [
     "schema",
     "commit",
-    "statuses"
+    "statuses",
+    "inputs"
   ],
   "properties": {
     "schema": {
@@ -43,6 +44,9 @@
       "items": {
         "$ref": "living-spec-boundary-coverage-v1.schema.json#/$defs/coverage"
       }
+    },
+    "inputs": {
+      "$ref": "#/$defs/inputs"
     }
   },
   "additionalProperties": false,
@@ -199,6 +203,133 @@
         "path": {
           "type": "array",
           "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "outcome": {
+      "type": "object",
+      "required": [
+        "test_id",
+        "status",
+        "duration_ms"
+      ],
+      "properties": {
+        "test_id": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "errored",
+            "skipped"
+          ]
+        },
+        "duration_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "failure_message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "requirement_inputs": {
+      "type": "object",
+      "required": [
+        "digest",
+        "revision",
+        "outcomes",
+        "depends_on",
+        "receipt_digest",
+        "test_ids"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "revision": {
+          "$ref": "#/$defs/digest"
+        },
+        "outcomes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/outcome"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "receipt_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "test_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "inputs": {
+      "type": "object",
+      "required": [
+        "digest",
+        "tool_version",
+        "results_file",
+        "results_digest",
+        "requirements",
+        "results_format",
+        "outcome_ids"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "results_file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "results_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "requirements": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/requirement_inputs"
+          }
+        },
+        "results_format": {
+          "enum": [
+            "libtest",
+            "junit",
+            null
+          ]
+        },
+        "outcome_ids": {
+          "type": "object",
+          "additionalProperties": {
             "type": "string"
           }
         }

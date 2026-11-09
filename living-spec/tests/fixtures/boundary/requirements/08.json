@@ -1,0 +1,116 @@
+{
+  "requirement": "R-008",
+  "text": "Latency is below 20 ms at the 99th percentile.",
+  "category": "time",
+  "parse_result": "needs_annotation",
+  "annotation": [
+    {
+      "quantity": "Latency",
+      "kind": {
+        "type": "numeric",
+        "value": "20",
+        "unit": "ms",
+        "op": {
+          "type": "lt"
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "rejection_form": "percentile",
+  "expected_bounds": [
+    {
+      "quantity": "Latency",
+      "kind": {
+        "type": "numeric",
+        "value": "20",
+        "unit": "ms",
+        "op": {
+          "type": "lt"
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "19",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "20",
+        "unit": "ms",
+        "expected": "rejected"
+      },
+      {
+        "position": "above",
+        "value": "21",
+        "unit": "ms",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Latency",
+      "position": "below",
+      "value": "19",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_08_0"
+    },
+    {
+      "quantity": "Latency",
+      "position": "at",
+      "value": "20",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_08_1"
+    },
+    {
+      "quantity": "Latency",
+      "position": "above",
+      "value": "21",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_08_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_08_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_08_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_08_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

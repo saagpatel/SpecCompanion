@@ -1,0 +1,73 @@
+{
+  "requirement": "R-002",
+  "text": "Timeout is within 30 s.",
+  "category": "time",
+  "parse_result": "parsed",
+  "annotation": null,
+  "rejection_form": null,
+  "expected_bounds": [
+    {
+      "quantity": "Timeout",
+      "kind": {
+        "type": "numeric",
+        "value": "30",
+        "unit": "s",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "29999",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "30000",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "30001",
+        "unit": "ms",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Timeout",
+      "position": "at",
+      "value": "30",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:contradiction_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:contradiction_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": "unit_contradiction",
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

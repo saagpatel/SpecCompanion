@@ -1,0 +1,73 @@
+{
+  "requirement": "R-012",
+  "text": "Archive is at most 10 MB.",
+  "category": "size",
+  "parse_result": "parsed",
+  "annotation": null,
+  "rejection_form": null,
+  "expected_bounds": [
+    {
+      "quantity": "Archive",
+      "kind": {
+        "type": "numeric",
+        "value": "10",
+        "unit": "MB",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "B"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "9999999",
+        "unit": "B",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "10000000",
+        "unit": "B",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "10000001",
+        "unit": "B",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Archive",
+      "position": "at",
+      "value": "10",
+      "unit": "MiB",
+      "test_id": "libtest:boundary:cases.rs:contradiction_12"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:contradiction_12",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": "unit_contradiction",
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

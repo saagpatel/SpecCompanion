@@ -1,0 +1,116 @@
+{
+  "requirement": "R-023",
+  "text": "Slots is at most 2 items or exactly 4 items.",
+  "category": "count",
+  "parse_result": "needs_annotation",
+  "annotation": [
+    {
+      "quantity": "Slots",
+      "kind": {
+        "type": "numeric",
+        "value": "2",
+        "unit": "items",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "items"
+        },
+        "integer": true
+      }
+    }
+  ],
+  "rejection_form": "disjunction",
+  "expected_bounds": [
+    {
+      "quantity": "Slots",
+      "kind": {
+        "type": "numeric",
+        "value": "2",
+        "unit": "items",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "items"
+        },
+        "integer": true
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "1",
+        "unit": "items",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "2",
+        "unit": "items",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "3",
+        "unit": "items",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Slots",
+      "position": "below",
+      "value": "1",
+      "unit": "items",
+      "test_id": "libtest:boundary:cases.rs:fixture_23_0"
+    },
+    {
+      "quantity": "Slots",
+      "position": "at",
+      "value": "2",
+      "unit": "items",
+      "test_id": "libtest:boundary:cases.rs:fixture_23_1"
+    },
+    {
+      "quantity": "Slots",
+      "position": "above",
+      "value": "3",
+      "unit": "items",
+      "test_id": "libtest:boundary:cases.rs:fixture_23_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_23_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_23_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_23_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

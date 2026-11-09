@@ -1,0 +1,116 @@
+{
+  "requirement": "R-014",
+  "text": "Blob is at most 1.000 MB.",
+  "category": "size",
+  "parse_result": "needs_annotation",
+  "annotation": [
+    {
+      "quantity": "Blob",
+      "kind": {
+        "type": "numeric",
+        "value": "1000",
+        "unit": "MB",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "B"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "rejection_form": "locale",
+  "expected_bounds": [
+    {
+      "quantity": "Blob",
+      "kind": {
+        "type": "numeric",
+        "value": "1000",
+        "unit": "MB",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "B"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "999999999",
+        "unit": "B",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "1000000000",
+        "unit": "B",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "1000000001",
+        "unit": "B",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Blob",
+      "position": "below",
+      "value": "999999999",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_14_0"
+    },
+    {
+      "quantity": "Blob",
+      "position": "at",
+      "value": "1000000000",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_14_1"
+    },
+    {
+      "quantity": "Blob",
+      "position": "above",
+      "value": "1000000001",
+      "unit": "B",
+      "test_id": "libtest:boundary:cases.rs:fixture_14_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_14_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_14_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_14_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

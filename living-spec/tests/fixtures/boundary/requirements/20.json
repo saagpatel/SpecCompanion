@@ -1,0 +1,99 @@
+{
+  "requirement": "R-020",
+  "text": "Attempts is 3 or fewer retries.",
+  "category": "count",
+  "parse_result": "parsed",
+  "annotation": null,
+  "rejection_form": null,
+  "expected_bounds": [
+    {
+      "quantity": "Attempts",
+      "kind": {
+        "type": "numeric",
+        "value": "3",
+        "unit": "retries",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "retries"
+        },
+        "integer": true
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "2",
+        "unit": "retries",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "3",
+        "unit": "retries",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "4",
+        "unit": "retries",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Attempts",
+      "position": "below",
+      "value": "2",
+      "unit": "retries",
+      "test_id": "libtest:boundary:cases.rs:fixture_20_0"
+    },
+    {
+      "quantity": "Attempts",
+      "position": "at",
+      "value": "3",
+      "unit": "retries",
+      "test_id": "libtest:boundary:cases.rs:fixture_20_1"
+    },
+    {
+      "quantity": "Attempts",
+      "position": "above",
+      "value": "4",
+      "unit": "retries",
+      "test_id": "libtest:boundary:cases.rs:fixture_20_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_20_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_20_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_20_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

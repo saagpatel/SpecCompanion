@@ -1,0 +1,135 @@
+{
+  "requirement": "R-025",
+  "text": "Mode is one of red, blue, green.",
+  "category": "domain",
+  "parse_result": "parsed",
+  "annotation": null,
+  "rejection_form": null,
+  "expected_bounds": [
+    {
+      "quantity": "Mode",
+      "kind": {
+        "type": "domain",
+        "allowed": [
+          "red",
+          "blue",
+          "green"
+        ],
+        "closed": true
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "allowed-0",
+        "value": "red",
+        "unit": null,
+        "expected": "accepted"
+      },
+      {
+        "position": "allowed-1",
+        "value": "blue",
+        "unit": null,
+        "expected": "accepted"
+      },
+      {
+        "position": "allowed-2",
+        "value": "green",
+        "unit": null,
+        "expected": "accepted"
+      },
+      {
+        "position": "invalid-variant",
+        "value": "red ",
+        "unit": null,
+        "expected": "rejected"
+      },
+      {
+        "position": "invalid-unlisted",
+        "value": "__unlisted__",
+        "unit": null,
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Mode",
+      "position": "allowed-0",
+      "value": "red",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_25_0"
+    },
+    {
+      "quantity": "Mode",
+      "position": "allowed-1",
+      "value": "blue",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_25_1"
+    },
+    {
+      "quantity": "Mode",
+      "position": "allowed-2",
+      "value": "green",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_25_2"
+    },
+    {
+      "quantity": "Mode",
+      "position": "invalid-variant",
+      "value": "red ",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_25_3"
+    },
+    {
+      "quantity": "Mode",
+      "position": "invalid-unlisted",
+      "value": "__unlisted__",
+      "unit": null,
+      "test_id": "libtest:boundary:cases.rs:fixture_25_4"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_25_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_25_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_25_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_25_3",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_25_4",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "requirement": "R-010",
+  "text": "Expiry is before 2032-01-01.",
+  "category": "time",
+  "parse_result": "needs_annotation",
+  "annotation": [
+    {
+      "quantity": "Expiry",
+      "kind": {
+        "type": "numeric",
+        "value": "1",
+        "unit": "d",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "rejection_form": "date",
+  "expected_bounds": [
+    {
+      "quantity": "Expiry",
+      "kind": {
+        "type": "numeric",
+        "value": "1",
+        "unit": "d",
+        "op": {
+          "type": "le"
+        },
+        "step": {
+          "value": "1",
+          "unit": "ms"
+        },
+        "integer": false
+      }
+    }
+  ],
+  "expected_cases": [
+    [
+      {
+        "position": "below",
+        "value": "86399999",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "at",
+        "value": "86400000",
+        "unit": "ms",
+        "expected": "accepted"
+      },
+      {
+        "position": "above",
+        "value": "86400001",
+        "unit": "ms",
+        "expected": "rejected"
+      }
+    ]
+  ],
+  "links": [
+    {
+      "quantity": "Expiry",
+      "position": "below",
+      "value": "86399999",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_10_0"
+    },
+    {
+      "quantity": "Expiry",
+      "position": "at",
+      "value": "86400000",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_10_1"
+    },
+    {
+      "quantity": "Expiry",
+      "position": "above",
+      "value": "86400001",
+      "unit": "ms",
+      "test_id": "libtest:boundary:cases.rs:fixture_10_2"
+    }
+  ],
+  "outcomes": [
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_10_0",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_10_1",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    },
+    {
+      "test_id": "libtest:boundary:cases.rs:fixture_10_2",
+      "status": "passed",
+      "duration_ms": null,
+      "failure_message": null
+    }
+  ],
+  "expected_error": null,
+  "expected_statuses": [
+    [
+      "tested_pass",
+      "tested_pass",
+      "tested_pass"
+    ]
+  ]
+}

@@ -482,9 +482,14 @@ fn score_detects_a_real_failure_in_a_temporary_crate_copy() {
             );
             let document: StatusDocument =
                 serde_json::from_slice(&fs::read(spec_dir.join("status.json")).unwrap()).unwrap();
+            let captured = fs::read_to_string(project.join("results.txt")).unwrap_or_default();
             assert_eq!(
                 document.statuses[0].badge,
-                if broken { Badge::Broken } else { Badge::Proven }
+                if broken { Badge::Broken } else { Badge::Proven },
+                "{command}: reasons {:?}, tests {:?}; captured results head:\n{}",
+                document.statuses[0].reasons,
+                document.statuses[0].tests,
+                captured.lines().take(60).collect::<Vec<_>>().join("\n")
             );
             assert!(spec_dir.join("spec.html").is_file());
             assert!(spec_dir.join("history.jsonl").is_file());

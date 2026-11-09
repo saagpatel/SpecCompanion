@@ -1,6 +1,8 @@
 mod audit;
 mod check;
 mod link;
+mod render;
+mod rollup;
 use std::error::Error;
 pub mod boundary;
 pub mod quantifier;
@@ -52,13 +54,15 @@ pub fn run(args: &[String]) -> Result<(), Exit> {
     let registry = std::env::var("LIVING_SPEC_REGISTRY").ok();
     run_with_registry_env(args, registry.as_deref())
 }
-pub fn run_with_registry_env(args: &[String], _registry_env: Option<&str>) -> Result<(), Exit> {
+pub fn run_with_registry_env(args: &[String], registry_env: Option<&str>) -> Result<(), Exit> {
     let result = match args {
         [command, dir] if command == "check" => check::run(std::slice::from_ref(dir)),
         [command, rest @ ..] if command == "link" => link::run(rest),
         [command, rest @ ..] if command == "audit" => audit::run(rest),
         [command, rest @ ..] if command == "boundary" => boundary::run(rest),
         [command, rest @ ..] if command == "quantifier" => Ok(quantifier::run(rest)?),
+        [command, rest @ ..] if command == "render" => render::run(rest),
+        [command, rest @ ..] if command == "rollup" => rollup::run(rest, registry_env),
         _ => Err(Exit::Usage(
             "usage: living-spec check|score|rescore|render|rollup|boundary|deps|quantifier|link|audit <args>".into(),
         )

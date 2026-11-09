@@ -1,0 +1,30 @@
+{
+  "schema": "living-spec.status/v1",
+  "lines": [
+    {
+      "id": "AL-001",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [{ "test_id": "rust:amber:src/lib.rs:keeps_entry", "status": "passed" }],
+      "source": "fixture"
+    },
+    {
+      "id": "AL-002",
+      "badge": "broken",
+      "reasons": ["test_failed"],
+      "tests": [{ "test_id": "rust:amber:src/lib.rs:rejects_negative", "status": "failed" }]
+    },
+    {
+      "id": "AL-003",
+      "badge": "unproven",
+      "reasons": ["no_link"],
+      "tests": []
+    },
+    {
+      "id": "AL-004",
+      "badge": "qualified",
+      "reasons": [{ "prerequisite_broken": { "path": ["AL-004", "AL-002"] } }],
+      "tests": [{ "test_id": "rust:amber:src/lib.rs:qualified_total", "status": "passed" }]
+    }
+  ]
+}

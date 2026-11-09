@@ -1,0 +1,2 @@
+{"at":"2026-03-01T00:00:00Z","commit":"commit-proven-r002","requirement":"R-002","from":"unproven","to":"proven","test_id":"rust:ledger:src/balance.rs:rejects_negative","note":"linked test passed"}
+{"at":"2026-04-02T00:00:00Z","commit":"commit-broken-r002","requirement":"R-002","from":"proven","to":"broken","test_id":"rust:ledger:src/balance.rs:rejects_negative","note":"rejects_negative failed while checking a negative balance"}

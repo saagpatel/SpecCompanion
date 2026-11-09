@@ -1,5 +1,6 @@
 mod audit;
 mod check;
+pub mod deps;
 mod link;
 mod render;
 mod rollup;
@@ -60,6 +61,7 @@ pub fn run_with_registry_env(args: &[String], registry_env: Option<&str>) -> Res
         [command, rest @ ..] if command == "link" => link::run(rest),
         [command, rest @ ..] if command == "audit" => audit::run(rest),
         [command, rest @ ..] if command == "boundary" => boundary::run(rest),
+        [command, rest @ ..] if command == "deps" => deps::run(rest),
         [command, rest @ ..] if command == "quantifier" => Ok(quantifier::run(rest)?),
         [command, rest @ ..] if command == "render" => render::run(rest),
         [command, rest @ ..] if command == "rollup" => rollup::run(rest, registry_env),

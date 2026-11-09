@@ -1,0 +1,56 @@
+{
+  "spec": "- [R-001] Synthetic feature R-001.\n- [R-002] Synthetic feature R-002.\n- [R-003] Synthetic feature R-003.\n",
+  "annotations": {
+    "schema": "living-spec.annotations/v1",
+    "requirements": {
+      "R-002": {
+        "depends_on": [
+          {
+            "id": "R-001",
+            "evidence": "authored"
+          }
+        ]
+      },
+      "R-003": {
+        "depends_on": [
+          {
+            "id": "R-002",
+            "evidence": "authored"
+          }
+        ]
+      }
+    }
+  },
+  "statuses": [
+    {
+      "id": "R-001",
+      "badge": "broken",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-002",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-003",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    }
+  ],
+  "expected": {
+    "R-002": [
+      "R-002",
+      "R-001"
+    ],
+    "R-003": [
+      "R-003",
+      "R-002",
+      "R-001"
+    ]
+  },
+  "cycles": []
+}

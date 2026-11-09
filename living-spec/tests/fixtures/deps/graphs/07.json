@@ -1,0 +1,166 @@
+{
+  "spec": "- [R-001] Synthetic feature R-001.\n- [R-002] Synthetic feature R-002.\n- [R-003] Synthetic feature R-003.\n- [R-004] Synthetic feature R-004.\n- [R-005] Synthetic feature R-005.\n- [R-006] Synthetic feature R-006.\n- [R-007] Synthetic feature R-007.\n- [R-008] Synthetic feature R-008.\n",
+  "annotations": {
+    "schema": "living-spec.annotations/v1",
+    "requirements": {
+      "R-002": {
+        "depends_on": [
+          {
+            "id": "R-001",
+            "evidence": "authored"
+          }
+        ]
+      },
+      "R-003": {
+        "depends_on": [
+          {
+            "id": "R-002",
+            "evidence": "authored"
+          }
+        ]
+      },
+      "R-004": {
+        "depends_on": [
+          {
+            "id": "R-003",
+            "evidence": "authored"
+          }
+        ]
+      },
+      "R-005": {
+        "depends_on": [
+          {
+            "id": "R-004",
+            "evidence": "authored"
+          }
+        ]
+      },
+      "R-006": {
+        "depends_on": [
+          {
+            "id": "R-005",
+            "evidence": "authored"
+          }
+        ]
+      },
+      "R-007": {
+        "depends_on": [
+          {
+            "id": "R-006",
+            "evidence": "authored"
+          }
+        ]
+      },
+      "R-008": {
+        "depends_on": [
+          {
+            "id": "R-007",
+            "evidence": "authored"
+          }
+        ]
+      }
+    }
+  },
+  "statuses": [
+    {
+      "id": "R-001",
+      "badge": "broken",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-002",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-003",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-004",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-005",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-006",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-007",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    },
+    {
+      "id": "R-008",
+      "badge": "proven",
+      "reasons": [],
+      "tests": []
+    }
+  ],
+  "expected": {
+    "R-002": [
+      "R-002",
+      "R-001"
+    ],
+    "R-003": [
+      "R-003",
+      "R-002",
+      "R-001"
+    ],
+    "R-004": [
+      "R-004",
+      "R-003",
+      "R-002",
+      "R-001"
+    ],
+    "R-005": [
+      "R-005",
+      "R-004",
+      "R-003",
+      "R-002",
+      "R-001"
+    ],
+    "R-006": [
+      "R-006",
+      "R-005",
+      "R-004",
+      "R-003",
+      "R-002",
+      "R-001"
+    ],
+    "R-007": [
+      "R-007",
+      "R-006",
+      "R-005",
+      "R-004",
+      "R-003",
+      "R-002",
+      "R-001"
+    ],
+    "R-008": [
+      "R-008",
+      "R-007",
+      "R-006",
+      "R-005",
+      "R-004",
+      "R-003",
+      "R-002",
+      "R-001"
+    ]
+  },
+  "cycles": []
+}

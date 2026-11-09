@@ -119,6 +119,8 @@ pub struct ScoreInputs {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RequirementInputs {
     pub digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own_badge: Option<super::badge::Badge>,
     pub revision: String,
     pub outcomes: Vec<TestOutcome>,
     pub test_ids: Vec<String>,
@@ -260,6 +262,16 @@ impl ScoreInputs {
                 line.id.clone(),
                 RequirementInputs {
                     digest: line_digest(&line.revision, annotation, &used, &test_ids, &depends_on)?,
+                    own_badge: statuses
+                        .iter()
+                        .find(|status| status.id == line.id)
+                        .map(|status| {
+                            if status.badge == super::badge::Badge::Qualified {
+                                super::badge::Badge::Proven
+                            } else {
+                                status.badge
+                            }
+                        }),
                     revision: line.revision.clone(),
                     outcomes: used,
                     test_ids,

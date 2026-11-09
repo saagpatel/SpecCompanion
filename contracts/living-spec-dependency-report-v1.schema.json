@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "living-spec-dependency-report-v1.schema.json",
+  "title": "Living Spec dependency impact report v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "claims",
+        "groups",
+        "cycles"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/claim"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/group"
+          }
+        },
+        "cycles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "description": "One witness per reachable cyclic SCC; indices are zero-based."
+        }
+      }
+    },
+    {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "badge"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "badge": {
+            "const": "stale"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "indices": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/index"
+      },
+      "uniqueItems": true
+    },
+    "path": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "claim": {
+      "type": "object",
+      "required": [
+        "dependent_id",
+        "dependent_text",
+        "path",
+        "other_nonproven_count",
+        "prerequisite_group"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "dependent_id": {
+          "type": "string"
+        },
+        "dependent_text": {
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/path",
+          "description": "Minimal path to the nearest other non-proven prerequisite using final badges and lexicographic path ties."
+        },
+        "other_nonproven_count": {
+          "$ref": "#/$defs/index",
+          "description": "Distinct reachable non-proven members excluding self and the selected path endpoint."
+        },
+        "prerequisite_group": {
+          "$ref": "#/$defs/index",
+          "description": "Root SCC group; traverse members and edges excluding this claim itself."
+        },
+        "cycles": {
+          "$ref": "#/$defs/indices",
+          "description": "Witness indices for this claim's SCC. Other reachable cycles are referenced by their groups."
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": [
+        "id",
+        "members",
+        "edges"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/index"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/prerequisite"
+          },
+          "description": "Non-proven SCC members listed once; proven transit SCCs have no members."
+        },
+        "edges": {
+          "$ref": "#/$defs/indices",
+          "description": "Direct prerequisite group ids without transitive expansion."
+        },
+        "cycle": {
+          "$ref": "#/$defs/index"
+        }
+      }
+    },
+    "prerequisite": {
+      "type": "object",
+      "required": [
+        "id",
+        "text",
+        "badge"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "badge": {
+          "enum": [
+            "broken",
+            "unproven",
+            "qualified"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "no_link",
+              "link_challenged",
+              "human_override",
+              "stale_revision",
+              "test_changed",
+              "not_executed",
+              "test_failed",
+              "link_unresolved",
+              "boundary_gap"
+            ]
+          },
+          "description": "Intrinsic reasons only; dependency paths and cycle witnesses are shared separately."
+        },
+        "boundary_reference": {
+          "type": "string",
+          "description": "Boundary declarations only; case execution details are not included."
+        },
+        "failing_test": {
+          "type": "string"
+        },
+        "failing_test_status": {
+          "enum": [
+            "failed",
+            "errored"
+          ]
+        }
+      }
+    }
+  }
+}

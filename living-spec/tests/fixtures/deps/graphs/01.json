@@ -1,0 +1,52 @@
+{
+  "spec": "- [R-001] Synthetic feature R-001.\n- [R-002] Synthetic feature R-002.\n",
+  "annotations": {
+    "schema": "living-spec.annotations/v1",
+    "requirements": {
+      "R-002": {
+        "depends_on": [
+          {
+            "id": "R-001",
+            "evidence": "authored"
+          }
+        ]
+      }
+    }
+  },
+  "statuses": [
+    {
+      "id": "R-001",
+      "badge": "broken",
+      "reasons": [
+        "test_failed"
+      ],
+      "tests": [
+        {
+          "test_id": "rust:living-spec:src/lib.rs:rejects_invalid_input",
+          "status": "failed",
+          "duration_ms": 3,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "R-002",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "rust:living-spec:src/lib.rs:accepts_valid_input",
+          "status": "passed",
+          "duration_ms": 2
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "R-002": [
+      "R-002",
+      "R-001"
+    ]
+  },
+  "cycles": []
+}

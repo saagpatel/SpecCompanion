@@ -1,9 +1,8 @@
 use super::{
     html::{escape, format_percentage, percentage, STYLE},
-    spec_page::display_statuses,
-    status::{load_boundary_reports, load_status},
+    status::{load_boundary_reports, load_freshness, load_quantifier_reports, load_status},
 };
-use crate::core::{annotations::Annotations, spec::Spec};
+use crate::core::spec::Spec;
 use serde::Serialize;
 use serde_json::{Map, Value};
 use std::{
@@ -16,6 +15,7 @@ use std::{
 #[serde(rename_all = "snake_case")]
 pub enum ProjectState {
     Scored,
+    Stale,
     NotScored,
     NoLivingSpec,
 }
@@ -60,9 +60,10 @@ struct Summary {
 /// Kept projects (`derived.archived == false`) plus extra `--include` roots.
 ///
 /// A project with `living-spec/status.json` is scored only if its IDs match the
-/// current parsed spec exactly; incomplete, extra, or spec-less status is invalid input.
-/// Positive badges also require current accepted annotation links with passing
-/// outcomes and current boundary evidence, as on the spec page. A project
+/// current parsed spec exactly. Changed input sets are stale; spec-less status
+/// is invalid input.
+/// Saved badges are displayed only when their input digests match. A stale
+/// project contributes zero proven lines. A project
 /// with `spec.md` and no status file is `not_scored` and is not given badges.
 /// Anything else is `no_living_spec`. Archived registry projects are omitted.
 /// Relative `workspace_root` is resolved from the registry file's directory.
@@ -162,8 +163,8 @@ pub fn render_rollup(rows: &[RollupRow]) -> String {
     html.push_str(&summary.total_proven.to_string());
     html.push_str(" of ");
     html.push_str(&summary.total_lines.to_string());
-    html.push_str(" lines across scored projects).</p>\n</header>\n");
-    html.push_str("<table>\n<caption>Scored projects by proven percentage, then projects not yet scored.</caption>\n<thead>\n<tr>");
+    html.push_str(" lines across scored or stale projects).</p>\n</header>\n");
+    html.push_str("<table>\n<caption>Scored and stale projects, then projects not yet scored.</caption>\n<thead>\n<tr>");
     for heading in [
         "Project",
         "Path",
@@ -258,6 +259,7 @@ fn push_tally(out: &mut String, rows: &[RollupRow], count: usize) {
 fn pct_label(row: &RollupRow) -> String {
     match row.state {
         ProjectState::Scored => format!("{}%", format_percentage(row.proven, row.lines)),
+        ProjectState::Stale => "stale".to_owned(),
         ProjectState::NotScored => "not yet scored".to_owned(),
         ProjectState::NoLivingSpec => "no living spec".to_owned(),
     }
@@ -266,6 +268,7 @@ fn pct_label(row: &RollupRow) -> String {
 fn state_label(state: ProjectState) -> &'static str {
     match state {
         ProjectState::Scored => "scored",
+        ProjectState::Stale => "stale",
         ProjectState::NotScored => "not yet scored",
         ProjectState::NoLivingSpec => "no living spec",
     }
@@ -274,6 +277,7 @@ fn state_label(state: ProjectState) -> &'static str {
 fn state_token(state: ProjectState) -> &'static str {
     match state {
         ProjectState::Scored => "scored",
+        ProjectState::Stale => "stale",
         ProjectState::NotScored => "not_scored",
         ProjectState::NoLivingSpec => "no_living_spec",
     }
@@ -282,8 +286,9 @@ fn state_token(state: ProjectState) -> &'static str {
 fn state_rank(state: ProjectState) -> u8 {
     match state {
         ProjectState::Scored => 0,
-        ProjectState::NotScored => 1,
-        ProjectState::NoLivingSpec => 2,
+        ProjectState::Stale => 1,
+        ProjectState::NotScored => 2,
+        ProjectState::NoLivingSpec => 3,
     }
 }
 
@@ -294,7 +299,7 @@ fn summarize(rows: &[RollupRow]) -> Summary {
     let mut not_scored_count = 0;
     for row in rows {
         match row.state {
-            ProjectState::Scored => {
+            ProjectState::Scored | ProjectState::Stale => {
                 total_proven += row.proven;
                 total_lines += row.lines;
             }
@@ -339,6 +344,22 @@ fn row_for_root(
         let lines = load_status(&status_path)?;
         let spec_ids: BTreeSet<_> = spec.lines.iter().map(|line| line.id.as_str()).collect();
         let status_ids: BTreeSet<_> = lines.iter().map(|line| line.id.as_str()).collect();
+        let reports = load_boundary_reports(&status_path)?;
+        let quantifier = load_quantifier_reports(&status_path)?;
+        let freshness = load_freshness(&spec_dir, &spec, &lines, &reports, &quantifier)?;
+        if freshness.stale {
+            return Ok(RollupRow {
+                project,
+                path,
+                lines: spec.lines.len() as u64,
+                proven: 0,
+                broken: 0,
+                unproven: 0,
+                qualified: 0,
+                proven_pct: 0.0,
+                state: ProjectState::Stale,
+            });
+        }
         if spec_ids != status_ids {
             return Err(format!(
                 "{}: status IDs do not match spec.md; missing: {:?}; extra: {:?}",
@@ -348,18 +369,6 @@ fn row_for_root(
             )
             .into());
         }
-        let annotations_path = spec_dir.join("annotations.json");
-        let annotations = if annotations_path.is_file() {
-            Annotations::load(&annotations_path)?
-        } else {
-            Annotations {
-                schema: "living-spec.annotations/v1".into(),
-                requirements: Default::default(),
-                extra: Default::default(),
-            }
-        };
-        let reports = load_boundary_reports(&status_path)?;
-        let lines = display_statuses(&spec, &annotations, &lines, &reports);
         let mut proven = 0;
         let mut broken = 0;
         let mut unproven = 0;

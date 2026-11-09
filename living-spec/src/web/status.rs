@@ -79,6 +79,24 @@ pub(crate) fn load_boundary_reports(
     Ok(serde_json::from_value(reports.clone())?)
 }
 
+pub(crate) fn load_freshness(
+    dir: &Path,
+    spec: &crate::core::spec::Spec,
+    statuses: &[LineStatus],
+    boundary: &[crate::core::views::BoundaryReport],
+    quantifier: &[crate::core::views::QuantifierReport],
+) -> Result<crate::core::freshness::Freshness, Box<dyn std::error::Error>> {
+    let value = parse_json(&fs::read_to_string(dir.join("status.json"))?)?;
+    match value.get("inputs") {
+        Some(value) => {
+            let inputs: crate::core::freshness::ScoreInputs =
+                serde_json::from_value(value.clone())?;
+            inputs.check(dir, spec, statuses, boundary, quantifier)
+        }
+        None => Ok(crate::core::freshness::missing_inputs(spec)),
+    }
+}
+
 fn parse_status(text: &str) -> Result<Vec<LineStatus>, String> {
     let value = parse_json(text)?;
     let array = status_array(&value)?;

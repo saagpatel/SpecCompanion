@@ -383,6 +383,13 @@ fn finding_3_every_persisted_status_document_matches_its_schema() {
             "qualified document: {document}"
         );
     }
+    // New persisted reports require input bindings. Legacy documents still load
+    // so the file view can label them stale rather than inventing a verdict.
+    let mut unbound = ordinary.clone();
+    unbound.as_object_mut().unwrap().remove("inputs");
+    assert!(!validate(&schema, &unbound, &schema));
+    let legacy: StatusDocument = serde_json::from_value(unbound).unwrap();
+    assert!(legacy.inputs.is_none());
     // Older saved documents omit report arrays; the Rust reader defaults them.
     let mut older = ordinary.clone();
     older.as_object_mut().unwrap().remove("quantifier_reports");

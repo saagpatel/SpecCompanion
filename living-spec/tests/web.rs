@@ -2,8 +2,11 @@ use living_spec::{
     core::{
         annotations::Annotations,
         badge::{Badge, LineStatus, Reason},
+        freshness::ScoreInputs,
         history::{History, Transition},
         spec::Spec,
+        test_identity::TestOutcome,
+        views::{BoundaryReport, QuantifierReport},
     },
     web::{
         collect_rollup, export_rollup_json, load_status, render_rollup, render_spec, ProjectState,
@@ -57,6 +60,30 @@ fn assert_no_urls(html: &str) {
 
 fn names(rows: &[RollupRow]) -> Vec<&str> {
     rows.iter().map(|row| row.project.as_str()).collect()
+}
+
+fn copy_tree(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).unwrap();
+    for entry in fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let target = destination.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+fn bound_registry_fixture() -> tempfile::TempDir {
+    let tmp = tempfile::tempdir_in("target").unwrap();
+    let source = Path::new(REGISTRY).parent().unwrap();
+    let copied = tmp.path().join("registry-fixture");
+    copy_tree(source, &copied);
+    for project in ["amber-ledger", "birch-timer"] {
+        bind_saved_inputs(&copied.join(project).join("living-spec"));
+    }
+    tmp
 }
 
 #[test]
@@ -178,7 +205,12 @@ fn drilldown_shows_below_at_above_boundary_cases() {
         extra: BTreeMap::new(),
     };
     let spec = Spec::parse("- [R-001] Delay stays within its stated limit.\n").unwrap();
-    let html = render_spec(&spec, &annotations, None, &[]);
+    let bounds: Vec<living_spec::core::boundary::Bound> =
+        serde_json::from_value(fixture["expected_bounds"].clone()).unwrap();
+    let report =
+        living_spec::core::boundary::coverage::coverage("R-001", &bounds, &[], &[]).unwrap();
+    let html =
+        living_spec::web::render_spec_with_reports(&spec, &annotations, None, &[], &[], &[report]);
     assert!(html.contains("Delay (below)"));
     assert!(html.contains("Delay (at)"));
     assert!(html.contains("Delay (above)"));
@@ -246,7 +278,11 @@ fn stored_boundary_results_include_tests_outside_core_links() {
 #[test]
 fn rendered_pages_have_no_http_urls() {
     let spec = seeded_html();
-    let rows = collect_rollup(Path::new(REGISTRY), &[]).unwrap();
+    let tmp = bound_registry_fixture();
+    let registry = tmp
+        .path()
+        .join("registry-fixture/portfolio-truth-mini.json");
+    let rows = collect_rollup(&registry, &[]).unwrap();
     let rollup = render_rollup(&rows);
     assert_no_urls(&spec);
     assert_no_urls(&rollup);
@@ -259,7 +295,11 @@ fn rollup_excludes_archived_and_lists_the_project_without_a_spec() {
     let expected_true = true;
     let expected_false = false;
 
-    let rows = collect_rollup(Path::new(REGISTRY), &[]).unwrap();
+    let tmp = bound_registry_fixture();
+    let registry = tmp
+        .path()
+        .join("registry-fixture/portfolio-truth-mini.json");
+    let rows = collect_rollup(&registry, &[]).unwrap();
     assert_eq!(
         names(&rows),
         ["Amber Ledger", "Birch Timer", "Elm Draft", "Cedar Sketch"]
@@ -296,7 +336,7 @@ fn rollup_excludes_archived_and_lists_the_project_without_a_spec() {
     assert_eq!(document["not_scored_count"].as_u64(), Some(1));
     let html = render_rollup(&rows);
     assert_eq!(
-        html.contains("Portfolio proven 50.0% (4 of 8 lines across scored projects)."),
+        html.contains("Portfolio proven 50.0% (4 of 8 lines across scored or stale projects)."),
         expected_true
     );
     assert_eq!(html.contains("data-proven-pct=\"25.0\""), expected_true);
@@ -340,6 +380,7 @@ fn rollup_can_include_a_newly_revived_repo_with_proven_lines() {
     )
     .unwrap();
     write_rollup_fixture_links(&living_spec);
+    bind_saved_inputs(&living_spec);
     let rows = collect_rollup(Path::new(REGISTRY), &[repo]).unwrap();
     let row = rows
         .iter()
@@ -392,6 +433,7 @@ fn status_alias_and_registry_tolerate_missing_optional_fields() {
     )
     .unwrap();
     write_rollup_fixture_links(&root.join("kept/living-spec"));
+    bind_saved_inputs(&root.join("kept/living-spec"));
     fs::create_dir_all(root.join("old").join("living-spec")).unwrap();
     fs::write(
         root.join("old").join("living-spec").join("status.json"),
@@ -462,6 +504,7 @@ fn review_input(spec: &str, annotations: Value, status: Value) -> tempfile::Temp
     fs::write(spec_dir.join("spec.md"), spec).unwrap();
     fs::write(spec_dir.join("annotations.json"), annotations.to_string()).unwrap();
     fs::write(spec_dir.join("status.json"), status.to_string()).unwrap();
+    bind_saved_inputs(&spec_dir);
     fs::write(
         dir.path().join("registry.json"),
         serde_json::json!({
@@ -474,6 +517,77 @@ fn review_input(spec: &str, annotations: Value, status: Value) -> tempfile::Temp
     )
     .unwrap();
     dir
+}
+
+fn bind_saved_inputs(spec_dir: &Path) {
+    let status_path = spec_dir.join("status.json");
+    let Ok(statuses) = load_status(&status_path) else {
+        return;
+    };
+    let mut outcomes = BTreeMap::new();
+    for line in &statuses {
+        for test in &line.tests {
+            outcomes.insert(
+                test.test_id.clone(),
+                TestOutcome {
+                    test_id: test.test_id.clone(),
+                    status: test.status,
+                    duration_ms: test.duration_ms,
+                    failure_message: None,
+                },
+            );
+        }
+    }
+    let outcomes: Vec<_> = outcomes.into_values().collect();
+    bind_saved_inputs_with_result_bytes(spec_dir, &serde_json::to_vec(&outcomes).unwrap());
+}
+
+fn bind_saved_inputs_with_result_bytes(spec_dir: &Path, results: &[u8]) {
+    let status_path = spec_dir.join("status.json");
+    let mut status: Value = serde_json::from_slice(&fs::read(&status_path).unwrap()).unwrap();
+    let statuses = load_status(&status_path).unwrap();
+    let mut outcomes = BTreeMap::new();
+    for line in &statuses {
+        for test in &line.tests {
+            outcomes.insert(
+                test.test_id.clone(),
+                TestOutcome {
+                    test_id: test.test_id.clone(),
+                    status: test.status,
+                    duration_ms: test.duration_ms,
+                    failure_message: None,
+                },
+            );
+        }
+    }
+    let outcomes: Vec<_> = outcomes.into_values().collect();
+    let boundary: Vec<BoundaryReport> = serde_json::from_value(
+        status
+            .get("boundary_reports")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!([])),
+    )
+    .unwrap();
+    let quantifier: Vec<QuantifierReport> = serde_json::from_value(
+        status
+            .get("quantifier_reports")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!([])),
+    )
+    .unwrap();
+    let results_path = spec_dir.join("test-results.txt");
+    fs::write(&results_path, results).unwrap();
+    let inputs = ScoreInputs::capture(
+        spec_dir,
+        &outcomes,
+        &statuses,
+        &boundary,
+        &quantifier,
+        results_path.to_str().unwrap(),
+    )
+    .unwrap();
+    status["inputs"] = serde_json::to_value(inputs).unwrap();
+    fs::write(&status_path, serde_json::to_vec_pretty(&status).unwrap()).unwrap();
 }
 
 fn empty_annotations() -> Value {
@@ -519,6 +633,164 @@ fn review_rollup(dir: &Path) -> std::process::Output {
         .unwrap()
 }
 
+#[test]
+fn editing_prerequisite_marks_dependent_stale() {
+    let spec = "- [R-001] Uses the prerequisite.\n- [R-002] Prerequisite behavior.\n- [R-003] Independent behavior.\n- [R-004] Uses the dependent behavior.\n";
+    let annotations = serde_json::json!({"schema":"living-spec.annotations/v1",
+        "requirements":{"R-001":{"depends_on":[{"id":"R-002","evidence":"authored"}]},
+            "R-004":{"depends_on":[{"id":"R-001","evidence":"authored"}]}}});
+    let statuses = serde_json::json!({"statuses":[
+        {"id":"R-001","badge":"proven","tests":[{"test_id":"case-a","status":"passed"}]},
+        {"id":"R-002","badge":"proven","tests":[{"test_id":"case-b","status":"passed"}]},
+        {"id":"R-003","badge":"proven","tests":[{"test_id":"case-c","status":"passed"}]},
+        {"id":"R-004","badge":"proven","tests":[{"test_id":"case-d","status":"passed"}]}
+    ]});
+    let dir = review_input(spec, annotations, statuses);
+    fs::write(
+        dir.path().join("sample/living-spec/spec.md"),
+        "- [R-001] Uses the prerequisite.\n- [R-002] Changed prerequisite behavior.\n- [R-003] Independent behavior.\n- [R-004] Uses the dependent behavior.\n",
+    )
+    .unwrap();
+
+    let html = rendered_review(dir.path());
+    assert!(html.contains("data-requirement=\"R-001\" data-badge=\"stale\""));
+    assert!(html.contains("data-requirement=\"R-002\" data-badge=\"stale\""));
+    assert!(html.contains("data-requirement=\"R-003\" data-badge=\"proven\""));
+    assert!(html.contains("data-requirement=\"R-004\" data-badge=\"stale\""));
+    assert!(html.contains("Stale: inputs changed since this status was scored"));
+
+    let rows = collect_rollup(&dir.path().join("registry.json"), &[]).unwrap();
+    assert_eq!(rows[0].state, ProjectState::Stale);
+    assert_eq!(rows[0].proven, 0);
+    assert_eq!(rows[0].lines, 4);
+}
+
+#[test]
+fn changed_result_marks_only_affected_line_and_dependents_stale() {
+    let spec = "- [R-001] Uses the prerequisite.\n- [R-002] Prerequisite behavior.\n- [R-003] Independent behavior.\n";
+    let annotations = serde_json::json!({"schema":"living-spec.annotations/v1",
+        "requirements":{"R-001":{"depends_on":[{"id":"R-002","evidence":"authored"}]}}});
+    let statuses = serde_json::json!({"statuses":[
+        {"id":"R-001","badge":"proven","tests":[{"test_id":"case-a","status":"passed"}]},
+        {"id":"R-002","badge":"proven","tests":[{"test_id":"case-b","status":"passed"}]},
+        {"id":"R-003","badge":"proven","tests":[{"test_id":"case-c","status":"passed"}]}
+    ]});
+    let dir = review_input(spec, annotations, statuses);
+    let spec_dir = dir.path().join("sample/living-spec");
+    bind_saved_inputs_with_result_bytes(
+        &spec_dir,
+        b"running 3 tests\ntest case-a ... ok\ntest case-b ... ok\ntest case-c ... ok\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n",
+    );
+    fs::write(
+        spec_dir.join("test-results.txt"),
+        "running 3 tests\ntest case-a ... ok\ntest case-b ... FAILED\ntest case-c ... ok\ntest result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\n",
+    )
+    .unwrap();
+    let html = rendered_review(dir.path());
+    assert!(html.contains("data-requirement=\"R-001\" data-badge=\"stale\""));
+    assert!(html.contains("data-requirement=\"R-002\" data-badge=\"stale\""));
+    assert!(html.contains("data-requirement=\"R-003\" data-badge=\"proven\""));
+}
+
+#[test]
+fn boundary_receipt_without_current_link_is_stale() {
+    use living_spec::core::{
+        boundary::{coverage, coverage::CaseLink, Bound, Unit},
+        test_identity::{TestOutcome, TestStatus},
+    };
+    let spec = "- [R-001] Delay is at most 30 ms.\n";
+    let bound: Bound = serde_json::from_value(serde_json::json!({
+        "quantity":"Delay", "kind":{"type":"numeric", "value":"30", "unit":"ms",
+        "op":{"type":"le"}, "step":{"value":"1", "unit":"ms"}, "integer":false}
+    }))
+    .unwrap();
+    let links: Vec<CaseLink> = [("below", "29"), ("at", "30"), ("above", "31")]
+        .into_iter()
+        .map(|(position, value)| CaseLink {
+            quantity: "Delay".into(),
+            position: position.into(),
+            value: value.into(),
+            unit: Some(Unit::Ms),
+            test_id: format!("boundary-{position}"),
+            test_body: None,
+        })
+        .collect();
+    let outcomes: Vec<TestOutcome> = links
+        .iter()
+        .map(|link| TestOutcome {
+            test_id: link.test_id.clone(),
+            status: TestStatus::Passed,
+            duration_ms: None,
+            failure_message: None,
+        })
+        .collect();
+    let report = coverage("R-001", std::slice::from_ref(&bound), &links, &outcomes).unwrap();
+    let annotations = serde_json::json!({"schema":"living-spec.annotations/v1",
+        "requirements":{"R-001":{"bounds":[bound],"boundary_links":links}}});
+    let mut status = one_proven_status();
+    status["boundary_reports"] = serde_json::json!([report]);
+    status["statuses"][0]["tests"] = serde_json::json!(outcomes);
+    let dir = review_input(spec, annotations, status);
+    let annotation_path = dir.path().join("sample/living-spec/annotations.json");
+    let mut current: Value = serde_json::from_slice(&fs::read(&annotation_path).unwrap()).unwrap();
+    current["requirements"]["R-001"]
+        .as_object_mut()
+        .unwrap()
+        .remove("boundary_links");
+    fs::write(&annotation_path, current.to_string()).unwrap();
+
+    let html = rendered_review(dir.path());
+    assert!(html.contains("data-badge=\"stale\""));
+    assert!(html.contains("Stored boundary and quantifier verdicts are stale"));
+    assert!(!html.contains("<h3>Boundary coverage</h3>"));
+}
+
+#[test]
+fn unchanged_inputs_render_stored_badges() {
+    let dir = review_input(
+        "- [R-001] Returns the input.\n",
+        empty_annotations(),
+        one_proven_status(),
+    );
+    // Annotation formatting is not semantic input: the digest uses canonical JSON.
+    fs::write(
+        dir.path().join("sample/living-spec/annotations.json"),
+        serde_json::to_string_pretty(&empty_annotations()).unwrap(),
+    )
+    .unwrap();
+    let html = rendered_review(dir.path());
+    assert!(html.contains("data-requirement=\"R-001\" data-badge=\"proven\""));
+    assert!(!html.contains("Stale: inputs changed"));
+    let row = collect_rollup(&dir.path().join("registry.json"), &[])
+        .unwrap()
+        .remove(0);
+    assert_eq!(row.state, ProjectState::Scored);
+    assert_eq!(row.proven, 1);
+}
+
+#[test]
+fn stale_rollup_counts_zero_proven() {
+    let dir = review_input(
+        "- [R-001] Returns the input.\n",
+        empty_annotations(),
+        one_proven_status(),
+    );
+    fs::write(
+        dir.path().join("sample/living-spec/test-results.txt"),
+        "changed test result bytes",
+    )
+    .unwrap();
+    let row = collect_rollup(&dir.path().join("registry.json"), &[])
+        .unwrap()
+        .remove(0);
+    assert_eq!(row.state, ProjectState::Stale);
+    assert_eq!(row.proven, 0);
+    assert_eq!(row.lines, 1);
+    let html = rendered_review(dir.path());
+    assert!(html.contains("data-badge=\"stale\""));
+    assert!(html.contains("test-result file changed or is unavailable since scoring"));
+}
+
 fn rendered_review(dir: &Path) -> String {
     let output = review_render(dir);
     assert!(
@@ -535,11 +807,12 @@ fn regression_edited_requirements_retain_a_green_badge_from_an_older_revision() 
     let current = "- [R-001] Returns twice the input.\n";
     let annotations = serde_json::json!({"schema": "living-spec.annotations/v1",
         "requirements": {"R-001": {"links": [reviewed_link()]}}});
-    let dir = review_input(current, annotations.clone(), one_proven_status());
+    let dir = review_input(original, annotations.clone(), one_proven_status());
+    fs::write(dir.path().join("sample/living-spec/spec.md"), current).unwrap();
     let html = rendered_review(dir.path());
     assert!(html.contains("Returns twice the input."));
-    assert!(html.contains("data-requirement=\"R-001\" data-badge=\"unproven\""));
-    assert!(html.contains("stale_revision"));
+    assert!(html.contains("data-requirement=\"R-001\" data-badge=\"stale\""));
+    assert!(html.contains("Stale: inputs changed since this status was scored"));
     assert!(html.contains("data-proven-pct=\"0.0\""));
     assert!(
         html.contains("passed"),
@@ -560,8 +833,8 @@ fn regression_edited_requirements_retain_a_green_badge_from_an_older_revision() 
         )
         .unwrap();
         let html = rendered_review(dir.path());
-        assert!(html.contains("data-badge=\"unproven\""), "{field}");
-        assert!(html.contains("stale_revision"), "{field}");
+        assert!(html.contains("data-badge=\"stale\""), "{field}");
+        assert!(html.contains("stale —"), "{field}");
     }
     fs::write(dir.path().join("sample/living-spec/spec.md"), original).unwrap();
     fs::write(
@@ -581,8 +854,7 @@ fn regression_rollup_omits_requirements_absent_from_an_old_status_file() {
     );
     let output = review_rollup(dir.path());
     assert_eq!(output.status.code(), Some(1));
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(error.contains("missing: [\"R-002\"]"), "{error}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing: [\"R-002\"]"));
     assert!(!dir.path().join("rollup.json").exists());
     // Removed status entries cannot contribute evidence either.
     fs::write(
@@ -591,8 +863,10 @@ fn regression_rollup_omits_requirements_absent_from_an_old_status_file() {
     )
     .unwrap();
     let output = review_rollup(dir.path());
-    assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("extra: [\"R-001\"]"));
+    assert!(output.status.success());
+    let rows: Value =
+        serde_json::from_slice(&fs::read(dir.path().join("rollup.json")).unwrap()).unwrap();
+    assert_eq!(rows["rows"][0]["state"], "stale");
     fs::remove_file(dir.path().join("sample/living-spec/spec.md")).unwrap();
     let output = review_rollup(dir.path());
     assert_eq!(output.status.code(), Some(1));
@@ -628,7 +902,7 @@ fn regression_conflicting_status_aliases_silently_discard_failed_evidence() {
 }
 
 #[test]
-fn regression_incomplete_stored_boundary_report_hides_every_required_case() {
+fn regression_changed_stored_boundary_receipt_marks_the_line_stale() {
     use living_spec::core::boundary::{coverage, Bound};
     let bound = serde_json::json!({"quantity": "Delay", "kind": {"type": "numeric",
         "value": "30", "unit": "ms", "op": {"type": "le"},
@@ -682,16 +956,10 @@ fn regression_incomplete_stored_boundary_report_hides_every_required_case() {
         )
         .unwrap();
         let html = rendered_review(dir.path());
-        assert!(html.contains("data-badge=\"unproven\""));
-        assert!(html.contains("boundary_gap"));
-        assert!(html.contains("Stored boundary report is incomplete"));
-        for (position, value) in [("below", "29"), ("at", "30"), ("above", "31")] {
-            assert!(
-                html.contains(&format!("Delay ({position})</td><td>{value} ms")),
-                "{html}"
-            );
-        }
-        assert_eq!(html.matches("</code></td><td>untested").count(), 3);
+        assert!(html.contains("data-badge=\"stale\""));
+        assert!(html.contains("stale —"));
+        assert!(html.contains("Stored boundary and quantifier verdicts are stale"));
+        assert!(!html.contains("<h3>Boundary coverage</h3>"));
     }
 }
 
@@ -742,7 +1010,7 @@ fn regression_orphan_annotations_disappear_from_the_web_report() {
     assert!(html.contains("Checks the input."));
     assert!(!html.contains("<script>"));
     assert_eq!(requirement_order(&html), ["R-001"]);
-    assert!(html.contains("data-unproven=\"1\""));
+    assert!(html.contains("data-proven=\"1\""));
 }
 
 #[test]
@@ -781,16 +1049,21 @@ fn regression_rollup_counts_stored_badges_after_only_validating_ids() {
     let annotations = serde_json::json!({"schema": "living-spec.annotations/v1",
         "requirements": {"R-001": {"links": [reviewed_link()]}}});
     let dir = review_input(
-        "- [R-001] Returns twice the input.\n",
+        "- [R-001] Returns the input.\n",
         annotations.clone(),
         one_proven_status(),
     );
+    fs::write(
+        dir.path().join("sample/living-spec/spec.md"),
+        "- [R-001] Returns twice the input.\n",
+    )
+    .unwrap();
     let rows = collect_rollup(&dir.path().join("registry.json"), &[]).unwrap();
     assert_eq!(
         rows[0].proven, 0,
         "edited text must not retain stored proof"
     );
-    assert_eq!(rows[0].unproven, 1);
+    assert_eq!(rows[0].state, ProjectState::Stale);
     let json: Value = serde_json::from_str(&export_rollup_json(&rows)).unwrap();
     assert_eq!(json["total_proven"], 0);
     assert!(render_rollup(&rows).contains("Portfolio proven 0.0%"));
@@ -805,13 +1078,13 @@ fn regression_rollup_counts_stored_badges_after_only_validating_ids() {
     );
     fs::remove_file(dir.path().join("sample/living-spec/annotations.json")).unwrap();
     assert_eq!(
-        collect_rollup(&dir.path().join("registry.json"), &[]).unwrap()[0].unproven,
-        1
+        collect_rollup(&dir.path().join("registry.json"), &[]).unwrap()[0].state,
+        ProjectState::Stale
     );
 }
 
 #[test]
-fn regression_any_passing_link_hides_an_unexecuted_current_link() {
+fn regression_web_displays_the_stored_badge_without_rederiving_link_verdicts() {
     let first = reviewed_link();
     let mut second = first.clone();
     second["test_id"] = "libtest:sample:tests/a.rs:second".into();
@@ -823,8 +1096,7 @@ fn regression_any_passing_link_hides_an_unexecuted_current_link() {
         one_proven_status(),
     );
     let html = rendered_review(dir.path());
-    assert!(html.contains("data-badge=\"unproven\""));
-    assert!(html.contains("not_executed"));
+    assert!(html.contains("data-badge=\"proven\""));
     for outcome in ["skipped", "failed", "errored", "passed"] {
         let mut status = one_proven_status();
         status["statuses"][0]["tests"]
@@ -839,20 +1111,12 @@ fn regression_any_passing_link_hides_an_unexecuted_current_link() {
         )
         .unwrap();
         let html = rendered_review(dir.path());
-        let badge = match outcome {
-            "passed" => "proven",
-            "failed" | "errored" => "broken",
-            _ => "unproven",
-        };
-        assert!(
-            html.contains(&format!("data-badge=\"{badge}\"")),
-            "{outcome}: {html}"
-        );
+        assert!(html.contains("data-badge=\"stale\""), "{outcome}: {html}");
     }
 }
 
 #[test]
-fn regression_boundary_projection_trusts_cached_inferred_bounds() {
+fn regression_changed_inferred_boundary_inputs_mark_saved_receipts_stale() {
     use living_spec::{
         boundary::{
             coverage::{coverage, CaseLink},
@@ -900,7 +1164,21 @@ fn regression_boundary_projection_trusts_cached_inferred_bounds() {
         }});
         let mut status = one_proven_status();
         status["boundary_reports"] = serde_json::json!([report]);
-        let dir = review_input(&spec_text, annotations, status.clone());
+        let original_text = "- [R-001] Delay is at most 30 ms.\n";
+        let dir = review_input(
+            original_text,
+            serde_json::json!({"schema":"living-spec.annotations/v1",
+            "requirements":{"R-001":{"links":[link.clone()],"bounds":bounds,
+                "bounds_source":{"origin":"inferred","revision":original.lines[0].revision},
+                "boundary_links":links}}}),
+            status.clone(),
+        );
+        fs::write(dir.path().join("sample/living-spec/spec.md"), &spec_text).unwrap();
+        fs::write(
+            dir.path().join("sample/living-spec/annotations.json"),
+            annotations.to_string(),
+        )
+        .unwrap();
         for stored_report in [true, false] {
             if !stored_report {
                 status.as_object_mut().unwrap().remove("boundary_reports");
@@ -919,15 +1197,9 @@ fn regression_boundary_projection_trusts_cached_inferred_bounds() {
                 .unwrap();
             }
             let html = rendered_review(dir.path());
-            assert!(html.contains("data-badge=\"unproven\""), "{html}");
-            assert!(html.contains("boundary_gap"));
-            assert_eq!(html.matches("</code></td><td>untested").count(), 3);
-            assert!(!html.contains("</code></td><td>tested pass"));
-            let at = if text.contains("20") { "20" } else { "30" };
-            assert!(
-                html.contains(&format!("Delay (at)</td><td>{at} ms")),
-                "{html}"
-            );
+            assert!(html.contains("data-badge=\"stale\""), "{html}");
+            assert!(html.contains("inputs changed since this status was scored"));
+            assert!(!html.contains("<h3>Boundary coverage</h3>"));
         }
     }
 }
@@ -1000,14 +1272,14 @@ fn drill2_changed_or_removed_boundary_links_make_stored_reports_stale() {
         )
         .unwrap();
         let html = rendered_review(dir.path());
-        assert!(html.contains("data-badge=\"unproven\""), "{html}");
-        assert!(!html.contains("data-badge=\"proven\""));
-        assert!(html.contains("Stored boundary report is incomplete"));
-        assert_eq!(html.matches("</code></td><td>untested").count(), 3);
+        assert!(html.contains("data-badge=\"stale\""), "{html}");
+        assert!(html.contains("Stored boundary and quantifier verdicts are stale"));
+        assert!(!html.contains("<h3>Boundary coverage</h3>"));
         let rows = collect_rollup(&dir.path().join("registry.json"), &[]).unwrap();
+        assert_eq!(rows[0].state, ProjectState::Stale);
         assert_eq!(
             (rows[0].proven, rows[0].qualified, rows[0].unproven),
-            (0, 0, 1)
+            (0, 0, 0)
         );
     }
     // A legacy receipt cannot attest to its original mapping.
@@ -1025,7 +1297,7 @@ fn drill2_changed_or_removed_boundary_links_make_stored_reports_stale() {
         status.to_string(),
     )
     .unwrap();
-    assert!(rendered_review(dir.path()).contains("data-badge=\"unproven\""));
+    assert!(rendered_review(dir.path()).contains("data-badge=\"stale\""));
 }
 
 #[test]
@@ -1065,10 +1337,8 @@ fn drill2_quantifier_reports_match_current_predicate_domain_and_text() {
         fs::write(spec_dir.join("annotations.json"), a.to_string()).unwrap();
         fs::write(spec_dir.join("status.json"), s.to_string()).unwrap();
         let html = rendered_review(dir.path());
-        assert!(
-            html.contains("Stored quantifier report is stale or mismatched"),
-            "{change}: {html}"
-        );
+        assert!(html.contains("data-badge=\"stale\""), "{change}: {html}");
+        assert!(html.contains("Stored boundary and quantifier verdicts are stale"));
         assert!(!html.contains("Tested cases:"));
         assert!(!html.contains("Tested result:"));
     }

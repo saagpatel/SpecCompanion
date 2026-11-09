@@ -1,15 +1,12 @@
 use super::{
     html::{escape, format_percentage, STYLE},
-    status::{load_boundary_reports, load_quantifier_reports, load_status},
+    status::{load_boundary_reports, load_freshness, load_quantifier_reports, load_status},
 };
 use crate::core::{
     annotations::{Annotations, RequirementAnnotations},
     badge::{Badge, LineStatus, Reason},
-    boundary::{
-        coverage,
-        parser::{requires_resolution, resolve_requirement},
-        CaseStatus, CoverageMap,
-    },
+    boundary::{CaseStatus, CoverageMap},
+    freshness::Freshness,
     history::{History, Transition},
     spec::{RequirementLine, Spec},
     test_identity::TestStatus,
@@ -27,6 +24,7 @@ enum ShownBadge {
     Unproven,
     Qualified,
     Unscored,
+    Stale,
 }
 
 impl ShownBadge {
@@ -37,6 +35,7 @@ impl ShownBadge {
             Self::Unproven => "unproven",
             Self::Qualified => "qualified",
             Self::Unscored => "unscored",
+            Self::Stale => "stale",
         }
     }
 }
@@ -47,6 +46,7 @@ struct Counts {
     unproven: usize,
     qualified: usize,
     unscored: usize,
+    stale: usize,
 }
 
 struct Page<'a> {
@@ -55,17 +55,19 @@ struct Page<'a> {
     by_id: &'a BTreeMap<&'a str, &'a LineStatus>,
     history: &'a [Transition],
     scored: bool,
+    freshness: &'a Freshness,
     quantifier_reports: &'a [crate::core::views::QuantifierReport],
     boundary_reports: &'a [crate::core::views::BoundaryReport],
 }
 
 impl Counts {
     fn total(&self) -> usize {
-        self.proven + self.broken + self.unproven + self.qualified + self.unscored
+        self.proven + self.broken + self.unproven + self.qualified + self.unscored + self.stale
     }
 }
 
 struct Classified {
+    stale: Vec<usize>,
     broken: Vec<usize>,
     middle: Vec<usize>,
     unscored: Vec<usize>,
@@ -73,7 +75,8 @@ struct Classified {
     counts: Counts,
 }
 
-/// Render one self-contained HTML page.
+/// Render an already-scored in-memory projection as one self-contained HTML page.
+/// File-backed views must use `render` so input freshness is checked first.
 ///
 /// `status` is `None` when the spec has no status report. Those lines use a
 /// gray `unscored` badge and the page says they have not been scored.
@@ -97,22 +100,41 @@ pub fn render_spec_with_reports(
     quantifier_reports: &[crate::core::views::QuantifierReport],
     boundary_reports: &[crate::core::views::BoundaryReport],
 ) -> String {
+    render_with_freshness(
+        spec,
+        annotations,
+        status,
+        history,
+        quantifier_reports,
+        boundary_reports,
+        &Freshness::default(),
+    )
+}
+
+fn render_with_freshness(
+    spec: &Spec,
+    annotations: &Annotations,
+    status: Option<&[LineStatus]>,
+    history: &[Transition],
+    quantifier_reports: &[crate::core::views::QuantifierReport],
+    boundary_reports: &[CoverageMap],
+    freshness: &Freshness,
+) -> String {
     let scored = status.is_some();
-    let current_status =
-        status.map(|lines| display_statuses(spec, annotations, lines, boundary_reports));
     let mut by_id: BTreeMap<&str, &LineStatus> = BTreeMap::new();
-    if let Some(lines) = current_status.as_deref() {
+    if let Some(lines) = status {
         for line in lines {
             by_id.insert(line.id.as_str(), line);
         }
     }
-    let classified = classify(spec, scored, &by_id);
+    let classified = classify(spec, scored, &by_id, freshness);
     let page = Page {
         spec,
         annotations,
         by_id: &by_id,
         history,
         scored,
+        freshness,
         quantifier_reports,
         boundary_reports,
     };
@@ -127,6 +149,9 @@ pub fn render_spec_with_reports(
         html.push_str(
             "<p class=\"banner\">This living spec has not been scored yet. Lines below use a gray unscored badge.</p>\n",
         );
+    }
+    if freshness.stale {
+        html.push_str("<p class=\"banner\" role=\"alert\">Stale: inputs changed since this status was scored; run <code>living-spec score</code></p>\n");
     }
     push_extra_status(&mut html, &page);
     push_orphan_annotations(&mut html, &page);
@@ -151,6 +176,7 @@ pub fn render_spec_with_reports(
         "not yet scored",
         &classified.unscored,
     );
+    push_groups(&mut html, &page, "stale", "Stale inputs", &classified.stale);
     push_groups(
         &mut html,
         &page,
@@ -164,115 +190,21 @@ pub fn render_spec_with_reports(
     html
 }
 
-// Stored outcomes remain visible as diagnostics. Only current, accepted
-// link/audit revisions and complete boundary evidence may retain a positive badge.
-pub(super) fn display_statuses(
-    spec: &Spec,
-    annotations: &Annotations,
-    statuses: &[LineStatus],
-    boundary_reports: &[CoverageMap],
-) -> Vec<LineStatus> {
-    let mut statuses = statuses.to_vec();
-    for status in &mut statuses {
-        if !matches!(status.badge, Badge::Proven | Badge::Qualified) {
-            continue;
-        }
-        let Some(line) = spec.lines.iter().find(|line| line.id == status.id) else {
-            continue;
-        };
-        let requirement = annotations.requirements.get(&line.id);
-        let mut gaps = Vec::new();
-        match requirement.filter(|requirement| !requirement.links.is_empty()) {
-            None => gaps.push(Reason::NoLink),
-            Some(requirement) => {
-                let accepted: Vec<_> = requirement
-                    .links
-                    .iter()
-                    .filter(|link| link.is_accepted())
-                    .collect();
-                if accepted.is_empty() {
-                    gaps.push(Reason::LinkChallenged);
-                } else {
-                    let current: Vec<_> = accepted
-                        .iter()
-                        .filter(|link| {
-                            link.revision == line.revision && link.audit.revision == line.revision
-                        })
-                        .collect();
-                    if current.is_empty() {
-                        gaps.push(Reason::StaleRevision);
-                    } else {
-                        for link in current {
-                            let base = link
-                                .test_id
-                                .split_once('#')
-                                .map_or(link.test_id.as_str(), |(base, _)| base);
-                            let case_prefix = format!("{base}#");
-                            let cases: Vec<_> = status
-                                .tests
-                                .iter()
-                                .filter(|test| test.test_id.starts_with(&case_prefix))
-                                .collect();
-                            let tests: Vec<_> = if cases.is_empty() {
-                                status
-                                    .tests
-                                    .iter()
-                                    .filter(|test| test.test_id == link.test_id)
-                                    .collect()
-                            } else {
-                                cases
-                            };
-                            if tests.iter().any(|test| {
-                                matches!(test.status, TestStatus::Failed | TestStatus::Errored)
-                            }) {
-                                gaps.push(Reason::TestFailed);
-                            }
-                            if tests.is_empty()
-                                || tests.iter().any(|test| test.status == TestStatus::Skipped)
-                            {
-                                gaps.push(Reason::NotExecuted);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if requires_resolution(line, requirement) {
-            let (coverage, _) =
-                boundary_projection(line, boundary_reports, requirement, Some(status));
-            if coverage.as_ref().is_none_or(|map| {
-                map.bounds.iter().any(|bound| {
-                    bound
-                        .cases
-                        .iter()
-                        .any(|case| case.status != CaseStatus::TestedPass)
-                })
-            }) {
-                gaps.push(Reason::BoundaryGap);
-            }
-        }
-        if !gaps.is_empty() {
-            status.badge = if gaps.contains(&Reason::TestFailed) {
-                Badge::Broken
-            } else {
-                Badge::Unproven
-            };
-            for reason in gaps {
-                if !status.reasons.contains(&reason) {
-                    status.reasons.push(reason);
-                }
-            }
-        }
-    }
-    statuses
-}
-
 pub(crate) fn render_dir(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let spec_path = dir.join("spec.md");
     let spec_text = fs::read_to_string(&spec_path)
         .map_err(|error| format!("failed to read {}: {error}", spec_path.display()))?;
     let spec = Spec::parse(&spec_text)?;
-    let annotations = Annotations::load(dir.join("annotations.json"))?;
+    let annotations_path = dir.join("annotations.json");
+    let annotations = if annotations_path.exists() {
+        Annotations::load(&annotations_path)?
+    } else {
+        Annotations {
+            schema: "living-spec.annotations/v1".into(),
+            requirements: BTreeMap::new(),
+            extra: BTreeMap::new(),
+        }
+    };
     let status_path = dir.join("status.json");
     let status = if status_path.is_file() {
         Some(load_status(&status_path)?)
@@ -290,17 +222,35 @@ pub(crate) fn render_dir(dir: &Path) -> Result<String, Box<dyn std::error::Error
         Vec::new()
     };
     let history = History::new(dir.join("history.jsonl")).read()?;
-    Ok(render_spec_with_reports(
+    let freshness = if status.is_some() {
+        load_freshness(
+            dir,
+            &spec,
+            status.as_deref().unwrap(),
+            &boundary_reports,
+            &quantifier_reports,
+        )?
+    } else {
+        Freshness::default()
+    };
+    Ok(render_with_freshness(
         &spec,
         &annotations,
         status.as_deref(),
         &history,
         &quantifier_reports,
         &boundary_reports,
+        &freshness,
     ))
 }
 
-fn classify(spec: &Spec, scored: bool, by_id: &BTreeMap<&str, &LineStatus>) -> Classified {
+fn classify(
+    spec: &Spec,
+    scored: bool,
+    by_id: &BTreeMap<&str, &LineStatus>,
+    freshness: &Freshness,
+) -> Classified {
+    let mut stale = Vec::new();
     let mut broken = Vec::new();
     let mut middle = Vec::new();
     let mut unscored = Vec::new();
@@ -311,6 +261,7 @@ fn classify(spec: &Spec, scored: bool, by_id: &BTreeMap<&str, &LineStatus>) -> C
         unproven: 0,
         qualified: 0,
         unscored: 0,
+        stale: 0,
     };
     for (index, line) in spec.lines.iter().enumerate() {
         let status = if scored {
@@ -318,7 +269,7 @@ fn classify(spec: &Spec, scored: bool, by_id: &BTreeMap<&str, &LineStatus>) -> C
         } else {
             None
         };
-        match shown_badge(scored, status) {
+        match shown_badge(scored, status, freshness.lines.contains_key(&line.id)) {
             ShownBadge::Broken => {
                 counts.broken += 1;
                 broken.push(index);
@@ -335,6 +286,10 @@ fn classify(spec: &Spec, scored: bool, by_id: &BTreeMap<&str, &LineStatus>) -> C
                 counts.unproven += 1;
                 unproven.push(index);
             }
+            ShownBadge::Stale => {
+                counts.stale += 1;
+                stale.push(index);
+            }
             ShownBadge::Unscored => {
                 counts.unscored += 1;
                 unscored.push(index);
@@ -342,6 +297,7 @@ fn classify(spec: &Spec, scored: bool, by_id: &BTreeMap<&str, &LineStatus>) -> C
         }
     }
     Classified {
+        stale,
         broken,
         middle,
         unscored,
@@ -350,7 +306,10 @@ fn classify(spec: &Spec, scored: bool, by_id: &BTreeMap<&str, &LineStatus>) -> C
     }
 }
 
-fn shown_badge(scored: bool, status: Option<&LineStatus>) -> ShownBadge {
+fn shown_badge(scored: bool, status: Option<&LineStatus>, stale: bool) -> ShownBadge {
+    if stale {
+        return ShownBadge::Stale;
+    }
     if !scored {
         return ShownBadge::Unscored;
     }
@@ -377,6 +336,8 @@ fn push_counts(out: &mut String, counts: &Counts, scored: bool) {
     push_usize(out, counts.qualified);
     out.push_str("\" data-unscored=\"");
     push_usize(out, counts.unscored);
+    out.push_str("\" data-stale=\"");
+    push_usize(out, counts.stale);
     out.push_str("\" data-proven-pct=\"");
     if scored {
         out.push_str(&format_percentage(counts.proven as u64, total as u64));
@@ -394,6 +355,10 @@ fn push_counts(out: &mut String, counts: &Counts, scored: bool) {
     if counts.unscored > 0 {
         out.push_str(" · unscored ");
         push_usize(out, counts.unscored);
+    }
+    if counts.stale > 0 {
+        out.push_str(" · stale ");
+        push_usize(out, counts.stale);
     }
     out.push_str(" · ");
     if scored {
@@ -508,7 +473,8 @@ fn push_line(out: &mut String, page: &Page<'_>, index: usize) {
     } else {
         None
     };
-    let badge = shown_badge(page.scored, status);
+    let stale_reason = page.freshness.lines.get(&line.id);
+    let badge = shown_badge(page.scored, status, stale_reason.is_some());
     let requirement = page.annotations.requirements.get(&line.id);
     out.push_str("<details class=\"line\" data-requirement=\"");
     out.push_str(&escape(&line.id));
@@ -527,8 +493,14 @@ fn push_line(out: &mut String, page: &Page<'_>, index: usize) {
     }
     push_notes(out, requirement, Some(&line.revision));
     push_reasons(out, status);
-    push_boundary(out, line, page.boundary_reports, requirement, status);
-    push_quantifier(out, line, page.quantifier_reports, requirement);
+    if let Some(reason) = stale_reason {
+        out.push_str("<p class=\"stale-reason\">stale — ");
+        out.push_str(&escape(reason));
+        out.push_str("</p>\n<p>Stored boundary and quantifier verdicts are stale; run living-spec score.</p>\n");
+    } else {
+        push_boundary(out, line, page.boundary_reports, requirement);
+        push_quantifier(out, line, page.quantifier_reports, requirement);
+    }
     push_dependency_path(out, requirement, status);
     out.push_str("</div></details>\n");
 }
@@ -729,115 +701,15 @@ fn reason_text(reason: &Reason) -> String {
     }
 }
 
-// Validate the entire stored shape against generated current cases before using
-// any receipt. An invalid stored report falls back to every current case untested.
-fn boundary_projection(
-    line: &RequirementLine,
-    reports: &[CoverageMap],
-    requirement: Option<&RequirementAnnotations>,
-    status: Option<&LineStatus>,
-) -> (Option<CoverageMap>, bool) {
-    let Ok(resolved) = resolve_requirement(line, requirement) else {
-        return (None, true);
-    };
-    let Ok(expected) = coverage(&line.id, &resolved.bounds, &[], &[]) else {
-        return (None, true);
-    };
-    // Inference is bound to the entire revision, including acceptance wording.
-    if resolved.stale {
-        return (Some(expected), true);
-    }
-    let stored: Vec<_> = reports
-        .iter()
-        .filter(|report| report.requirement == line.id)
-        .collect();
-    if !stored.is_empty() {
-        return if stored.len() == 1
-            && stored[0].links_fingerprint.as_deref()
-                == Some(
-                    crate::core::boundary::coverage::links_fingerprint(&resolved.links).as_str(),
-                )
-            && boundary_shape_matches(stored[0], &expected)
-        {
-            (Some(stored[0].clone()), false)
-        } else {
-            (Some(expected), true)
-        };
-    }
-    let outcomes = status
-        .map(|line| {
-            line.tests
-                .iter()
-                .map(|test| crate::core::test_identity::TestOutcome {
-                    test_id: test.test_id.clone(),
-                    status: test.status,
-                    duration_ms: test.duration_ms,
-                    failure_message: None,
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    (
-        coverage(&line.id, &resolved.bounds, &resolved.links, &outcomes).ok(),
-        false,
-    )
-}
-
-fn boundary_shape_matches(stored: &CoverageMap, expected: &CoverageMap) -> bool {
-    if stored.bounds.len() != expected.bounds.len() {
-        return false;
-    }
-    expected.bounds.iter().all(|wanted| {
-        let matches: Vec<_> = stored
-            .bounds
-            .iter()
-            .filter(|bound| bound.bound == wanted.bound)
-            .collect();
-        if matches.len() != 1 || matches[0].cases.len() != wanted.cases.len() {
-            return false;
-        }
-        wanted.cases.iter().all(|case| {
-            let matches: Vec<_> = matches[0]
-                .cases
-                .iter()
-                .filter(|stored| {
-                    stored.position == case.position
-                        && stored.value == case.value
-                        && stored.unit == case.unit
-                        && stored.expected == case.expected
-                })
-                .collect();
-            matches.len() == 1
-                && match matches[0].status {
-                    CaseStatus::Untested => matches[0].reason.is_some(),
-                    CaseStatus::TestedPass | CaseStatus::TestedFail => {
-                        matches[0]
-                            .test_id
-                            .as_ref()
-                            .is_some_and(|id| !id.trim().is_empty())
-                            && matches[0].reason.is_none()
-                    }
-                }
-        })
-    })
-}
-
 fn push_boundary(
     out: &mut String,
     line: &RequirementLine,
     reports: &[CoverageMap],
     requirement: Option<&RequirementAnnotations>,
-    status: Option<&LineStatus>,
 ) {
-    if !requires_resolution(line, requirement) {
+    let map = reports.iter().find(|report| report.requirement == line.id);
+    if map.is_none() && requirement.is_none_or(|a| a.bounds.is_empty()) {
         return;
-    }
-    let (map, invalid_stored) = boundary_projection(line, reports, requirement, status);
-    if map.as_ref().is_some_and(|map| map.bounds.is_empty()) {
-        return;
-    }
-    if invalid_stored {
-        out.push_str("<p class=\"banner\">Stored boundary report is incomplete, duplicated, mismatched, or stale. Current cases are untested until rescoring.</p>\n");
     }
     out.push_str("<h3>Boundary coverage</h3>\n<table><thead><tr><th>Boundary</th><th>Value</th><th>Test</th><th>Status</th></tr></thead><tbody>\n");
     if let Some(map) = map {
@@ -871,7 +743,7 @@ fn push_boundary(
             }
         }
     } else {
-        out.push_str("<tr><td colspan=\"4\">Boundary coverage is unavailable because its annotations or result data are invalid.</td></tr>\n");
+        out.push_str("<tr><td colspan=\"4\">Boundary coverage has not been scored.</td></tr>\n");
     }
     out.push_str("</tbody></table>\n");
 }
@@ -882,7 +754,7 @@ fn push_quantifier(
     reports: &[crate::core::views::QuantifierReport],
     requirement: Option<&RequirementAnnotations>,
 ) {
-    let Some(section) = requirement.and_then(|a| a.quantifier.as_ref()) else {
+    let Some(_) = requirement.and_then(|a| a.quantifier.as_ref()) else {
         return;
     };
     out.push_str("<h3>Quantifier Map</h3>\n");
@@ -891,17 +763,6 @@ fn push_quantifier(
         out.push_str("<p>Quantifier claim has not been scored.</p>\n");
         return;
     };
-    let current = serde_json::from_value::<crate::core::quantifier::Quantifier>(section.clone());
-    if matching.next().is_some()
-        || report.text != line.text
-        || current
-            .as_ref()
-            .ok()
-            .is_none_or(|claim| claim != &report.quantifier)
-    {
-        out.push_str("<p>Stored quantifier report is stale or mismatched. Current claim has not been scored.</p>\n");
-        return;
-    }
     match crate::core::views::quantifier_html_report(report) {
         Ok(html) => {
             out.push_str(&html);

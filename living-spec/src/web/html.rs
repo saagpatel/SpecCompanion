@@ -13,6 +13,7 @@ h1,h2,h3{line-height:1.2}
 .badge-broken{color:#4d0d0d;background:#ffd4d4;border-color:#b42318;border-style:double}
 .badge-unproven{color:#222;background:#e4e4e4;border-color:#555;border-style:dotted}
 .badge-qualified{color:#3f2a00;background:#ffe4ad;border-color:#8a5a00;border-style:dashed}
+.badge-stale{color:#222;background:#e4e4e4;border-color:#555;border-style:dashed}
 .badge-unscored{color:#222;background:#eee;border-color:#777;border-style:dashed}
 details{margin:.7rem 0;padding:.45rem .7rem;background:#fff;border:1px solid #ddd}
 .banner{padding:.7rem .9rem;background:#eee;border:1px dashed #777}

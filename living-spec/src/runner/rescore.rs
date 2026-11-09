@@ -52,6 +52,8 @@ impl RescoreReport {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inputs: Option<crate::core::freshness::ScoreInputs>,
     pub schema: String,
     pub commit: String,
     #[serde(default = "stored_audit")]
@@ -315,6 +317,14 @@ pub fn rescore_with_context(
     if annotations_changed || !report.renamed_links.is_empty() {
         annotations.save(spec_dir.join("annotations.json"))?;
     }
+    let inputs = crate::core::freshness::ScoreInputs::capture(
+        spec_dir,
+        outcomes,
+        &report.statuses,
+        &report.boundary_reports,
+        &report.quantifier_reports,
+        note_source,
+    )?;
     for event in rename_events
         .iter()
         .chain(report.transitions.iter())
@@ -323,6 +333,7 @@ pub fn rescore_with_context(
         history.append(event)?;
     }
     let document = StatusDocument {
+        inputs: Some(inputs),
         schema: "living-spec.status/v1".into(),
         commit: commit.into(),
         audit: if sources.is_some() { "fresh" } else { "stored" }.into(),

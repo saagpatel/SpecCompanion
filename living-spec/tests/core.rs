@@ -172,7 +172,39 @@ fn rename() {
         fingerprint("assert_eq!(x, \"a  b\")"),
         fingerprint("assert_eq!(x, \"a b\")")
     );
-    assert_eq!(fingerprint("a  \nb\t"), fingerprint("a\nb"));
+    assert_ne!(fingerprint("a  \nb\t"), fingerprint("a\nb"));
+}
+
+#[test]
+fn trailing_space_inside_python_multiline_literal_changes_fingerprint() {
+    let source = "def test_message():\n    assert message == '''hello  \nworld'''\n";
+    let changed = source.replace("hello  \n", "hello\n");
+    assert_ne!(fingerprint(source), fingerprint(&changed));
+    assert_ne!(rename_hint(source), rename_hint(&changed));
+}
+
+#[test]
+fn trailing_space_inside_rust_raw_string_changes_fingerprint() {
+    let source = "fn test_message() {\n    assert_eq!(message, r#\"hello  \nworld\"#);\n}";
+    let changed = source.replace("hello  \n", "hello\n");
+    assert_ne!(fingerprint(source), fingerprint(&changed));
+    assert_ne!(rename_hint(source), rename_hint(&changed));
+}
+
+#[test]
+fn crlf_and_lf_sources_share_a_fingerprint() {
+    let source = "fn test_message() {\n    assert!(true);\n}\n";
+    for ending in ["\r\n", "\r"] {
+        let converted = source.replace('\n', ending);
+        assert_eq!(fingerprint(source), fingerprint(&converted));
+        assert_eq!(rename_hint(source), rename_hint(&converted));
+        let decorated = "@marker\ndef test_message():\n    assert value\n";
+        assert!(rename_hint(decorated).is_some());
+        assert_eq!(
+            rename_hint(decorated),
+            rename_hint(&decorated.replace('\n', ending))
+        );
+    }
 }
 #[test]
 fn renamed_link_requires_reaudit() {

@@ -32,13 +32,9 @@ pub enum Resolution {
     Renamed { new_id: String },
     Unresolved,
 }
-/// Hash source bytes, trimming only trailing whitespace on each line.
+/// Hash source bytes with CRLF and CR line endings normalized to LF.
 pub fn fingerprint(source: &str) -> String {
-    let normalized = source
-        .split('\n')
-        .map(str::trim_end)
-        .collect::<Vec<_>>()
-        .join("\n");
+    let normalized = source.replace("\r\n", "\n").replace('\r', "\n");
     format!("sha256:{:x}", Sha256::digest(normalized.as_bytes()))
 }
 /// Normalize only a recognized test name, preserving the rest of the source.
@@ -59,7 +55,8 @@ pub fn rename_hint(source: &str) -> Option<String> {
         ))
         .expect("bounded declaration regex")
     });
-    let captures = HEADER.captures(source)?;
+    let source = source.replace("\r\n", "\n").replace('\r', "\n");
+    let captures = HEADER.captures(&source)?;
     let header = captures.get(0)?;
     if source[header.end()..].trim().is_empty() {
         return None;
@@ -67,9 +64,10 @@ pub fn rename_hint(source: &str) -> Option<String> {
     let name = captures
         .name("rust")
         .or_else(|| captures.name("python"))
-        .or_else(|| captures.name("js"))?;
-    let mut normalized = source.to_owned();
-    normalized.replace_range(name.range(), "<test-name>");
+        .or_else(|| captures.name("js"))?
+        .range();
+    let mut normalized = source;
+    normalized.replace_range(name, "<test-name>");
     Some(fingerprint(&normalized))
 }
 /// Compatibility entry point for digest-only callers. Renames require hints.

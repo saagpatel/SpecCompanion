@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add the Living Spec crate's unified score pipeline, dogfood evidence, CI gate, and offline portfolio roll-up.
+- Document Living Spec badges, annotations, commands, hook, CI, and evidence limits.
+- Preserve punctuation inside Quantifier Map Markdown code spans while escaping surrounding prose.
 - Replace pass-equals-coverage reporting with evidence-backed `VERIFIED`, `PARTIAL`, `FAILED`, and `UNKNOWN` classifications.
 - Add stable source-linked requirements, placeholder assertion rejection, deterministic JavaScript/TypeScript and Python evidence, and bounded test execution.
 - Add exact evidence trails and explanatory accessible report states.

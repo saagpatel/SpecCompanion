@@ -1,0 +1,5 @@
+# Packet 31: dependency report size must be linear
+
+Review finding on `src/deps/report.rs` around line 59 (part 7, PR #136, round 2): every qualified dependent embeds every reachable qualified prerequisite, *with their full dependency-path reasons*. For an N-node cycle, the N+1-node cycle witness is repeated N(N−1) times, so a 1,000-node cycle yields about a billion path ids (about 8 GB) and a valid input can exhaust memory.
+
+Fix: for each affected claim, the report gives its own **minimal path** (as now) plus the **ids only** of the other reachable non-proven prerequisites (with their badge), never their paths. Cycle witnesses are emitted **once** in a top-level `cycles` section and referenced by index. Write the Markdown and JSON exports as streams to the output (no single giant string). Update the dependency-report schema. Regressions: `report_size_is_linear_for_large_cycle` (1,000-node cycle; output bytes under a linear bound, e.g. < 200 bytes × N), and keep `deps_reference_set` (20/20) and the existing report tests passing (adjust expectations only where they asserted embedded prerequisite paths). Keep `make verify` green.

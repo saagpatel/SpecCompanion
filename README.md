@@ -105,6 +105,36 @@ The Rust backend owns the full pipeline: parse spec → normalize stable require
 
 `VERIFIED` requires all of the following: deterministic implementation evidence, an exact stable requirement trace, a meaningful non-placeholder assertion, and a passing execution result. Missing any part keeps the requirement partial or unknown; a failure or timeout is reported as failed.
 
+## Living Spec
+
+The standalone Rust crate in `living-spec/` tracks whether the requirements for the Living Spec tools themselves have executable test evidence. It works offline and does not use an LLM.
+
+The auditor is a deterministic, best-effort static check aimed at lazy or accidental non-tests: placeholders, irrelevant or tautological assertions, and unexecuted or unsupported shapes. Unsupported shapes are always challenged. It is not a sandbox or a proof that a test is adversarially sound; a deliberately obfuscated test can still mislead it. A green badge means “a passing test the auditor could relate to this line”, never “proven correct”.
+
+Each requirement line has a stable identifier, such as `- [LS-001] The store preserves unknown annotation sections.` The four badges describe the current evidence: **proven** means accepted, current links passed and required boundary cases passed; **broken** means a linked test failed or a link cannot be resolved; **unproven** means evidence is absent, stale, challenged, or not executed, or a required boundary case is missing; **qualified** means the line's own evidence passed but a prerequisite is not proven. Qualification preserves the line's own test results.
+
+The shared `annotations.json` file stores accepted test links and their audits alongside optional typed bounds, dependency edges with evidence, and quantifier domains and claims. The Markdown spec remains plain English; annotations add structured evidence without changing its requirement text. `status.json` is the current score and `history.jsonl` records score transitions. Saved scores bind exact spec and result-file bytes, canonical annotation JSON, and the tool version with SHA-256 digests. `render` and `rollup` check those bindings rather than recomputing evidence verdicts. Changed inputs show a stale banner and a stale roll-up row with zero proven; affected requirements and their transitive dependents get gray **stale** badges until `living-spec score` runs again. Older scores without digests also require rescoring. Result-file paths are relative to the spec directory; unavailable or malformed results make every line stale.
+
+From the repository root, `make living-spec-test` runs formatting, lint and tests; `make living-spec-score` scores the dogfood spec using those test results; `make verify` runs both. These targets also require Ruby 3+ for the CI workflow and scoring-script regressions (standard library only). The equivalent direct commands are:
+
+```sh
+cd living-spec
+cargo fmt -- --check
+cargo clippy --offline --all-targets -- -D warnings
+cargo test --offline --locked 2>&1 | tee target/test-output.txt
+cargo run --offline --locked -q -- score living-spec --results target/test-output.txt --format libtest --tests .
+```
+
+From the crate directory, `living-spec link living-spec --tests . --write` proposes links for review; `living-spec audit living-spec --tests .` reports its conservative assertion audit. Add `--write` to audit to rebind and save only existing links against current requirements and source, including challenged verdicts; it does not add linker proposals. Hand-reviewed links use `proposed_by: human` and bind both the test fingerprint and the current requirement revision. `score` accepts libtest or JUnit results, optional `--commit SHA`, and `--html out.html`; `rescore` uses the same pipeline. `living-spec render living-spec --out spec.html` renders saved evidence. The [Boundary Cases](living-spec/BOUNDARY.md) and [Quantifier Map](living-spec/QUANTIFIER.md) guides describe their annotations and standalone exports. `living-spec deps report living-spec --status living-spec/status.json` explains dependency impacts.
+
+With `--tests` (or `--fingerprints-from`), scoring re-audits every resolved link against current sources, including human-proposed links with unchanged fingerprints. A stored `accepted` verdict cannot bypass this audit. To accept a challenge explicitly, add `"override": { "by": "human", "reason": "Explain the reviewed limitation", "test_id": "<reviewed test_id>", "fingerprint": "<reviewed fingerprint>", "revision": "<reviewed requirement revision>" }` inside that link's `audit` object. The reason must contain non-whitespace text, and all three binding fields must match the current link. An override with a missing or changed binding is inactive; write commands retain it in `audit.invalidated_overrides` as history. The auditor's challenged verdict is retained; scoring records `human_override`, the spec page displays “accepted by human override” with the reason, and `status.json` counts these links separately as `human_overrides`. Overrides do not bypass source identity, requirement revisions, execution results, or boundary gates. Without sources, scoring uses saved verdicts and labels `status.json` with `"audit": "stored"`; source-backed scoring records `"audit": "fresh"`. The dogfood spec uses no overrides.
+
+The optional [Git pre-push hook](living-spec/hooks/README.md) is installed manually in an existing hooks directory or an explicitly chosen hooks directory. For this repository, configure its spec directory as `living-spec/living-spec`, source root as `living-spec`, and test command as `cd living-spec && cargo test --locked`. It runs a local rescore before pushing. CI runs the test and score gates on every push and pull request and saves the HTML and JSON evidence as an artifact.
+
+Portfolio roll-up reads the kept-project registry at runtime. Set `LIVING_SPEC_REGISTRY` to a registry snapshot, then run `living-spec rollup --include . --out rollup.html --json rollup.json`; `--registry PATH` can supply the snapshot explicitly. Projects without a scored living spec remain visible as unscored or missing.
+
+The honesty rules keep failed links visible, require every typed boundary case to be tested, and keep quantifier coverage descriptive rather than proof language. Known limits: the deterministic auditor checks syntax and relevance, rather than semantic equivalence; source discovery supports a bounded set of languages and syntax; current source fingerprints are needed for admissible links; and a passing process does not establish that every parameterized case ran. Quantifier checks cover declared observations of allowlisted compiled fixture subjects, with finite or sampled domains; they do not execute arbitrary application code. Dependency qualification records prerequisite status; it does not claim the dependent behavior failed. Exit 2 means at least one requirement is broken; malformed or incomplete results exit 1, while CLI usage errors exit 64.
+
 ## License
 
 MIT

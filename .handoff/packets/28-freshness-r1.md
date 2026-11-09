@@ -1,0 +1,7 @@
+# Packet 28: freshness digests must describe exactly what was scored
+
+Read `.handoff/packets/00-architecture.md` (binding). The review of part 6a (PR #135) found two ways in `src/core/freshness.rs` for an old green badge to look current:
+1. **Around line 133, re-read after scoring.** Capture re-reads the inputs after the runner has scored its in-memory snapshots. If `spec.md` (or annotations, or the results file) changes during scoring, the receipt records the *new* bytes next to the *old* status, and a later check calls the old green current. A replaced results file is also accepted even when it can't be reconciled with the outcomes that were actually used. **Fix:** read each input exactly once into memory, score from those bytes, and compute every digest from those same in-memory bytes (pass them through the API; never re-read). If the results file can't be parsed into exactly the outcome set that was scored, fail with an input error.
+2. **Around line 169, positional identity mapping.** Raw results `[b, a]` against supplied outcomes `[a, b]` map b→a and a→b, so when b later fails the failure is pinned on a. **Fix:** map by test id (the scoped `test_id`, including `#case`), never by position. Duplicate or missing ids are an input error.
+
+Regressions: `spec_change_during_scoring_is_not_fresh` (simulate the change between read and capture, e.g. through an injected reader), `results_file_mismatch_is_rejected`, `reordered_outcomes_map_by_id`. Keep `make verify` green and the dogfood at 33/33 proven.

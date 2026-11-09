@@ -1,0 +1,34 @@
+{
+  "id": "Q-001",
+  "text": "Every signed 8-bit input has a nonnegative absolute-value result.",
+  "quantifier": {
+    "kind": "finite-universal",
+    "domain": {
+      "type": "int-range",
+      "lo": -8,
+      "hi": 8
+    },
+    "subject": "abs_i8",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "ge",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "int",
+            "value": 0
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

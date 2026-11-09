@@ -1,0 +1,189 @@
+{
+  "schema_version": "0.12.0",
+  "generated_at": "2026-01-15T00:00:00Z",
+  "derivation_policy_version": "portfolio_attention.v3",
+  "producer": { "name": "living-spec-fixture", "version": "0" },
+  "inputs": {},
+  "coverage": [],
+  "exclusions": { "policy_version": "workspace_discovery.v3", "counts": {} },
+  "workspace_root": ".",
+  "source_summary": { "project_count": 5, "activity_status_counts": { "active": 4 }, "archived_count": 1 },
+  "precedence_matrix": {},
+  "warnings": [],
+  "fixture_note": "synthetic portfolio snapshot",
+  "projects": [
+    {
+      "identity": {
+        "project_key": "amber-ledger",
+        "display_name": "Amber Ledger",
+        "path": "amber-ledger",
+        "top_level_dir": "amber-ledger",
+        "group_key": "samples",
+        "group_label": "Samples",
+        "section_marker": "samples",
+        "section_label": "Samples",
+        "has_git": true,
+        "repo_full_name": "",
+        "default_branch": "main"
+      },
+      "declared": {
+        "owner": "",
+        "purpose": "Synthetic ledger sample",
+        "lifecycle_state": "active",
+        "category": "learning"
+      },
+      "derived": {
+        "stack": ["rust"],
+        "context_quality": "boilerplate",
+        "activity_status": "active",
+        "archived": false,
+        "attention_state": "active-product"
+      },
+      "risk": { "risk_tier": "baseline" },
+      "security": { "alerts_available": false, "coverage_state": "unknown" },
+      "advisory": { "notion_portfolio_call": "" },
+      "repository_state": {},
+      "provenance": {},
+      "warnings": [],
+      "fixture_only": true
+    },
+    {
+      "identity": {
+        "project_key": "birch-timer",
+        "display_name": "Birch Timer",
+        "path": "birch-timer",
+        "top_level_dir": "birch-timer",
+        "group_key": "samples",
+        "group_label": "Samples",
+        "section_marker": "samples",
+        "section_label": "Samples",
+        "has_git": true,
+        "repo_full_name": "",
+        "default_branch": "main"
+      },
+      "declared": {
+        "owner": "",
+        "purpose": "Synthetic timer sample",
+        "lifecycle_state": "active",
+        "category": "learning"
+      },
+      "derived": {
+        "stack": ["rust"],
+        "context_quality": "boilerplate",
+        "activity_status": "active",
+        "archived": false,
+        "attention_state": "active-product"
+      },
+      "risk": { "risk_tier": "baseline" },
+      "security": { "alerts_available": false, "coverage_state": "unknown" },
+      "advisory": {},
+      "repository_state": {},
+      "provenance": {},
+      "warnings": []
+    },
+    {
+      "identity": {
+        "project_key": "cedar-sketch",
+        "display_name": "Cedar Sketch",
+        "path": "cedar-sketch",
+        "top_level_dir": "cedar-sketch",
+        "group_key": "samples",
+        "group_label": "Samples",
+        "section_marker": "samples",
+        "section_label": "Samples",
+        "has_git": false,
+        "repo_full_name": "",
+        "default_branch": ""
+      },
+      "declared": {
+        "purpose": "Kept sample with no living spec",
+        "lifecycle_state": "active",
+        "category": "learning"
+      },
+      "derived": {
+        "stack": [],
+        "context_quality": "none",
+        "activity_status": "active",
+        "archived": false,
+        "attention_state": "experiment"
+      },
+      "risk": { "risk_tier": "baseline" },
+      "security": { "coverage_state": "unknown" },
+      "advisory": {},
+      "repository_state": {},
+      "provenance": {},
+      "warnings": []
+    },
+    {
+      "identity": {
+        "project_key": "dune-relic",
+        "display_name": "Dune Relic",
+        "path": "dune-relic",
+        "top_level_dir": "dune-relic",
+        "group_key": "samples",
+        "group_label": "Samples",
+        "section_marker": "samples",
+        "section_label": "Samples",
+        "has_git": true,
+        "repo_full_name": "",
+        "default_branch": "main"
+      },
+      "declared": {
+        "purpose": "Archived sample that must be excluded",
+        "lifecycle_state": "archived",
+        "category": "learning"
+      },
+      "derived": {
+        "stack": ["rust"],
+        "context_quality": "none",
+        "activity_status": "stale",
+        "archived": true,
+        "attention_state": "archived"
+      },
+      "risk": { "risk_tier": "deferred" },
+      "security": { "coverage_state": "unknown" },
+      "advisory": {},
+      "repository_state": {},
+      "provenance": {},
+      "warnings": []
+    },
+    {
+      "identity": {
+        "project_key": "elm-draft",
+        "display_name": "Elm Draft",
+        "path": "elm-draft",
+        "top_level_dir": "elm-draft",
+        "group_key": "samples",
+        "group_label": "Samples",
+        "section_marker": "samples",
+        "section_label": "Samples",
+        "has_git": true,
+        "repo_full_name": "",
+        "default_branch": "main"
+      },
+      "declared": {
+        "purpose": "Living spec that has not been scored",
+        "lifecycle_state": "experimental",
+        "category": "learning"
+      },
+      "derived": {
+        "stack": ["rust"],
+        "context_quality": "boilerplate",
+        "activity_status": "active",
+        "archived": false,
+        "attention_state": "experiment"
+      },
+      "risk": { "risk_tier": "baseline" },
+      "security": { "coverage_state": "unknown" },
+      "advisory": {},
+      "repository_state": {},
+      "provenance": {},
+      "warnings": []
+    }
+  ],
+  "rollups": {
+    "risk_tier_counts": { "elevated": 0, "moderate": 0, "baseline": 4, "deferred": 1 },
+    "security": { "coverage_state": "unknown" },
+    "decision": { "decision_needed_count": 0, "default_attention_count": 0 }
+  }
+}

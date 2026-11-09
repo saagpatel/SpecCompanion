@@ -1,0 +1,35 @@
+{
+  "id": "Q-018",
+  "text": "Unicode text has identical contents before and after a UTF-8 round trip.",
+  "quantifier": {
+    "kind": "infinite-universal",
+    "domain": {
+      "type": "unbounded",
+      "base": "string",
+      "size_hint": 4
+    },
+    "subject": "utf8_roundtrip",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "input"
+        },
+        "right": {
+          "kind": "field",
+          "source": "output"
+        }
+      }
+    },
+    "sampling": {
+      "seed": 18,
+      "samples": 12
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

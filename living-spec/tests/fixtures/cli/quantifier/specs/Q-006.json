@@ -1,0 +1,79 @@
+{
+  "id": "Q-006",
+  "text": "Sorting each declared vector returns one of the declared ascending vectors.",
+  "quantifier": {
+    "kind": "finite-universal",
+    "domain": {
+      "type": "enum",
+      "values": [
+        {
+          "type": "vec-int",
+          "value": []
+        },
+        {
+          "type": "vec-int",
+          "value": [
+            1
+          ]
+        },
+        {
+          "type": "vec-int",
+          "value": [
+            1,
+            2
+          ]
+        },
+        {
+          "type": "vec-int",
+          "value": [
+            1,
+            2,
+            3
+          ]
+        }
+      ]
+    },
+    "subject": "sort_vec",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "in",
+        "value": {
+          "kind": "field",
+          "source": "output"
+        },
+        "set": [
+          {
+            "type": "vec-int",
+            "value": []
+          },
+          {
+            "type": "vec-int",
+            "value": [
+              1
+            ]
+          },
+          {
+            "type": "vec-int",
+            "value": [
+              1,
+              2
+            ]
+          },
+          {
+            "type": "vec-int",
+            "value": [
+              1,
+              2,
+              3
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

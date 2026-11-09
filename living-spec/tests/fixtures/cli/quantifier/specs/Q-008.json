@@ -1,0 +1,48 @@
+{
+  "id": "Q-008",
+  "text": "Byte round-tripping preserves each declared byte sequence.",
+  "quantifier": {
+    "kind": "finite-universal",
+    "domain": {
+      "type": "enum",
+      "values": [
+        {
+          "type": "bytes",
+          "value": []
+        },
+        {
+          "type": "bytes",
+          "value": [
+            0
+          ]
+        },
+        {
+          "type": "bytes",
+          "value": [
+            0,
+            255
+          ]
+        }
+      ]
+    },
+    "subject": "bytes_roundtrip",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "field",
+          "source": "input"
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

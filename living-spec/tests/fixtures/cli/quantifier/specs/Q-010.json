@@ -1,0 +1,34 @@
+{
+  "id": "Q-010",
+  "text": "For inputs from 98 through 100, clamp_buggy returns no value above 100.",
+  "quantifier": {
+    "kind": "finite-universal",
+    "domain": {
+      "type": "int-range",
+      "lo": 98,
+      "hi": 100
+    },
+    "subject": "clamp_buggy",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "le",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "int",
+            "value": 100
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": "living-spec.annotations/v1",
+  "requirements": {
+    "AL-001": {
+      "links": [
+        {
+          "test_id": "rust:amber:src/lib.rs:keeps_entry",
+          "fingerprint": "sha256:fixture",
+          "revision": "sha256:5ea1b4ed34b659f2fa47ba06af108976d1eea7ad493845a54817e213f753074b",
+          "explanation": "Authored fixture evidence.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [],
+            "revision": "sha256:5ea1b4ed34b659f2fa47ba06af108976d1eea7ad493845a54817e213f753074b"
+          }
+        }
+      ]
+    },
+    "AL-004": {
+      "links": [
+        {
+          "test_id": "rust:amber:src/lib.rs:qualified_total",
+          "fingerprint": "sha256:fixture",
+          "revision": "sha256:7ca6e972a0dd9dad7831e4b46e9a0c7e7058ddd1bd9f8fede73054908348f357",
+          "explanation": "Authored fixture evidence.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [],
+            "revision": "sha256:7ca6e972a0dd9dad7831e4b46e9a0c7e7058ddd1bd9f8fede73054908348f357"
+          }
+        }
+      ]
+    }
+  }
+}

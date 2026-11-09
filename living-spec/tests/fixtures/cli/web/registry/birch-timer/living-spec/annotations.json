@@ -1,0 +1,53 @@
+{
+  "schema": "living-spec.annotations/v1",
+  "requirements": {
+    "BT-001": {
+      "links": [
+        {
+          "test_id": "rust:birch:src/lib.rs:starts",
+          "fingerprint": "sha256:fixture",
+          "revision": "sha256:534c050e2605e441de7b80e8390b9f6196e400f7548965d1cb9765a347ccd5ca",
+          "explanation": "Authored fixture evidence.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [],
+            "revision": "sha256:534c050e2605e441de7b80e8390b9f6196e400f7548965d1cb9765a347ccd5ca"
+          }
+        }
+      ]
+    },
+    "BT-002": {
+      "links": [
+        {
+          "test_id": "rust:birch:src/lib.rs:stops",
+          "fingerprint": "sha256:fixture",
+          "revision": "sha256:c3727cd0d97413a223b536d2e00c79743bd659bc6ae3e32d8674fcc968fa71f0",
+          "explanation": "Authored fixture evidence.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [],
+            "revision": "sha256:c3727cd0d97413a223b536d2e00c79743bd659bc6ae3e32d8674fcc968fa71f0"
+          }
+        }
+      ]
+    },
+    "BT-003": {
+      "links": [
+        {
+          "test_id": "rust:birch:src/lib.rs:remembers",
+          "fingerprint": "sha256:fixture",
+          "revision": "sha256:56e0c07bc40e23ade9eb4ee588a845141311706f53e73ebed766528c2efaf0c9",
+          "explanation": "Authored fixture evidence.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [],
+            "revision": "sha256:56e0c07bc40e23ade9eb4ee588a845141311706f53e73ebed766528c2efaf0c9"
+          }
+        }
+      ]
+    }
+  }
+}

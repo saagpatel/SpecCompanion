@@ -1,0 +1,42 @@
+{
+  "id": "Q-026",
+  "text": "One of the declared strings round-trips to the string é.",
+  "quantifier": {
+    "kind": "existential",
+    "domain": {
+      "type": "enum",
+      "values": [
+        {
+          "type": "string",
+          "value": "a"
+        },
+        {
+          "type": "string",
+          "value": "é"
+        }
+      ]
+    },
+    "subject": "utf8_roundtrip",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "string",
+            "value": "é"
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "witness-found",
+    "min_failures": 0
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "id": "Q-028",
+  "text": "One of the declared byte sequences round-trips to the byte sequence [0].",
+  "quantifier": {
+    "kind": "existential",
+    "domain": {
+      "type": "enum",
+      "values": [
+        {
+          "type": "bytes",
+          "value": []
+        },
+        {
+          "type": "bytes",
+          "value": [
+            0
+          ]
+        }
+      ]
+    },
+    "subject": "bytes_roundtrip",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "bytes",
+            "value": [
+              0
+            ]
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "witness-found",
+    "min_failures": 0
+  }
+}

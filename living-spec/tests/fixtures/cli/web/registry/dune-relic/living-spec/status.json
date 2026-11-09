@@ -1,0 +1,7 @@
+{
+  "schema": "living-spec.status/v1",
+  "lines": [
+    { "id": "DU-001", "badge": "proven", "tests": [{ "test_id": "rust:dune:src/lib.rs:one", "status": "passed" }] },
+    { "id": "DU-002", "badge": "proven", "tests": [{ "test_id": "rust:dune:src/lib.rs:two", "status": "passed" }] }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "Q-009",
+  "text": "The percent_of subject leaves every input from 0 through 102 unchanged, including values above 100.",
+  "quantifier": {
+    "kind": "finite-universal",
+    "domain": {
+      "type": "int-range",
+      "lo": 0,
+      "hi": 102
+    },
+    "subject": "percent_of",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "field",
+          "source": "input"
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "counterexample-found",
+    "min_failures": 1
+  }
+}

@@ -52,6 +52,8 @@ impl RescoreReport {
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inputs: Option<crate::core::freshness::ScoreInputs>,
     pub schema: String,
     pub commit: String,
     #[serde(default = "stored_audit")]
@@ -86,6 +88,7 @@ pub fn rescore_with_providers(
             boundary,
             qualified,
             reauditor: None,
+            results: None,
             quantifier_reports: &|_, _| Ok(Vec::new()),
         },
     )
@@ -96,6 +99,7 @@ pub type QuantifierReports =
 
 /// The pipeline supplies concrete providers; the runner owns scoring and persistence.
 pub struct RescoreContext<'a> {
+    pub results: Option<&'a crate::core::freshness::ResultsSnapshot>,
     pub boundary: &'a dyn BoundaryGapProvider,
     pub qualified: &'a dyn QualifiedProvider,
     pub reauditor: Option<&'a dyn Reauditor>,
@@ -113,6 +117,7 @@ pub fn rescore_with_context(
     let RescoreContext {
         boundary,
         qualified,
+        results,
         reauditor: sources,
         quantifier_reports,
     } = context;
@@ -125,8 +130,21 @@ pub fn rescore_with_context(
             return Err("empty or duplicate outcome identity".into());
         }
     }
-    let spec = Spec::parse(&fs::read_to_string(spec_dir.join("spec.md"))?)?;
-    let mut annotations = Annotations::load(spec_dir.join("annotations.json"))?;
+    let owned_results;
+    let results = match results {
+        Some(results) => results,
+        None => {
+            owned_results =
+                crate::core::freshness::ResultsSnapshot::read(spec_dir, note_source, outcomes)?;
+            &owned_results
+        }
+    };
+    results.validate(outcomes)?;
+    let spec_bytes = fs::read(spec_dir.join("spec.md"))?;
+    let spec = Spec::parse(std::str::from_utf8(&spec_bytes)?)?;
+    let annotation_bytes = fs::read(spec_dir.join("annotations.json"))?;
+    let mut annotations = Annotations::from_bytes(&annotation_bytes)?;
+    let mut annotation_value: serde_json::Value = serde_json::from_slice(&annotation_bytes)?;
     if annotations.schema != "living-spec.annotations/v1" {
         return Err("unsupported annotations schema".into());
     }
@@ -313,6 +331,20 @@ pub fn rescore_with_context(
         }
     }
     if annotations_changed || !report.renamed_links.is_empty() {
+        // Bind intentional re-audits/renames to the in-memory annotations used
+        // for scoring, without re-reading a possibly replaced file.
+        annotation_value = serde_json::to_value(&annotations)?;
+    }
+    let inputs = crate::core::freshness::ScoreInputs::capture(
+        &spec_bytes,
+        &annotation_value,
+        results,
+        outcomes,
+        &report.statuses,
+        &report.boundary_reports,
+        &report.quantifier_reports,
+    )?;
+    if annotations_changed || !report.renamed_links.is_empty() {
         annotations.save(spec_dir.join("annotations.json"))?;
     }
     for event in rename_events
@@ -323,6 +355,7 @@ pub fn rescore_with_context(
         history.append(event)?;
     }
     let document = StatusDocument {
+        inputs: Some(inputs),
         schema: "living-spec.status/v1".into(),
         commit: commit.into(),
         audit: if sources.is_some() { "fresh" } else { "stored" }.into(),

@@ -358,7 +358,7 @@ fn unparen(mut tokens: &[Token]) -> &[Token] {
     while tokens.first().is_some_and(|t| t.text == "(")
         && close(tokens, 0) == Some(tokens.len() - 1)
         && split_args(&tokens[1..tokens.len() - 1]).len() == 1
-        && !tokens.get(tokens.len() - 2).is_some_and(|t| t.text == ",")
+        && tokens.get(tokens.len() - 2).is_none_or(|t| t.text != ",")
     {
         tokens = &tokens[1..tokens.len() - 1];
     }

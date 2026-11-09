@@ -1,0 +1,1318 @@
+{
+  "inputs": {
+    "digest": "sha256:bbe568cfe75b8495ab145818528ad061fa1e244b02e807f1223836b6ded4db35",
+    "tool_version": "0.1.0",
+    "results_file": "../target/test-output.txt",
+    "results_digest": "sha256:12a212d88db95bddbb19ca068108bfca751b0e2595750396eccff132ccac99f3",
+    "results_format": "libtest",
+    "outcome_ids": {},
+    "requirements": {
+      "LS-001": {
+        "digest": "sha256:25e8a3adc853ba5652dccc3eefa5f6a46512dfb2a88fe9175c14e5441d74c694",
+        "own_badge": "proven",
+        "revision": "sha256:7076593f36f4dd0a7d1899c203ebbde8f08e61ec6724714175b803ff6e47fe85",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:d1d1cda292a90d6b26c9fba537327cde6b8e6f384c7c98373a7d738d38bfb27d"
+      },
+      "LS-002": {
+        "digest": "sha256:23a40237994a6575d2f6ecef6fa5d95fae7961f70fdb3e9ef3daabeccf8d13de",
+        "own_badge": "proven",
+        "revision": "sha256:4f384f5d759d9c79c6a68a513c49950f54ed6e230418f157b06273327334e7bc",
+        "outcomes": [
+          {
+            "test_id": "libtest:core:tests/core.rs:fenced_examples_are_ignored",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:core:tests/core.rs:fenced_examples_are_ignored"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:61d0052ac9d53e5764113bcd08400911cb0ae7ee7ff27c1e22ebc4bb41924e84"
+      },
+      "LS-003": {
+        "digest": "sha256:fdfe728c4d4a255bb32cd52fc971890baf1af604b82c9a24565530496bff2930",
+        "own_badge": "proven",
+        "revision": "sha256:ccd2636f815ae51b5ca984a1ba84cd4dc438a8c572897367f9236cd6f5863bc7",
+        "outcomes": [
+          {
+            "test_id": "libtest:cli:tests/cli.rs:link_write_preserves_human_metadata_other_sections_and_is_idempotent",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:cli:tests/cli.rs:link_write_preserves_human_metadata_other_sections_and_is_idempotent"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:c91622dc6c430960d44b90c81e8aa6334f392c15cf0e739dd91808789bec548a"
+      },
+      "LS-004": {
+        "digest": "sha256:9b166eec6bc652ee3078a63a73e4dc359b8d2f0903884e873ee979dcef9c8edd",
+        "own_badge": "proven",
+        "revision": "sha256:1fdbd98daeaae2f62930829b4f416a156d7fa18316be8ce31bfa4ffdd19df137",
+        "outcomes": [
+          {
+            "test_id": "libtest:core:tests/core.rs:roundtrip_and_orphans",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:core:tests/core.rs:roundtrip_and_orphans"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:dc137103ced2b4013c1c66e771433a19427f6940cca9c8b847bd20106ad9f75b"
+      },
+      "LS-005": {
+        "digest": "sha256:2fe98df38b7299b8795f2095b81a6b2a6ff46eaa2bbd9785126e96eb587fcf18",
+        "own_badge": "proven",
+        "revision": "sha256:e72cd99cde3660baefe3b6771c5b7d1db983190f4117ad42398de57766f08931",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:renamed_link_is_rewritten_with_history_note",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:renamed_link_is_rewritten_with_history_note"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:ea871154b3616b6d210f0b03683a603088cdf2e1a5b3276f292c6db7f2801981"
+      },
+      "LS-006": {
+        "digest": "sha256:7f7b6a06919eb9d337526c0ae438862cbac692a7e63fbf0325281c31cf26cb9d",
+        "own_badge": "proven",
+        "revision": "sha256:3bdc2d0b2bb7444dd55492ebc08785bb2f6ee4865891d598c0096d8802fa3af6",
+        "outcomes": [
+          {
+            "test_id": "libtest:agents:tests/agents.rs:rust_python_and_javascript_index_entries_have_scoped_spans",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:agents:tests/agents.rs:rust_python_and_javascript_index_entries_have_scoped_spans"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:045cf8f59f64cf63e48a57c789be1b8b19911c94ab3958cb1cd856c18a0cc591"
+      },
+      "LS-007": {
+        "digest": "sha256:a41ddea923844eb4410d7b5f02e1e31a73b9c39bf13b7d10ced64844c1f983d5",
+        "own_badge": "proven",
+        "revision": "sha256:2f2f8bd1c2587ee53c14ac46fc3e36cfc4e6f75cbb0d30eacd1a1d5253428a43",
+        "outcomes": [
+          {
+            "test_id": "libtest:agents_partial:tests/agents_partial.rs:revised_digests_preserve_literals_and_trailing_spaces",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:agents_partial:tests/agents_partial.rs:revised_digests_preserve_literals_and_trailing_spaces"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:bc54721a3d1160c35cbfd7c9a3a226e3d463481ee4ffb8583fd49e7b9b255f1c"
+      },
+      "LS-008": {
+        "digest": "sha256:bcf05d1d44e46028eab2c4cc09df2b6c36ecbc351b137ff50f4ced49e7ff7184",
+        "own_badge": "proven",
+        "revision": "sha256:fc71e2af5f55d6f089328c3b548fd306a0b0a0e65a1513816c1078b9acca7524",
+        "outcomes": [
+          {
+            "test_id": "libtest:core:tests/core.rs:ambiguous_rename_is_unresolved",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:core:tests/core.rs:ambiguous_rename_is_unresolved"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:7beba1ccbdf85c860e4acc4304eae9b53a3950a62563f9cba2823d11931f8fe9"
+      },
+      "LS-009": {
+        "digest": "sha256:ab9c60c47775cea5c213459cf894023c0a9859a4161d4de33717da6f5dfda027",
+        "own_badge": "proven",
+        "revision": "sha256:7d3b61f1f33a730de67f18e78f03fbff204d8ee64aa58b3865c06482859d6b65",
+        "outcomes": [
+          {
+            "test_id": "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:475f678725d3f9e452d44354db1bdfacc9f779818f562b0c0f5714283dbf3398"
+      },
+      "LS-010": {
+        "digest": "sha256:8e4f615973ed648c6779776bd0c9b3ed94d83e554d28b1d3d1246c7f2360c4ab",
+        "own_badge": "proven",
+        "revision": "sha256:f4ac61ac7e45459d5dda6a22df6d63bbf69b36e46ab1aebaad23d3709a7787d5",
+        "outcomes": [
+          {
+            "test_id": "libtest:cli:tests/cli.rs:audit_cli_reports_challenge_usage_and_input_errors",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:cli:tests/cli.rs:audit_cli_reports_challenge_usage_and_input_errors"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:118585e794570357e63791735c6f037a48e206cdc474f54994b32c11195e629d"
+      },
+      "LS-011": {
+        "digest": "sha256:34e25ad2e2e31c43d7d3953d185a3172a8da86f1630d59284443faf945bf1a09",
+        "own_badge": "proven",
+        "revision": "sha256:05f5f5313444072bfc06af35283eb4fb698396c6cab7712ff2c88e8d411e7bf4",
+        "outcomes": [
+          {
+            "test_id": "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:43c31c28d5a9b7169e76ecb90d0924a5e08618f6442259b6e00e6af7836c22ab"
+      },
+      "LS-012": {
+        "digest": "sha256:b38bbb153d47b0e131a5816ecfc3df0e77c00ab2cb6397e9b60ccff0cd7a698a",
+        "own_badge": "proven",
+        "revision": "sha256:e4fe066a3df92a606177f4015ff30cede7da3648adf76daf1b7524fd0b7e2179",
+        "outcomes": [
+          {
+            "test_id": "libtest:living_spec:src/lib.rs:adapters::tests::libtest_scopes_same_name_to_each_binary_and_doc_tests",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:living_spec:src/lib.rs:adapters::tests::libtest_scopes_same_name_to_each_binary_and_doc_tests"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:ce16b6201d0d6360a3a4db575448c3ab9e5eb48ce5a241d8e61b842435f9e453"
+      },
+      "LS-013": {
+        "digest": "sha256:5b3d226492e41447cabd31f55128bc3c8a90e6b16bc3bf186fb49efaf7b519a8",
+        "own_badge": "proven",
+        "revision": "sha256:acce2eb60232d4fefe08a8fd7cefee696bd9d871b3ce87ea8b3dcfe57b9980d9",
+        "outcomes": [
+          {
+            "test_id": "libtest:runner:tests/runner.rs:adapters_preserve_case_statuses",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:runner:tests/runner.rs:adapters_preserve_case_statuses"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:7b430c8b9cc13927a7646bb468ed4b0fd4c3915c30cf0c17cdeabbdf02c79c57"
+      },
+      "LS-014": {
+        "digest": "sha256:7038f90fb14353a7e65616e1317d4ee217d69164e728cdecf71d993d1fa89a3a",
+        "own_badge": "proven",
+        "revision": "sha256:ea1446e24c180c3fb6b1a8907783a5d10ce80254091ce21b6fe5685628597a5d",
+        "outcomes": [
+          {
+            "test_id": "libtest:core:tests/core.rs:audit_revision_must_also_be_current",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:core:tests/core.rs:audit_revision_must_also_be_current"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:1e5c2e9e27705c1083631482c0ee2218ed0de32615f626030d3e5ca58271071d"
+      },
+      "LS-015": {
+        "digest": "sha256:7fa858b4cc4768ef21d8bc0d9c3ab17feafe5b119303d7fac76f4160e68b826e",
+        "own_badge": "proven",
+        "revision": "sha256:dec309c5206e5eb703d4b878b72b8db789846aa9a48c12d3455bcea6cd28b1b8",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:fe8c95cb9bf7f6bb1e0c8ec15404cd0b7399cae4af39d5e33d1e19b0a8b20245"
+      },
+      "LS-016": {
+        "digest": "sha256:da675fa0c3cc9a13c7dc17a48a2c16432f5fcd49234cb042d17388c86e325e36",
+        "own_badge": "proven",
+        "revision": "sha256:e3f0422f60ee0487c932bab4d169611b7d6c44f9649e79edd6a65507d3f2b88b",
+        "outcomes": [
+          {
+            "test_id": "libtest:core:tests/core.rs:challenged_unresolved_link_still_breaks",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:core:tests/core.rs:challenged_unresolved_link_still_breaks"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:4327b130c07a87fda8cfce52b37ca767ffdbc2fedb944f3ab4d2d920677ad592"
+      },
+      "LS-017": {
+        "digest": "sha256:c1f99a27443b029280cb1028914eeeead36144933d777ee3f6f3b56a9d41d09f",
+        "own_badge": "proven",
+        "revision": "sha256:fb3f9056d97df40d7a61947f6d3ac54ac07f903aff548cbafba1e3bb19dae039",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:garbled_results_exit_1_without_writing_status",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:garbled_results_exit_1_without_writing_status"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:c924231700c391170b77abe158a6f7a62d26783c43d31b6fac6d2110a69b9606"
+      },
+      "LS-018": {
+        "digest": "sha256:64edcf2385f6becb3b745737795f3ee03e5827468ad7ba5eed14aa43310abf5b",
+        "own_badge": "proven",
+        "revision": "sha256:eb4d72936741bea2ab911af3862033161f9994d30ee998b3e95e65c6dfb4d3b5",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:hook_blocks_a_broken_line",
+            "status": "passed",
+            "duration_ms": null
+          },
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:pre_push_hook_blocks_a_broken_scored_line",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:hook_blocks_a_broken_line",
+          "libtest:pipeline:tests/pipeline.rs:pre_push_hook_blocks_a_broken_scored_line"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:a40d8cc89adf5efa1be25066fbad58d655690fc0a5598ad320107107747ab923"
+      },
+      "LS-019": {
+        "digest": "sha256:08f2a57558a10434abdf3167afd4869fb93b2c7bce68c371941d8ad69957ef77",
+        "own_badge": "proven",
+        "revision": "sha256:e00ef95d082a5cc726049f9c2dcc82b1d6fa54bb9ea00778f7369787993acba9",
+        "outcomes": [
+          {
+            "test_id": "libtest:agents:tests/agents.rs:linker_proposal_resolves_and_explains_a_genuine_timestamp_test",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:agents:tests/agents.rs:linker_proposal_resolves_and_explains_a_genuine_timestamp_test"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:47a6981d3fdff96bff213e00f5fb682f30e3040b18f08f0e7f6c1461baf61dde"
+      },
+      "LS-020": {
+        "digest": "sha256:297266417a701673cda3b2a3896f2e8f6f35b297b59ed33d31b4ba80b79844d9",
+        "own_badge": "proven",
+        "revision": "sha256:30a0d7e1e158fcaa270db410207671e4f3aa6965147929e17948e36cc1c6fabd",
+        "outcomes": [
+          {
+            "test_id": "libtest:web:tests/web.rs:script_in_a_requirement_is_escaped",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:web:tests/web.rs:script_in_a_requirement_is_escaped"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:fb2eda3c3adcf43d994c117a38b85a1acc45a1ed3d224639383917b62e4849c3"
+      },
+      "LS-021": {
+        "digest": "sha256:97aa6188e723f9b80ac67e18ab27aac5b13d7a6227e3498c4d88002b2bed9cd3",
+        "own_badge": "proven",
+        "revision": "sha256:ba16a8ebbbda7b7759e5f35d2a5dfa73aadb3f844ff122c38c33a5cf7ac17415",
+        "outcomes": [
+          {
+            "test_id": "libtest:cli:tests/cli.rs:include_adds_a_root_and_registry_must_be_explicit",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:cli:tests/cli.rs:include_adds_a_root_and_registry_must_be_explicit"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:99b9979607a64922ccaf1d43cd284620e4f6ce351f53d2bc34d63172f5f0e761"
+      },
+      "LS-022": {
+        "digest": "sha256:9aaa6b684f70d8e4fe3eb22b5b47541ba418715587d651ffd42c463f9909f599",
+        "own_badge": "proven",
+        "revision": "sha256:7181853d21a4c6c8f1ce7954ea032839b51308af44d7f6e66de26766904e7d34",
+        "outcomes": [
+          {
+            "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:909f8593c57e43634b3bac0703a558b3cc24408d05112f2d9404fc66ace4175b"
+      },
+      "LS-023": {
+        "digest": "sha256:b72be36defa7e0c4b8ea5f1403fd1e0467feaaee083d17d1c5439242b1995ccf",
+        "own_badge": "proven",
+        "revision": "sha256:e211daa25a3e90721650531d75e4adfc918b3f19c53445d60fad769786f85d3d",
+        "outcomes": [
+          {
+            "test_id": "libtest:boundary:tests/boundary.rs:boundary_reference_set",
+            "status": "passed",
+            "duration_ms": null
+          },
+          {
+            "test_id": "libtest:boundary:tests/boundary.rs:delay_boundary_has_adjacent_cases_around_thirty_seconds",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:boundary:tests/boundary.rs:boundary_reference_set",
+          "libtest:boundary:tests/boundary.rs:delay_boundary_has_adjacent_cases_around_thirty_seconds"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:fec242144a00b8454a429d7740923444dd066bde3a2b02d292c4107a9c5c2985"
+      },
+      "LS-024": {
+        "digest": "sha256:ecca0445525ad82695d82be9a45af0d48f1961d83dd67edd523c708eca25a01f",
+        "own_badge": "proven",
+        "revision": "sha256:46cfb9bfe9e74c705978c90a70df222d91a5625792fc7674924f80713eaef087",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_applies_boundary_and_dependency_rules",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:rescore_applies_boundary_and_dependency_rules"
+        ],
+        "depends_on": [
+          "LS-023"
+        ],
+        "receipt_digest": "sha256:0527f4311d98d78cb75a86b93d0d45fc10cc131d129d6870f64a30ddd65bcc38"
+      },
+      "LS-025": {
+        "digest": "sha256:9d2dc612a4f9d80ca7a311b820e8e43dbe864b4f7cba2c989025bb332e68138d",
+        "own_badge": "proven",
+        "revision": "sha256:7084823a37d09ccbf520cb6ef42b01b9976a48c383ce34b1472a893bbbff9361",
+        "outcomes": [
+          {
+            "test_id": "libtest:deps:tests/deps.rs:missing_evidence_is_error",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:deps:tests/deps.rs:missing_evidence_is_error"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:efdc3293d572dfecc347ada7145e45dd14a1574c47876f74498dbf85a1ce9f91"
+      },
+      "LS-026": {
+        "digest": "sha256:a36cbdda4e33f2051e4eccb2f4c8d5dfcc78fc41bf3b88486903cab217f7342a",
+        "own_badge": "proven",
+        "revision": "sha256:c9b71f25556c67d2a851fd1f1bb4cd8e5d8c440dfef2206c8976f22ea28f4147",
+        "outcomes": [
+          {
+            "test_id": "libtest:web:tests/web.rs:seeded_view_reports_counts_and_broken_drilldown",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:web:tests/web.rs:seeded_view_reports_counts_and_broken_drilldown"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:8faf55c5c2a25694c139ff3da58d940f40da2da1846221260cb1482eea2c85cf"
+      },
+      "LS-027": {
+        "digest": "sha256:172e980564969db4c0694b0efcbafc4d9086b48640650ba286211fe420af4d59",
+        "own_badge": "proven",
+        "revision": "sha256:2611b00c68b4f2b868c6bb44385f1ffce837ce62a69a4c764ef9843f1b9b85f9",
+        "outcomes": [
+          {
+            "test_id": "libtest:cli:tests/cli.rs:quantifier_cli_dispatches_checks_and_writes_each_export",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:cli:tests/cli.rs:quantifier_cli_dispatches_checks_and_writes_each_export"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:a902486ced5477a8ad98dd99d536cf1064b0ceeba7e827f33336fd9aaa4e2b1b"
+      },
+      "LS-028": {
+        "digest": "sha256:18f9ae17dcbd23e9e01e2314d22e205ebeeed38243d3ead0186ddd1b84a14a50",
+        "own_badge": "proven",
+        "revision": "sha256:c76a6547790feb4a6a4a3b5e94ab4bf55af3a07ecabe13931a6854b27fd499f7",
+        "outcomes": [
+          {
+            "test_id": "libtest:quantifier:tests/quantifier.rs:sampled_quantifier_records_seed_and_untested_remainder",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:quantifier:tests/quantifier.rs:sampled_quantifier_records_seed_and_untested_remainder"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:4abfda00a4a60199a7df3985d15237de084dd9468dd578409c441ca9986444f9"
+      },
+      "LS-029": {
+        "digest": "sha256:957677d8b0d5e7c3b33623c41ccc8a03997e8c09dc048bd6abe751a643ee818f",
+        "own_badge": "proven",
+        "revision": "sha256:c9583b4b53eca44eafa1a34a5a856f7e91882d4d1bfab2af01c25bdc36816ac6",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage"
+        ],
+        "depends_on": [
+          "LS-025"
+        ],
+        "receipt_digest": "sha256:fe56eba50c5f9c19888d34542e623065aa51c047c41a4197abf03306d60f2251"
+      },
+      "LS-030": {
+        "digest": "sha256:f12619ddce944e89fbd59e3015539c8731905a59f189f41a051014e932626707",
+        "own_badge": "proven",
+        "revision": "sha256:cf5e0821aed8ba840f97364bc73d425b777547a60067bdd311b6e961bbfb8b6b",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:malformed_previous_status_is_not_reset",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:malformed_previous_status_is_not_reset"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:ecb854fecd67cad6446a4eb952eb1dd1ce9b53a83f1cb02e50a55a112c7be292"
+      },
+      "LS-031": {
+        "digest": "sha256:4e69ccd4e280abf7a524cfc094ec6f78cb1a8c67ee970595c0577c0dadba2612",
+        "own_badge": "proven",
+        "revision": "sha256:9dcc499dab57cfa59b028887bf5abcae1e6b1bc3f12e3a281dc571e9208447e5",
+        "outcomes": [
+          {
+            "test_id": "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:9685bb6084155f7933ab5e2f36fa8ff05df104b0b2b5985f6ecd7ac0694814c1"
+      },
+      "LS-032": {
+        "digest": "sha256:e47cf04dd84f4e5da333d2cbd7ec92a6db45e62910927dc63c51c538bdc41883",
+        "own_badge": "proven",
+        "revision": "sha256:be50b7da751ee37a60e617056ada3ad1564013e9be2415d86a368cb5ca9e75a1",
+        "outcomes": [
+          {
+            "test_id": "libtest:cli:tests/cli.rs:check_command_still_reports_orphans",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:cli:tests/cli.rs:check_command_still_reports_orphans"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:4fc21e08dc14843ddf1017e2105ad11035bcdffb34946a9e38a68fdbf1dcd2a8"
+      },
+      "LS-033": {
+        "digest": "sha256:3e9c9cfaf9c685e8b1f6de1b7d1807c6f0347ba32adf82dd73faae0002625026",
+        "own_badge": "proven",
+        "revision": "sha256:a0e4205f8312b7b6a89d67351be939dbe9bfe78a1964f0900985b4abd589e951",
+        "outcomes": [
+          {
+            "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
+            "status": "passed",
+            "duration_ms": null
+          }
+        ],
+        "test_ids": [
+          "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec"
+        ],
+        "depends_on": [],
+        "receipt_digest": "sha256:1f393b7b41053c0c6ccc007ec79a0761ae1ff4cbb57fe96fef2a67ae828e0fbd"
+      }
+    }
+  },
+  "schema": "living-spec.status/v1",
+  "commit": "730e56848ee572d2d7455cc8c4fd076dba5da383",
+  "audit": "fresh",
+  "human_overrides": 0,
+  "statuses": [
+    {
+      "id": "LS-001",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-002",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:core:tests/core.rs:fenced_examples_are_ignored",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-003",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:link_write_preserves_human_metadata_other_sections_and_is_idempotent",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-004",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:core:tests/core.rs:roundtrip_and_orphans",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-005",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:renamed_link_is_rewritten_with_history_note",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-006",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:agents:tests/agents.rs:rust_python_and_javascript_index_entries_have_scoped_spans",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-007",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:agents_partial:tests/agents_partial.rs:revised_digests_preserve_literals_and_trailing_spaces",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-008",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:core:tests/core.rs:ambiguous_rename_is_unresolved",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-009",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-010",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:audit_cli_reports_challenge_usage_and_input_errors",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-011",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-012",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:living_spec:src/lib.rs:adapters::tests::libtest_scopes_same_name_to_each_binary_and_doc_tests",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-013",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:runner:tests/runner.rs:adapters_preserve_case_statuses",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-014",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:core:tests/core.rs:audit_revision_must_also_be_current",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-015",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-016",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:core:tests/core.rs:challenged_unresolved_link_still_breaks",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-017",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:garbled_results_exit_1_without_writing_status",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-018",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:pre_push_hook_blocks_a_broken_scored_line",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        },
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:hook_blocks_a_broken_line",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-019",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:agents:tests/agents.rs:linker_proposal_resolves_and_explains_a_genuine_timestamp_test",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-020",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:web:tests/web.rs:script_in_a_requirement_is_escaped",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-021",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:include_adds_a_root_and_registry_must_be_explicit",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-022",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-023",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:boundary:tests/boundary.rs:delay_boundary_has_adjacent_cases_around_thirty_seconds",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-024",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_applies_boundary_and_dependency_rules",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-025",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:deps:tests/deps.rs:missing_evidence_is_error",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-026",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:web:tests/web.rs:seeded_view_reports_counts_and_broken_drilldown",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-027",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:quantifier_cli_dispatches_checks_and_writes_each_export",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-028",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:quantifier:tests/quantifier.rs:sampled_quantifier_records_seed_and_untested_remainder",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-029",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-030",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:malformed_previous_status_is_not_reset",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-031",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-032",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:check_command_still_reports_orphans",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    },
+    {
+      "id": "LS-033",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
+          "status": "passed",
+          "duration_ms": null,
+          "admissible": true
+        }
+      ]
+    }
+  ],
+  "quantifier_reports": [
+    {
+      "id": "LS-027",
+      "text": "The Quantifier CLI checks finite claims against compiled fixture subjects and writes coverage exports.",
+      "quantifier": {
+        "kind": "finite-universal",
+        "domain": {
+          "type": "int-range",
+          "lo": -8,
+          "hi": 8
+        },
+        "subject": "abs_i8",
+        "predicate": {
+          "version": 1,
+          "expression": {
+            "op": "ge",
+            "left": {
+              "kind": "field",
+              "source": "output",
+              "path": []
+            },
+            "right": {
+              "kind": "literal",
+              "value": {
+                "type": "int",
+                "value": 0
+              }
+            }
+          }
+        }
+      },
+      "coverage": {
+        "mode": "exhaustive",
+        "tested_cases": 17,
+        "distinct_tested": 17,
+        "finite_total": 17,
+        "seed": null,
+        "untested_remainder": "0 cases in the declared finite domain untested"
+      },
+      "result": "no-counterexample-in-tested-cases",
+      "observations": [
+        {
+          "input": {
+            "type": "int",
+            "value": -8
+          },
+          "output": {
+            "type": "int",
+            "value": 8
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": -7
+          },
+          "output": {
+            "type": "int",
+            "value": 7
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": -6
+          },
+          "output": {
+            "type": "int",
+            "value": 6
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": -5
+          },
+          "output": {
+            "type": "int",
+            "value": 5
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": -4
+          },
+          "output": {
+            "type": "int",
+            "value": 4
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": -3
+          },
+          "output": {
+            "type": "int",
+            "value": 3
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": -2
+          },
+          "output": {
+            "type": "int",
+            "value": 2
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": -1
+          },
+          "output": {
+            "type": "int",
+            "value": 1
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 0
+          },
+          "output": {
+            "type": "int",
+            "value": 0
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 1
+          },
+          "output": {
+            "type": "int",
+            "value": 1
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 2
+          },
+          "output": {
+            "type": "int",
+            "value": 2
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 3
+          },
+          "output": {
+            "type": "int",
+            "value": 3
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 4
+          },
+          "output": {
+            "type": "int",
+            "value": 4
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 5
+          },
+          "output": {
+            "type": "int",
+            "value": 5
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 6
+          },
+          "output": {
+            "type": "int",
+            "value": 6
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 7
+          },
+          "output": {
+            "type": "int",
+            "value": 7
+          },
+          "satisfied": true
+        },
+        {
+          "input": {
+            "type": "int",
+            "value": 8
+          },
+          "output": {
+            "type": "int",
+            "value": 8
+          },
+          "satisfied": true
+        }
+      ],
+      "failing_subdomains": [],
+      "witness": null
+    }
+  ],
+  "boundary_reports": [
+    {
+      "requirement": "LS-023",
+      "bounds": [
+        {
+          "bound": {
+            "quantity": "Delay",
+            "kind": {
+              "type": "numeric",
+              "value": "30",
+              "unit": "s",
+              "op": {
+                "type": "le"
+              },
+              "step": {
+                "value": "1",
+                "unit": "ms"
+              },
+              "integer": false
+            }
+          },
+          "cases": [
+            {
+              "position": "below",
+              "value": "29999",
+              "unit": "ms",
+              "expected": "accepted",
+              "test_id": "libtest:boundary:tests/boundary.rs:boundary_reference_set",
+              "status": "tested_pass",
+              "reason": null
+            },
+            {
+              "position": "at",
+              "value": "30000",
+              "unit": "ms",
+              "expected": "accepted",
+              "test_id": "libtest:boundary:tests/boundary.rs:boundary_reference_set",
+              "status": "tested_pass",
+              "reason": null
+            },
+            {
+              "position": "above",
+              "value": "30001",
+              "unit": "ms",
+              "expected": "rejected",
+              "test_id": "libtest:boundary:tests/boundary.rs:boundary_reference_set",
+              "status": "tested_pass",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "links_fingerprint": "sha256:f84a34150047ec747d11a5db4a7590843780988731960217940ef36e985606d0"
+    }
+  ]
+}

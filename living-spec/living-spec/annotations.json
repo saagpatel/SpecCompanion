@@ -1,0 +1,760 @@
+{
+  "schema": "living-spec.annotations/v1",
+  "requirements": {
+    "LS-001": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link",
+          "fingerprint": "sha256:a3d3382f6960db339605b3f76052f9de1938c6509c7cac5a7475c711142f294c",
+          "rename_hint": "sha256:7449d17adb4c6e6d0565ed6f8bb773030c9783c7b7a594fa7577c1b17a95f2a1",
+          "revision": "sha256:7076593f36f4dd0a7d1899c203ebbde8f08e61ec6724714175b803ff6e47fe85",
+          "explanation": "matched \"audit\", \"before\", \"chang\", \"link\", \"source\" in test name; matched \"audit\", \"link\", \"source\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:7076593f36f4dd0a7d1899c203ebbde8f08e61ec6724714175b803ff6e47fe85",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-002": {
+      "links": [
+        {
+          "test_id": "libtest:core:tests/core.rs:fenced_examples_are_ignored",
+          "fingerprint": "sha256:a3b8d5c64811bec09c7b9c8c9a5d8420194dbc951ad7be954074d20df1061623",
+          "rename_hint": "sha256:1d5f6067b659b8ab2200890ff696c0b11328046c034ecc93f8097e7d1463bfa4",
+          "revision": "sha256:4f384f5d759d9c79c6a68a513c49950f54ed6e230418f157b06273327334e7bc",
+          "explanation": "Selected fenced_examples_are_ignored instead of the ranked proposals because it directly checks that fenced requirement examples produce no parsed lines, including a misleading closing fence.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:4f384f5d759d9c79c6a68a513c49950f54ed6e230418f157b06273327334e7bc",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-003": {
+      "links": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:link_write_preserves_human_metadata_other_sections_and_is_idempotent",
+          "fingerprint": "sha256:9951265a9bb5bb26452536ccca5ff4de697a2e017f1e4750d6a12d6e65a0e44a",
+          "rename_hint": "sha256:53df4c30b42f2c0b6c69f75f3f930fc6265e7b3a8b37b733b87fa2e64e401d72",
+          "revision": "sha256:ccd2636f815ae51b5ca984a1ba84cd4dc438a8c572897367f9236cd6f5863bc7",
+          "explanation": "matched \"human\", \"link\", \"metadata\", \"other\", \"preserve\", \"section\", \"write\" in test name; matched \"annotation\", \"human\", \"link\", \"write\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:ccd2636f815ae51b5ca984a1ba84cd4dc438a8c572897367f9236cd6f5863bc7",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-004": {
+      "links": [
+        {
+          "test_id": "libtest:core:tests/core.rs:roundtrip_and_orphans",
+          "fingerprint": "sha256:90c8f21315f073799e3893cfe62c236febc8f340195f57187232fdfb45a72ecd",
+          "rename_hint": "sha256:6b9e3b40f7253ef0137bc15be64c5c0a69cc914cdfe3e11923237fcfe1993f0f",
+          "revision": "sha256:1fdbd98daeaae2f62930829b4f416a156d7fa18316be8ce31bfa4ffdd19df137",
+          "explanation": "matched \"orphan\" in test name; matched \"orphan\" in called identifiers; matched \"annotation\", \"core\", \"orphan\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:1fdbd98daeaae2f62930829b4f416a156d7fa18316be8ce31bfa4ffdd19df137",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-005": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:renamed_link_is_rewritten_with_history_note",
+          "fingerprint": "sha256:a93dd4bcb4a5e1c1ca8590ad5338b535238496f0ed697eafdec808c1052bd0e7",
+          "rename_hint": "sha256:fb6a2d795a766b067bb90457c7c1dc4c8415d3f7c258b4c8277f261225386a7e",
+          "revision": "sha256:e72cd99cde3660baefe3b6771c5b7d1db983190f4117ad42398de57766f08931",
+          "explanation": "matched \"history\", \"link\", \"renam\" in test name; matched \"history\", \"link\", \"renam\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:e72cd99cde3660baefe3b6771c5b7d1db983190f4117ad42398de57766f08931",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-006": {
+      "links": [
+        {
+          "test_id": "libtest:agents:tests/agents.rs:rust_python_and_javascript_index_entries_have_scoped_spans",
+          "fingerprint": "sha256:51bd70e65f880e1b45cf16e0832f8f01a9f7026e9d81e666cf7c8607db3de384",
+          "rename_hint": "sha256:931fc8e6836af0837fd38595f630a9d8cabb8487c5ee41846e53bac3db25c811",
+          "revision": "sha256:3bdc2d0b2bb7444dd55492ebc08785bb2f6ee4865891d598c0096d8802fa3af6",
+          "explanation": "matched \"index\", \"scop\", \"span\" in test name",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:3bdc2d0b2bb7444dd55492ebc08785bb2f6ee4865891d598c0096d8802fa3af6",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-007": {
+      "links": [
+        {
+          "test_id": "libtest:agents_partial:tests/agents_partial.rs:revised_digests_preserve_literals_and_trailing_spaces",
+          "fingerprint": "sha256:2b76712b1d9cf956749e64b27b553b000c660fa1bad7208b6e4afd12334f2a68",
+          "rename_hint": "sha256:4f68a0ddc47a08692b8bc2029dce7f4b7532136085195263f4aaee3d3db729e8",
+          "revision": "sha256:2f2f8bd1c2587ee53c14ac46fc3e36cfc4e6f75cbb0d30eacd1a1d5253428a43",
+          "explanation": "matched \"literal\", \"preserve\", \"trail\" in test name; matched \"fingerprint\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:2f2f8bd1c2587ee53c14ac46fc3e36cfc4e6f75cbb0d30eacd1a1d5253428a43",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-008": {
+      "links": [
+        {
+          "test_id": "libtest:core:tests/core.rs:ambiguous_rename_is_unresolved",
+          "fingerprint": "sha256:d41df928155331acbb70c2a73c07a2cfe0fff2f27425d4520210e59a0df42e8e",
+          "rename_hint": "sha256:c828210d6b9a65da18abbd7af213fab2ea823261496314eae1918f0deca49b27",
+          "revision": "sha256:fc71e2af5f55d6f089328c3b548fd306a0b0a0e65a1513816c1078b9acca7524",
+          "explanation": "matched \"ambiguou\", \"rename\", \"unresolv\" in test name",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:fc71e2af5f55d6f089328c3b548fd306a0b0a0e65a1513816c1078b9acca7524",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-009": {
+      "links": [
+        {
+          "test_id": "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged",
+          "fingerprint": "sha256:803e5c8d325426df350545e69a40e8053578f9cd86243643c0b7e7f5bef29dff",
+          "rename_hint": "sha256:256a01ebe9bfebaed7d8e490949f7589d7e79e93b2cfe91f1e4e46d33d27face",
+          "revision": "sha256:7d3b61f1f33a730de67f18e78f03fbff204d8ee64aa58b3865c06482859d6b65",
+          "explanation": "matched \"assertion\", \"challeng\", \"irrelevant\", \"rust\", \"unsupport\" in test name",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:7d3b61f1f33a730de67f18e78f03fbff204d8ee64aa58b3865c06482859d6b65",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-010": {
+      "links": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:audit_cli_reports_challenge_usage_and_input_errors",
+          "fingerprint": "sha256:1c54e9676113b762d1bc7f3253d24edbd010c2ad704e338841bac75d5d5642f0",
+          "rename_hint": "sha256:3045c733eb3429b2f40ed7c066b4ffb4eddd06fb4f1a18bc85957d96c0cd9ef1",
+          "revision": "sha256:f4ac61ac7e45459d5dda6a22df6d63bbf69b36e46ab1aebaad23d3709a7787d5",
+          "explanation": "matched \"error\", \"input\", \"report\", \"usage\" in test name; matched \"challeng\", \"input\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:f4ac61ac7e45459d5dda6a22df6d63bbf69b36e46ab1aebaad23d3709a7787d5",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-011": {
+      "links": [
+        {
+          "test_id": "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged",
+          "fingerprint": "sha256:803e5c8d325426df350545e69a40e8053578f9cd86243643c0b7e7f5bef29dff",
+          "rename_hint": "sha256:256a01ebe9bfebaed7d8e490949f7589d7e79e93b2cfe91f1e4e46d33d27face",
+          "revision": "sha256:05f5f5313444072bfc06af35283eb4fb698396c6cab7712ff2c88e8d411e7bf4",
+          "explanation": "matched \"assertion\", \"challeng\", \"rust\" in test name; matched \"unrelat\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:05f5f5313444072bfc06af35283eb4fb698396c6cab7712ff2c88e8d411e7bf4",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-012": {
+      "links": [
+        {
+          "test_id": "libtest:living_spec:src/lib.rs:adapters::tests::libtest_scopes_same_name_to_each_binary_and_doc_tests",
+          "fingerprint": "sha256:1a55bf49127c9c27caceef976b1f4d2e52fb204949d72a23cc6100fe2d5401f9",
+          "rename_hint": "sha256:778c60b9f3a80b545892fa455e4b7da22b16c6d2847dab263c8f8ce6d9d3fe01",
+          "revision": "sha256:e4fe066a3df92a606177f4015ff30cede7da3648adf76daf1b7524fd0b7e2179",
+          "explanation": "matched \"binary\", \"libtest\", \"name\", \"scope\" in test name; matched \"libtest\" in called identifiers; matched \"binary\", \"libtest\", \"name\", \"target\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:e4fe066a3df92a606177f4015ff30cede7da3648adf76daf1b7524fd0b7e2179",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-013": {
+      "links": [
+        {
+          "test_id": "libtest:runner:tests/runner.rs:adapters_preserve_case_statuses",
+          "fingerprint": "sha256:3a6971d260bdff72cc6ae4ca8262df03faff8983e70ce7d58065a5bd582b8817",
+          "rename_hint": "sha256:e667e0dfe15584ec9f4dccc6b12e588d569d4bb119505ca951df339ec159170b",
+          "revision": "sha256:acce2eb60232d4fefe08a8fd7cefee696bd9d871b3ce87ea8b3dcfe57b9980d9",
+          "explanation": "matched \"adapter\", \"preserve\" in test name; matched \"junit\" in called identifiers; matched \"fail\", \"skipp\", \"testcase\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:acce2eb60232d4fefe08a8fd7cefee696bd9d871b3ce87ea8b3dcfe57b9980d9",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-014": {
+      "links": [
+        {
+          "test_id": "libtest:core:tests/core.rs:audit_revision_must_also_be_current",
+          "fingerprint": "sha256:e99228d76dc490c6ab5dbc8c3f91b594416c104142ad8bdaa27c3a7aa196a6f9",
+          "rename_hint": "sha256:3290db74c529884adc5e8c9b8ad831c7a8aee8771171ee7041d3b884fc9ca25d",
+          "revision": "sha256:ea1446e24c180c3fb6b1a8907783a5d10ce80254091ce21b6fe5685628597a5d",
+          "explanation": "matched \"audit\", \"current\", \"revision\" in test name; matched \"link\", \"revision\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:ea1446e24c180c3fb6b1a8907783a5d10ce80254091ce21b6fe5685628597a5d",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-015": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link",
+          "fingerprint": "sha256:a3d3382f6960db339605b3f76052f9de1938c6509c7cac5a7475c711142f294c",
+          "rename_hint": "sha256:7449d17adb4c6e6d0565ed6f8bb773030c9783c7b7a594fa7577c1b17a95f2a1",
+          "revision": "sha256:dec309c5206e5eb703d4b878b72b8db789846aa9a48c12d3455bcea6cd28b1b8",
+          "explanation": "matched \"audit\", \"before\", \"chang\", \"source\" in test name; matched \"audit\", \"source\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:dec309c5206e5eb703d4b878b72b8db789846aa9a48c12d3455bcea6cd28b1b8",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-016": {
+      "links": [
+        {
+          "test_id": "libtest:core:tests/core.rs:challenged_unresolved_link_still_breaks",
+          "fingerprint": "sha256:24dc9c3610009ff06410cb2833e3f17d1a98cece0aea00ef218750dfba00f8a8",
+          "rename_hint": "sha256:94d1c7642f58f1691b0172e1df78bc7132eab4dd3ec65d98dcc6e006dfb766bc",
+          "revision": "sha256:e3f0422f60ee0487c932bab4d169611b7d6c44f9649e79edd6a65507d3f2b88b",
+          "explanation": "matched \"challeng\", \"link\", \"unresolv\" in test name; matched \"link\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:e3f0422f60ee0487c932bab4d169611b7d6c44f9649e79edd6a65507d3f2b88b",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-017": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:garbled_results_exit_1_without_writing_status",
+          "fingerprint": "sha256:3d4d70b59ef5f51c17b2c2c2c1abb32d917674a68c7fe666da74d5a151462c90",
+          "rename_hint": "sha256:57dc224b4157e4504a9dc345f8b3ee6af544b6cb3051cee2c7b85fe02a0b1f92",
+          "revision": "sha256:fb3f9056d97df40d7a61947f6d3ac54ac07f903aff548cbafba1e3bb19dae039",
+          "explanation": "matched \"exit\", \"statu\", \"writ\" in test name; matched \"output\", \"statu\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:fb3f9056d97df40d7a61947f6d3ac54ac07f903aff548cbafba1e3bb19dae039",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-018": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:pre_push_hook_blocks_a_broken_scored_line",
+          "fingerprint": "sha256:a107e55c10085901c6df89fe3132e2210de376d40db240df01670b79789e0d2c",
+          "rename_hint": "sha256:9e9d943eb17534136fb815609c40f2eb3b9b3e219551c59783d524b771a65f50",
+          "revision": "sha256:eb4d72936741bea2ab911af3862033161f9994d30ee998b3e95e65c6dfb4d3b5",
+          "explanation": "matched \"block\", \"broken\", \"hook\", \"line\", \"pre\", \"push\", \"scor\" in test name; matched \"hook\", \"pre\", \"push\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:eb4d72936741bea2ab911af3862033161f9994d30ee998b3e95e65c6dfb4d3b5",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        },
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:hook_blocks_a_broken_line",
+          "fingerprint": "sha256:df13a83f216c87b668013aa0e80a23eb542c9a4c7fde4301e884433619705ce1",
+          "rename_hint": "sha256:c5d5adcd8e1326809834c2288fb15ea24318ae5a3a031254623d21ebd99dcf10",
+          "revision": "sha256:eb4d72936741bea2ab911af3862033161f9994d30ee998b3e95e65c6dfb4d3b5",
+          "explanation": "matched \"block\", \"broken\", \"hook\", \"line\" in test name; matched \"hook\", \"pre\", \"push\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:eb4d72936741bea2ab911af3862033161f9994d30ee998b3e95e65c6dfb4d3b5",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-019": {
+      "links": [
+        {
+          "test_id": "libtest:agents:tests/agents.rs:linker_proposal_resolves_and_explains_a_genuine_timestamp_test",
+          "fingerprint": "sha256:3e8f7513dc0615aafdfb86a85eada8e290df2513a3ae81b8fd5e9b44ba74d1b1",
+          "rename_hint": "sha256:05f4689663ecc7fd5da61b0f9894f6b1f9c56be7de81b50023e17ce5959f0e25",
+          "revision": "sha256:e00ef95d082a5cc726049f9c2dcc82b1d6fa54bb9ea00778f7369787993acba9",
+          "explanation": "matched \"linker\" in test name; matched \"empty\", \"propose\" in called identifiers; matched \"session\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:e00ef95d082a5cc726049f9c2dcc82b1d6fa54bb9ea00778f7369787993acba9",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-020": {
+      "links": [
+        {
+          "test_id": "libtest:web:tests/web.rs:script_in_a_requirement_is_escaped",
+          "fingerprint": "sha256:30e12dee412931e10f14da958c3e5eaace07f012e3dc4357ec81421b4d5ca1e6",
+          "rename_hint": "sha256:2b76dccd20d4d04d415b9087fba7f77e6316dbed232e9b3492ae41e2a936831d",
+          "revision": "sha256:30a0d7e1e158fcaa270db410207671e4f3aa6965147929e17948e36cc1c6fabd",
+          "explanation": "matched \"requirement\" in test name; matched \"text\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:30a0d7e1e158fcaa270db410207671e4f3aa6965147929e17948e36cc1c6fabd",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-021": {
+      "links": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:include_adds_a_root_and_registry_must_be_explicit",
+          "fingerprint": "sha256:8a14719c4b07ad330c3e7540a9956811437e9ca7e717a33a73dff68335707600",
+          "rename_hint": "sha256:594d6d1cd23aeb6631c10e75b53fcdf6082a17169754dd247d30183d322f9d3b",
+          "revision": "sha256:ba16a8ebbbda7b7759e5f35d2a5dfa73aadb3f844ff122c38c33a5cf7ac17415",
+          "explanation": "matched \"explicit\", \"registry\", \"root\" in test name; matched \"registry\" in called identifiers; matched \"registry\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:ba16a8ebbbda7b7759e5f35d2a5dfa73aadb3f844ff122c38c33a5cf7ac17415",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-022": {
+      "links": [
+        {
+          "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
+          "fingerprint": "sha256:eb953377e2f312161438c8ede7da75515f53afca0d1b76f3ebdada973638602e",
+          "rename_hint": "sha256:18f450326c7519ccf0048855f5f32f7eaf09953dfb3ab4614310cd3630e6bdaa",
+          "revision": "sha256:7181853d21a4c6c8f1ce7954ea032839b51308af44d7f6e66de26766904e7d34",
+          "explanation": "matched \"list\", \"project\", \"spec\" in test name; matched \"no\" in called identifiers; matched \"has\", \"liv\", \"no\", \"project\", \"spec\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:7181853d21a4c6c8f1ce7954ea032839b51308af44d7f6e66de26766904e7d34",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-023": {
+      "links": [
+        {
+          "test_id": "libtest:boundary:tests/boundary.rs:delay_boundary_has_adjacent_cases_around_thirty_seconds",
+          "fingerprint": "sha256:89ce0074415ea77b3bc861a29048c78ee87fcef792affd0bb12985d3364533ac",
+          "rename_hint": "sha256:3442ddf0f7e363f38db519814404aacd9eb99df0fabaada002c3da7923d02b91",
+          "revision": "sha256:e211daa25a3e90721650531d75e4adfc918b3f19c53445d60fad769786f85d3d",
+          "explanation": "matched \"adjacent\", \"around\", \"boundary\", \"case\", \"delay\" in test name; matched \"30\", \"delay\", \"s\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:e211daa25a3e90721650531d75e4adfc918b3f19c53445d60fad769786f85d3d",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ],
+      "bounds": [
+        {
+          "kind": {
+            "integer": false,
+            "op": {
+              "type": "le"
+            },
+            "step": {
+              "unit": "ms",
+              "value": "1"
+            },
+            "type": "numeric",
+            "unit": "s",
+            "value": "30"
+          },
+          "quantity": "Delay"
+        }
+      ],
+      "boundary_links": [
+        {
+          "position": "below",
+          "quantity": "Delay",
+          "test_id": "libtest:boundary:tests/boundary.rs:boundary_reference_set",
+          "unit": "ms",
+          "value": "29999"
+        },
+        {
+          "position": "at",
+          "quantity": "Delay",
+          "test_id": "libtest:boundary:tests/boundary.rs:boundary_reference_set",
+          "unit": "ms",
+          "value": "30000"
+        },
+        {
+          "position": "above",
+          "quantity": "Delay",
+          "test_id": "libtest:boundary:tests/boundary.rs:boundary_reference_set",
+          "unit": "ms",
+          "value": "30001"
+        }
+      ]
+    },
+    "LS-024": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_applies_boundary_and_dependency_rules",
+          "fingerprint": "sha256:c79d2f90e77e6bcb56ebf2c7d60510e8882e16580ed371f7b190838ae688b84f",
+          "rename_hint": "sha256:9ffaee6ec845dccc4a01cd4cfc76281d731fee6173d644c76cf2dbca06b0d534",
+          "revision": "sha256:46cfb9bfe9e74c705978c90a70df222d91a5625792fc7674924f80713eaef087",
+          "explanation": "matched \"apply\", \"boundary\", \"rescore\" in test name; matched \"rescore\" in called identifiers; matched \"before\", \"boundary\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:46cfb9bfe9e74c705978c90a70df222d91a5625792fc7674924f80713eaef087",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ],
+      "depends_on": [
+        {
+          "id": "LS-023",
+          "evidence": "Rescoring evaluates generated below, at, and above cases before the core badge is assigned."
+        }
+      ]
+    },
+    "LS-025": {
+      "links": [
+        {
+          "test_id": "libtest:deps:tests/deps.rs:missing_evidence_is_error",
+          "fingerprint": "sha256:0bf67bbf6930faa63e5730f095a8cbe7ed9f5d96f430e71ed290bc69cd840b08",
+          "rename_hint": "sha256:2a9e047ff338150110770aadd3509312ca822084d85ccf3c768516e0412b328b",
+          "revision": "sha256:7084823a37d09ccbf520cb6ef42b01b9976a48c383ce34b1472a893bbbff9361",
+          "explanation": "Selected missing_evidence_is_error instead of the ranked proposals because it asserts graph loading fails for a dependency edge without authored evidence.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:7084823a37d09ccbf520cb6ef42b01b9976a48c383ce34b1472a893bbbff9361",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-026": {
+      "links": [
+        {
+          "test_id": "libtest:web:tests/web.rs:seeded_view_reports_counts_and_broken_drilldown",
+          "fingerprint": "sha256:7bf6bc2108b25b720cbb43531543321b3ff585a794f1fd2b8ffcdc7984cd77f4",
+          "rename_hint": "sha256:213082ac0ade5ff0ddadd86eeffc5d8ad7785171c4693829afeb40fe7d0b45f0",
+          "revision": "sha256:c9b71f25556c67d2a851fd1f1bb4cd8e5d8c440dfef2206c8976f22ea28f4147",
+          "explanation": "Selected seeded_view_reports_counts_and_broken_drilldown instead of the ranked proposals because it checks badge counts and the broken-test drill-down in the rendered page.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:c9b71f25556c67d2a851fd1f1bb4cd8e5d8c440dfef2206c8976f22ea28f4147",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-027": {
+      "links": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:quantifier_cli_dispatches_checks_and_writes_each_export",
+          "fingerprint": "sha256:e07c57f6d8144fdb54035918bc549397c5fd93a176f2f5dc58b45d85b8012493",
+          "rename_hint": "sha256:3eb4508c48d6905e1accea2f2668289045185a518ab6f676b0bb32af9f07ac88",
+          "revision": "sha256:2611b00c68b4f2b868c6bb44385f1ffce837ce62a69a4c764ef9843f1b9b85f9",
+          "explanation": "matched \"check\", \"cli\", \"export\", \"quantifier\", \"write\" in test name; matched \"check\", \"coverage\", \"finite\", \"quantifier\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:2611b00c68b4f2b868c6bb44385f1ffce837ce62a69a4c764ef9843f1b9b85f9",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ],
+      "quantifier": {
+        "domain": {
+          "hi": 8,
+          "lo": -8,
+          "type": "int-range"
+        },
+        "kind": "finite-universal",
+        "predicate": {
+          "expression": {
+            "left": {
+              "kind": "field",
+              "source": "output"
+            },
+            "op": "ge",
+            "right": {
+              "kind": "literal",
+              "value": {
+                "type": "int",
+                "value": 0
+              }
+            }
+          },
+          "version": 1
+        },
+        "subject": "abs_i8"
+      }
+    },
+    "LS-028": {
+      "links": [
+        {
+          "test_id": "libtest:quantifier:tests/quantifier.rs:sampled_quantifier_records_seed_and_untested_remainder",
+          "fingerprint": "sha256:10cc5566de95f22b82b442ab861286f5b3a137ff23c7d6321c81144dada4cb02",
+          "rename_hint": "sha256:1275fd0a9e6dad5dd6e7450c21bbae3fb2bea73da454c3751dbaf4c12b5eec9b",
+          "revision": "sha256:c76a6547790feb4a6a4a3b5e94ab4bf55af3a07ecabe13931a6854b27fd499f7",
+          "explanation": "matched \"quantifier\", \"record\", \"remainder\", \"sampl\", \"seed\", \"untest\" in test name; matched \"untest\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:c76a6547790feb4a6a4a3b5e94ab4bf55af3a07ecabe13931a6854b27fd499f7",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-029": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage",
+          "fingerprint": "sha256:46efb2921b3a7422fe556f193bb49aae530654212f44c9712ff44028754c141c",
+          "rename_hint": "sha256:98413b51c4fc97fbf8969c2f81dfdbcd37fb09e9578d55c7f707923c39866db0",
+          "revision": "sha256:c9583b4b53eca44eafa1a34a5a856f7e91882d4d1bfab2af01c25bdc36816ac6",
+          "explanation": "matched \"boundary\", \"dependency\", \"quantifier\", \"rescore\", \"score\" in test name; matched \"provider\", \"score\" in called identifiers; matched \"rescore\", \"score\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:c9583b4b53eca44eafa1a34a5a856f7e91882d4d1bfab2af01c25bdc36816ac6",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ],
+      "depends_on": [
+        {
+          "id": "LS-025",
+          "evidence": "The shared score pipeline validates authored dependency evidence before dependency propagation."
+        }
+      ]
+    },
+    "LS-030": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:malformed_previous_status_is_not_reset",
+          "fingerprint": "sha256:da5ab00fb9565528b8830c885270f3b24144d9f8fb2e1e21b4b3e660509b8444",
+          "rename_hint": "sha256:3fc612575bf8192acda5eaaaf754ff37b7d4f779ab5eaae55439d48175028336",
+          "revision": "sha256:cf5e0821aed8ba840f97364bc73d425b777547a60067bdd311b6e961bbfb8b6b",
+          "explanation": "matched \"malform\", \"statu\" in test name; matched \"exist\" in called identifiers; matched \"history\", \"statu\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:cf5e0821aed8ba840f97364bc73d425b777547a60067bdd311b6e961bbfb8b6b",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-031": {
+      "links": [
+        {
+          "test_id": "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage",
+          "fingerprint": "sha256:46efb2921b3a7422fe556f193bb49aae530654212f44c9712ff44028754c141c",
+          "rename_hint": "sha256:98413b51c4fc97fbf8969c2f81dfdbcd37fb09e9578d55c7f707923c39866db0",
+          "revision": "sha256:9dcc499dab57cfa59b028887bf5abcae1e6b1bc3f12e3a281dc571e9208447e5",
+          "explanation": "Selected score_and_rescore_share_boundary_dependencies_and_quantifier_coverage instead of the ranked proposals because its CLI helper reads the written status and checks the rendered page content for both commands.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:9dcc499dab57cfa59b028887bf5abcae1e6b1bc3f12e3a281dc571e9208447e5",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-032": {
+      "links": [
+        {
+          "test_id": "libtest:cli:tests/cli.rs:check_command_still_reports_orphans",
+          "fingerprint": "sha256:b9437962dd58f2286123013414549bf19883d614802ca7d1e0392dd2a46e97b3",
+          "rename_hint": "sha256:5f32a1bbf7527e65667020a415ca707635d01d7af0e53469397c3e209ff0e1b2",
+          "revision": "sha256:be50b7da751ee37a60e617056ada3ad1564013e9be2415d86a368cb5ca9e75a1",
+          "explanation": "matched \"check\", \"command\", \"orphan\", \"report\" in test name; matched \"check\", \"orphan\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:be50b7da751ee37a60e617056ada3ad1564013e9be2415d86a368cb5ca9e75a1",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    },
+    "LS-033": {
+      "links": [
+        {
+          "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
+          "fingerprint": "sha256:eb953377e2f312161438c8ede7da75515f53afca0d1b76f3ebdada973638602e",
+          "rename_hint": "sha256:18f450326c7519ccf0048855f5f32f7eaf09953dfb3ab4614310cd3630e6bdaa",
+          "revision": "sha256:a0e4205f8312b7b6a89d67351be939dbe9bfe78a1964f0900985b4abd589e951",
+          "explanation": "matched \"archiv\", \"exclude\", \"project\", \"spec\", \"without\" in test name; matched \"count\", \"project\", \"spec\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:a0e4205f8312b7b6a89d67351be939dbe9bfe78a1964f0900985b4abd589e951",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs.",
+              "Link automatically re-audited against current source."
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -19,6 +19,34 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 #[test]
+fn coloured_libtest_output_parses_like_plain() {
+    let plain = "Running tests/export.rs (target/debug/deps/export-012abc)\nrunning 2 tests\ntest rust:fixture:tests/export.rs:exports::timestamps ... FAILED\ntest rust:fixture:tests/export.rs:exports::order ... ok\n\nfailures:\n\n---- rust:fixture:tests/export.rs:exports::timestamps stdout ----\nassertion failed\n\nfailures:\n    rust:fixture:tests/export.rs:exports::timestamps\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n";
+    let coloured = "\x1b]8;;file:///tests/export.rs\x1b\\Running tests/export.rs\x1b]8;;\x1b\\ (target/debug/deps/export-012abc)\nrunning 2 tests\ntest rust:fixture:tests/export.rs:exports::timestamps ... \x1b[31mFAILED\x1b[0m\ntest rust:fixture:tests/export.rs:exports::order ... \x1b[32mok\x1b[0m\n\n\x1b[1mfailures:\x1b[0m\n\n---- rust:fixture:tests/export.rs:exports::timestamps stdout ----\nassertion failed\n\n\x1b[1mfailures:\x1b[0m\n    rust:fixture:tests/export.rs:exports::timestamps\ntest result: \x1b[31mFAILED\x1b[0m. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n";
+    assert_eq!(
+        parse_libtest(coloured).unwrap(),
+        parse_libtest(plain).unwrap()
+    );
+}
+
+#[test]
+fn coloured_failure_breaks_the_line() {
+    let input = "running 2 tests\ntest rust:fixture:tests/export.rs:exports::timestamps ... \x1b[31mFAILED\x1b[0m\ntest rust:fixture:tests/export.rs:exports::order ... \x1b[32mok\x1b[0m\n\n\x1b[1mfailures:\x1b[0m\n\n---- rust:fixture:tests/export.rs:exports::timestamps stdout ----\nassertion failed: exported timestamp differs\n\n\x1b[1mfailures:\x1b[0m\n    rust:fixture:tests/export.rs:exports::timestamps\ntest result: \x1b[31mFAILED\x1b[0m. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n";
+    let outcomes = parse_libtest(input).unwrap();
+    assert_eq!(outcomes[0].status, TestStatus::Failed);
+    let dir = copy_spec();
+    let report = rescore(
+        dir.path(),
+        &outcomes,
+        &fingerprints(),
+        "fixture",
+        "coloured",
+    )
+    .unwrap();
+    assert_eq!(report.statuses[0].badge, Badge::Broken);
+    assert_eq!(report.exit_code(), 2);
+}
+
+#[test]
 fn adapter_rejects_duplicate_ids() {
     use living_spec::adapters::parse_junit_with;
 

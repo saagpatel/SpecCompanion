@@ -324,6 +324,7 @@ fn serialized_status(
             boundary,
             qualified,
             reauditor: None,
+            results: None,
             quantifier_reports: &quantifier_fn,
         },
     )

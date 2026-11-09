@@ -1,8 +1,9 @@
+mod common;
 use living_spec::{
     core::{
         annotations::Annotations,
         badge::{Badge, LineStatus, Reason},
-        freshness::ScoreInputs,
+        freshness::{ResultsSnapshot, ScoreInputs},
         history::{History, Transition},
         spec::Spec,
         test_identity::TestOutcome,
@@ -539,28 +540,16 @@ fn bind_saved_inputs(spec_dir: &Path) {
         }
     }
     let outcomes: Vec<_> = outcomes.into_values().collect();
-    bind_saved_inputs_with_result_bytes(spec_dir, &serde_json::to_vec(&outcomes).unwrap());
+    bind_saved_inputs_with_result_bytes(spec_dir, common::junit(&outcomes).as_bytes());
 }
 
 fn bind_saved_inputs_with_result_bytes(spec_dir: &Path, results: &[u8]) {
     let status_path = spec_dir.join("status.json");
     let mut status: Value = serde_json::from_slice(&fs::read(&status_path).unwrap()).unwrap();
     let statuses = load_status(&status_path).unwrap();
-    let mut outcomes = BTreeMap::new();
-    for line in &statuses {
-        for test in &line.tests {
-            outcomes.insert(
-                test.test_id.clone(),
-                TestOutcome {
-                    test_id: test.test_id.clone(),
-                    status: test.status,
-                    duration_ms: test.duration_ms,
-                    failure_message: None,
-                },
-            );
-        }
-    }
-    let outcomes: Vec<_> = outcomes.into_values().collect();
+    let outcomes = living_spec::adapters::parse_junit(std::str::from_utf8(results).unwrap())
+        .or_else(|_| living_spec::adapters::parse_libtest(std::str::from_utf8(results).unwrap()))
+        .unwrap();
     let boundary: Vec<BoundaryReport> = serde_json::from_value(
         status
             .get("boundary_reports")
@@ -577,13 +566,19 @@ fn bind_saved_inputs_with_result_bytes(spec_dir: &Path, results: &[u8]) {
     .unwrap();
     let results_path = spec_dir.join("test-results.txt");
     fs::write(&results_path, results).unwrap();
+    let results =
+        ResultsSnapshot::read(spec_dir, results_path.to_str().unwrap(), &outcomes).unwrap();
+    let spec_bytes = fs::read(spec_dir.join("spec.md")).unwrap();
+    let annotations =
+        serde_json::from_slice(&fs::read(spec_dir.join("annotations.json")).unwrap()).unwrap();
     let inputs = ScoreInputs::capture(
-        spec_dir,
+        &spec_bytes,
+        &annotations,
+        &results,
         &outcomes,
         &statuses,
         &boundary,
         &quantifier,
-        results_path.to_str().unwrap(),
     )
     .unwrap();
     status["inputs"] = serde_json::to_value(inputs).unwrap();

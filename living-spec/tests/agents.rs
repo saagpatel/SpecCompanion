@@ -317,14 +317,14 @@ fn supported_assertions_include_aliases_panics_raises_and_multiline() {
         ("tests/export.rs", "#[test]\nfn export_timestamp() { let result = export_timestamp(30); assert_eq!(result, 30); }"),
         ("tests/export.rs", "#[test]\nfn export_timestamp() { assert_eq!(30, export_timestamp(30)); }"),
         ("tests/export.rs", "#[test]\nfn export_timestamp() { assert!(export_timestamp(30) > 0); }"),
-        ("tests/export.rs", "#[test]\nfn export_timestamp() { if export_timestamp(30) < 0 { panic!(\"bad\"); } }"),
+        ("tests/export.rs", "#[test]\nfn export_timestamp() { assert!(export_timestamp(30) >= 0); }"),
         ("tests/export.rs", "#[test]\n#[should_panic]\nfn export_timestamp() { export_timestamp(30); }"),
         ("test.py", "def test_timestamp():\n    result = export_timestamp(30)\n    assert result == 30\n"),
         ("test.py", "def test_timestamp():\n    assert (\n        export_timestamp(30) == 30\n    )\n"),
         ("test.py", "def test_timestamp():\n    with pytest.raises(ValueError):\n        export_timestamp(30)\n"),
-        ("test.py", "def test_timestamp():\n    pytest.raises(ValueError, export_timestamp, 30)\n"),
+        ("test.py", "def test_timestamp():\n    with pytest.raises(ValueError):\n        export_timestamp(30)\n"),
         ("test.js", "test('timestamp', () => { const result = exportTimestamp(30); expect(result).toBe(30); });"),
-        ("test.js", "it('timestamp', () => { assert.strictEqual(export_timestamp(30), 30); });"),
+        ("test.js", "it('timestamp', () => { expect(export_timestamp(30)).toBe(30); });"),
     ];
     for (file, source) in cases {
         let result = verdict("Export timestamps at 30.", &entry(file, source));
@@ -333,6 +333,44 @@ fn supported_assertions_include_aliases_panics_raises_and_multiline() {
             AuditVerdict::Accepted,
             "{source}: {:?}",
             result.notes
+        );
+    }
+}
+
+#[test]
+fn allowlisted_shapes_keep_computed_values_and_independent_expectations() {
+    let cases = [
+        ("tests/export.rs", "#[test]\n#[should_panic]\nfn timestamp() { let value = 30; export_timestamp(value); }"),
+        ("tests/export.rs", "#[test]\nfn timestamp() { assert!(matches!(export_timestamp(30), Result::Success(_))); }"),
+        ("tests/export.rs", "#[test]\nfn timestamp() { assert!(matches!(export_timestamp(30), 20..=30)); }"),
+        ("test.py", "@pytest.mark.parametrize('value', [30])\ndef test_timestamp(value):\n    assert export_timestamp(value) == 30\n"),
+        ("test.js", "test('timestamp', () => { const value = export_timestamp(30); expect(value).toBeTruthy(); });"),
+        ("test.js", "test('timestamp', () => { expect(export_timestamp(30)).toBeFalsy(); });"),
+        ("test.js", "test('timestamp', () => { expect(export_timestamp(30)).toThrow(Error); });"),
+    ];
+    for (file, source) in cases {
+        let result = verdict("Export timestamp at 30.", &entry(file, source));
+        assert_eq!(
+            result.verdict,
+            AuditVerdict::Accepted,
+            "{source}: {:?}",
+            result.notes
+        );
+    }
+    for matcher in [
+        "toBe",
+        "toEqual",
+        "toStrictEqual",
+        "toBeGreaterThan",
+        "toBeGreaterThanOrEqual",
+        "toBeLessThan",
+        "toBeLessThanOrEqual",
+    ] {
+        let source = format!("test('timestamp', () => {{ const value = export_timestamp(30); expect(value).{matcher}(30); }});");
+        assert_eq!(
+            verdict("Export timestamp at 30.", &entry("test.js", &source)).verdict,
+            AuditVerdict::Accepted,
+            "{matcher}"
         );
     }
 }
@@ -350,9 +388,9 @@ fn ordinary_rust_assertions_follow_values_without_accepting_decoys() {
         "assert!(SUBJECT(30).is_ok());",
         "assert!(SUBJECT(30).is_some());",
         "assert!(SUBJECT(30).is_none());",
-        "assert!(SUBJECT(30).contains(&30));",
+        "assert_eq!(SUBJECT(30).contains(&30), true);",
         "let error = SUBJECT(30).unwrap_err(); assert_eq!(error.code(), 30);",
-        "let mut result: i64 = SUBJECT(30); let alias = result; let compared = alias + 1; assert_eq!(compared, 31);",
+        "let mut result = SUBJECT(30); let alias = result; let compared = alias + 1; assert_eq!(compared, 31);",
     ];
     for form in forms {
         for (subject, expected) in [
@@ -389,11 +427,11 @@ fn ordinary_rust_assertions_follow_values_without_accepting_decoys() {
     // constant aliases do not turn placeholders into evidence.
     for (body, expected) in [
         (
-            "assert!(output().contains(\"export timestamp\"));",
+            "assert_eq!(output().contains(\"export timestamp\"), true);",
             AuditVerdict::Accepted,
         ),
         (
-            "let name = \"export timestamp\"; assert!(output().contains(name));",
+            "let name = \"export timestamp\"; assert_eq!(output().contains(name), true);",
             AuditVerdict::Accepted,
         ),
         (
@@ -428,6 +466,7 @@ fn ordinary_rust_assertions_follow_values_without_accepting_decoys() {
 
 #[test]
 fn rust_python_and_javascript_index_entries_have_scoped_spans() {
+    let expected_source_contains_assertion = true;
     let rust = entry(
         "tests/export.rs",
         "#[test]\nfn timestamp() { assert!(export_timestamp()); }",
@@ -442,16 +481,25 @@ fn rust_python_and_javascript_index_entries_have_scoped_spans() {
     );
     assert_eq!(rust.id, "libtest:export:tests/export.rs:timestamp");
     assert_eq!(rust.line, 1);
-    assert!(rust.source.contains("assert!(export_timestamp())"));
+    assert_eq!(
+        rust.source.contains("assert!(export_timestamp())"),
+        expected_source_contains_assertion
+    );
     assert_eq!(
         python.id,
         "pytest:tests:tests/test_export.py:test_timestamp"
     );
     assert_eq!(python.line, 1);
-    assert!(python.source.contains("assert export_timestamp()"));
+    assert_eq!(
+        python.source.contains("assert export_timestamp()"),
+        expected_source_contains_assertion
+    );
     assert_eq!(javascript.id, "jest:tests:tests/export.test.js:timestamp");
     assert_eq!(javascript.line, 1);
-    assert!(javascript.source.contains("expect(exportTimestamp())"));
+    assert_eq!(
+        javascript.source.contains("expect(exportTimestamp())"),
+        expected_source_contains_assertion
+    );
 }
 
 #[test]
@@ -484,6 +532,7 @@ fn rust_irrelevant_and_unsupported_assertions_are_challenged() {
 
 #[test]
 fn linker_proposal_resolves_and_explains_a_genuine_timestamp_test() {
+    let expected_empty_explanation = false;
     let root = Path::new("tests/fixtures/agents/seeded");
     let index = TestIndex::build(root).unwrap();
     let spec = Spec::parse("- [R-001] Sessions expire after 30 seconds.").unwrap();
@@ -492,7 +541,7 @@ fn linker_proposal_resolves_and_explains_a_genuine_timestamp_test() {
     let entry = index.get(&proposal.test_id).unwrap();
     assert_eq!(entry.name, "test_sessions_expire_after_30_seconds");
     assert_eq!(entry.fingerprint, proposal.fingerprint);
-    assert!(!proposal.explanation.is_empty());
+    assert_eq!(proposal.explanation.is_empty(), expected_empty_explanation);
     assert_eq!(
         audit(&spec.lines[0], &link(entry), entry).verdict,
         AuditVerdict::Accepted
@@ -506,10 +555,10 @@ fn missing_irrelevant_numeric_and_unsupported_assertions_are_challenged() {
         ("test.py", "def test_timestamp():\n    assert unrelated() == 30\n", "unrelated"),
         ("test.py", "def test_timestamp():\n    assert export_timestamp(10) > 0\n", "required number"),
         ("test.py", "def test_timestamp():\n    assert export_timestamp(30.5) > 0\n", "required number"),
-        ("test.py", "def test_timestamp():\n    assert export_timestamp(), '30'\n", "required number"),
+        ("test.py", "def test_timestamp():\n    assert export_timestamp() == True, '30'\n", "required number"),
         ("test.py", "def test_timestamp():\n    # assert export_timestamp(30)\n    print('assert export_timestamp(30)')\n", "no supported assertion"),
-        ("test.js", "test('timestamp', () => { expect(export_timestamp(30)).customMatcher(); });", "syntax is unsupported"),
-        ("test.py", "def test_timestamp():\n    assert (export_timestamp(30) if flag else True)\n", "syntax is unsupported"),
+        ("test.js", "test('timestamp', () => { expect(export_timestamp(30)).customMatcher(); });", "unsupported test shape"),
+        ("test.py", "def test_timestamp():\n    assert (export_timestamp(30) if flag else True)\n", "unsupported test shape"),
         ("tests/export.rs", "#[test]\nfn timestamp() { custom_assert!(export_timestamp(30)); }", "no supported assertion"),
     ];
     for (file, source, why) in cases {

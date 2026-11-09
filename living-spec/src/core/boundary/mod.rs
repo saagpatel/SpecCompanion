@@ -2,6 +2,7 @@
 pub mod coverage;
 mod gen;
 pub mod model;
+pub mod parser;
 pub use coverage::{
     coverage, BoundCoverage, CaseLink, CaseStatus, CoverageMap, CoveredCase, GapReason,
 };

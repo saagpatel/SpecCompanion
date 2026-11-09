@@ -890,10 +890,7 @@ test src/lib.rs - same_name (line 7) ... ok\n\
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n";
         let outcomes = parse_libtest(input).unwrap();
         assert_eq!(
-            outcomes
-                .iter()
-                .map(|o| o.test_id.as_str())
-                .collect::<Vec<_>>(),
+            libtest_outcome_ids(&outcomes),
             [
                 "libtest:alpha:tests/alpha.rs:same_name",
                 "libtest:beta:tests/beta.rs:same_name",
@@ -910,6 +907,13 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
         // Cargo's build hashes do not change stable test identity.
         let rebuilt = input.replace("alpha-456def", "alpha-fedcba");
         assert_eq!(parse_libtest(&rebuilt).unwrap(), outcomes);
+    }
+
+    fn libtest_outcome_ids(outcomes: &[TestOutcome]) -> Vec<&str> {
+        outcomes
+            .iter()
+            .map(|outcome| outcome.test_id.as_str())
+            .collect()
     }
 
     #[test]

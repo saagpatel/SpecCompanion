@@ -46,13 +46,24 @@ struct RequirementAnnotationsWire {
         skip_serializing_if = "Option::is_none"
     )]
     bounds: Option<Vec<Value>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_quantifier",
+        skip_serializing_if = "Option::is_none"
+    )]
     quantifier: Option<Value>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
 fn present_bounds<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<Value>>, D::Error> {
     Vec::deserialize(d).map(Some)
+}
+fn present_quantifier<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Value>, D::Error> {
+    let value = Value::deserialize(d)?;
+    if !value.is_object() {
+        return Err(serde::de::Error::custom("quantifier must be an object"));
+    }
+    Ok(Some(value))
 }
 impl From<RequirementAnnotationsWire> for RequirementAnnotations {
     fn from(wire: RequirementAnnotationsWire) -> Self {

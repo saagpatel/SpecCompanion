@@ -52,6 +52,11 @@ fn challenged_even_when_passed(entry: &TestEntry) {
         entry.source,
         link.audit.notes
     );
+    assert!(link
+        .audit
+        .notes
+        .iter()
+        .any(|note| note.starts_with("unsupported test shape: ")));
     let outcome = TestOutcome {
         test_id: entry.id.clone(),
         status: TestStatus::Passed,
@@ -234,4 +239,112 @@ def test_export_timestamp():
             "def test_export_timestamp():\n    {body}\n"
         )));
     }
+}
+
+#[test]
+fn stringify_macro_token_trees_do_not_supply_assertions() {
+    for body in [
+        "stringify!(assert_eq!(export_timestamp(30), 30));",
+        "format!(\"{}\", export_timestamp(30)); assert_eq!(export_timestamp(30), 30);",
+        "dbg!(export_timestamp(30)); assert_eq!(export_timestamp(30), 30);",
+        "assert_eq!(export_timestamp(30), 30); stringify!(ignored);",
+    ] {
+        challenged_even_when_passed(&indexed(
+            "tests/export.rs",
+            &format!("#[test]\nfn timestamp() {{ {body} }}"),
+        ));
+    }
+}
+
+#[test]
+fn unsupported_binding_forms_cannot_create_computed_evidence() {
+    for (file, source) in [
+        ("tests/export.rs", "#[test]\nfn timestamp() { let (export_timestamp, _) = (true, ()); assert!(export_timestamp); }"),
+        ("tests/export.rs", "#[test]\nfn timestamp() { let (unused, _) = (true, ()); assert_eq!(export_timestamp(30), 30); }"),
+        ("test_export.py", "def test_timestamp():\n    export_timestamp: bool = True\n    assert export_timestamp\n"),
+        ("test_export.py", "def test_timestamp():\n    unused: bool = True\n    assert export_timestamp(30) == 30\n"),
+        ("test_export.py", "def test_timestamp():\n    export_timestamp = other = True\n    assert export_timestamp == True\n"),
+        ("test.js", "test('timestamp', () => { const [export_timestamp] = [true]; expect(export_timestamp).toBeTruthy(); });"),
+    ] {
+        challenged_even_when_passed(&indexed(file, source));
+    }
+}
+
+#[test]
+fn always_truthy_containers_do_not_establish_behavior() {
+    for body in [
+        "assert (export_timestamp(30), False)",
+        "assert [export_timestamp(30)]",
+        "assert export_timestamp(30) == [30]",
+        "value = (export_timestamp(30), False)\n    assert value",
+    ] {
+        challenged_even_when_passed(&indexed(
+            "test_export.py",
+            &format!("def test_timestamp():\n    {body}\n"),
+        ));
+    }
+    for body in [
+        "expect([export_timestamp(30)]).toBeTruthy();",
+        "expect({value: export_timestamp(30)}).toBeTruthy();",
+        "const value = [export_timestamp(30)]; expect(value).toBeTruthy();",
+        "expect([export_timestamp(30)]).toEqual([30]);",
+    ] {
+        challenged_even_when_passed(&indexed(
+            "test.js",
+            &format!("test('timestamp', () => {{ {body} }});"),
+        ));
+    }
+}
+
+#[test]
+fn same_value_derivations_and_literal_constructors_are_not_evidence() {
+    for body in [
+        "let value = export_timestamp(30); assert_eq!(value, value + 0);",
+        "let value = export_timestamp(30); let alias = value; assert_eq!(value, alias);",
+        "let value = export_timestamp(30); assert_eq!(value.left(), value.right());",
+        "let value = export_timestamp(30); assert_eq!(value.left(), wrap(value.right()));",
+        "let export_timestamp = String::from(\"thirty\"); assert_eq!(export_timestamp.len(), 30);",
+        "assert!(Some(export_timestamp(30)).is_some());",
+        "let value = format!(\"{}\", export_timestamp(30)); assert_eq!(value.len(), 30);",
+    ] {
+        challenged_even_when_passed(&indexed(
+            "tests/export.rs",
+            &format!("#[test]\nfn timestamp() {{ {body} }}"),
+        ));
+    }
+    for body in [
+        "value = export_timestamp(30)\n    assert value == value + 0",
+        "export_timestamp = bool(True)\n    assert export_timestamp == True",
+        "assert len([export_timestamp(30)]) == 1",
+    ] {
+        challenged_even_when_passed(&indexed(
+            "test_export.py",
+            &format!("def test_timestamp():\n    {body}\n"),
+        ));
+    }
+    for body in [
+        "const value = export_timestamp(30); expect(value).toBe(value + 0);",
+        "const export_timestamp = Boolean(true); expect(export_timestamp).toBeTruthy();",
+    ] {
+        challenged_even_when_passed(&indexed(
+            "test.js",
+            &format!("test('timestamp', () => {{ {body} }});"),
+        ));
+    }
+}
+
+#[test]
+fn unsupported_assertion_messages_are_not_ignored() {
+    challenged_even_when_passed(&indexed(
+        "tests/export.rs",
+        "#[test]\nfn timestamp() { assert_eq!(export_timestamp(30), 30, stringify!(ignored)); }",
+    ));
+    challenged_even_when_passed(&indexed(
+        "test_export.py",
+        "def test_timestamp():\n    assert export_timestamp(30) == 30, (lambda: True)\n",
+    ));
+    challenged_even_when_passed(&indexed(
+        "test.js",
+        "test('timestamp', () => { expect(30, export_timestamp(30)).toBe(30); });",
+    ));
 }

@@ -15,7 +15,7 @@ pub(super) fn parse(
     match args {
         [dir, flag, root] if flag == "--tests" && !dir.starts_with('-') && !root.starts_with('-') => Ok((Path::new(dir), Path::new(root), false)),
         [dir, flag, root, write] if allow_write && flag == "--tests" && write == "--write" && !dir.starts_with('-') && !root.starts_with('-') => Ok((Path::new(dir), Path::new(root), true)),
-        _ => Err(Exit::Usage("usage: living-spec link <spec-dir> --tests <source-root> [--write]; living-spec audit <spec-dir> --tests <source-root>".into()).into()),
+        _ => Err(Exit::Usage("usage: living-spec link <spec-dir> --tests <source-root> [--write]; living-spec audit <spec-dir> --tests <source-root> [--write]".into()).into()),
     }
 }
 pub(super) fn load(dir: &Path) -> Result<(Spec, Annotations), Box<dyn Error>> {

@@ -9,17 +9,28 @@ use crate::{
     },
     core::annotations::{Audit, AuditVerdict},
 };
-use std::{collections::BTreeMap, error::Error};
+use std::{collections::BTreeMap, error::Error, fs};
 
 pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
-    let (dir, root, _) = parse(args, false)?;
+    let (dir, root, write) = parse(args, true)?;
     let (spec, annotations) = load(dir)?;
     let index = TestIndex::build(root)?;
+    let path = dir.join("annotations.json");
+    let mut document: Option<serde_json::Value> = if write && path.exists() {
+        Some(serde_json::from_slice(&fs::read(&path)?)?)
+    } else {
+        None
+    };
+    let original = document.clone();
     let mut challenged = false;
     for (id, annotation) in &annotations.requirements {
-        for link in &annotation.links {
+        for (position, link) in annotation.links.iter().enumerate() {
             let line = spec.lines.iter().find(|line| line.id == *id);
             let resolved = index.resolve(link);
+            let mut current = link.clone();
+            if let Some(line) = line {
+                current.revision = line.revision.clone();
+            }
             let result = match (line, resolved) {
                 (
                     Some(line),
@@ -41,16 +52,13 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                         ),
                         SourceResolution::Unresolved => unreachable!(),
                     };
-                    // Re-audit the current source binding. This command reports only; link --write
-                    // is the explicit persistence operation, including refreshed identity metadata.
-                    let mut current = link.clone();
                     current.test_id = entry.id.clone();
                     current.fingerprint = entry.fingerprint.clone();
                     current.rename_hint = Some(entry.rename_hint.clone());
                     let mut result = auditor::audit(line, &current, entry);
-                    if let Some(note) = note {
+                    if let Some(note) = note.filter(|_| !write) {
                         result.notes.push(format!(
-                            "{note} Current test: {} ({}); use link --write to persist proposals.",
+                            "{note} Current test: {} ({}); use audit --write to persist this binding.",
                             entry.id, entry.fingerprint
                         ));
                     }
@@ -68,8 +76,25 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                 },
             };
             challenged |= result.verdict == AuditVerdict::Challenged;
-            print_audit(id, &link.test_id, &result);
+            print_audit(id, &current.test_id, &result);
+            if let Some(document) = &mut document {
+                let saved = &mut document["requirements"][id]["links"][position];
+                saved["test_id"] = current.test_id.into();
+                saved["fingerprint"] = current.fingerprint.into();
+                saved["rename_hint"] = serde_json::to_value(current.rename_hint)?;
+                if line.is_some() {
+                    saved["revision"] = current.revision.into();
+                }
+                saved["audit"]["verdict"] = serde_json::to_value(result.verdict)?;
+                saved["audit"]["revision"] = result.revision.into();
+                saved["audit"]["notes"] = serde_json::to_value(result.notes)?;
+            }
         }
+    }
+    if document != original {
+        let mut bytes = serde_json::to_vec_pretty(&document.unwrap())?;
+        bytes.push(b'\n');
+        fs::write(path, bytes)?;
     }
     if challenged {
         Err(Exit::Challenged.into())

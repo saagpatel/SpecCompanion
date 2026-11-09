@@ -13,7 +13,7 @@ def test_clamp_maximum_100():
     assert clamp_maximum(101) == 100
 
 def test_names_sort_alphabetically():
-    assert names_sort(["b", "a"]) == ["a", "b"]
+    assert names_sort(["b", "a"]) == sorted(["b", "a"])
 
 def test_archives_retain_7_entries():
     archives_retain(7)

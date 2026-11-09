@@ -7,6 +7,7 @@ use super::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Badge {
@@ -30,7 +31,7 @@ pub enum Reason {
     PrerequisiteBroken { path: Vec<String> },
     PrerequisiteUnproven { path: Vec<String> },
     PrerequisiteQualified { path: Vec<String> },
-    DependencyCycle { path: Vec<String> },
+    DependencyCycle { path: Arc<Vec<String>> },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TestEvidence {

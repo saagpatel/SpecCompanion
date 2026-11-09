@@ -3,6 +3,7 @@ use crate::core::annotations::Link;
 use crate::core::test_identity::fingerprint;
 use regex::Regex;
 use std::{
+    collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
 };
@@ -127,24 +128,27 @@ impl TestIndex {
                         .skip(1)
                         .take_while(|dir| dir.starts_with(identity_root))
                         .find(|dir| dir.join("Cargo.toml").is_file());
-                    let (rust_file, unit_target) = if let Some(crate_root) = crate_root {
+                    if let Some(crate_root) = crate_root {
                         let relative = path
                             .strip_prefix(crate_root)
                             .unwrap()
                             .to_string_lossy()
                             .replace('\\', "/");
-                        let target = cargo_unit_target(crate_root, &relative)?;
-                        (relative, target)
+                        if let Some(target) = cargo_unit_target(crate_root, &relative)? {
+                            let module_path = target_module_path(crate_root, &target, &relative)
+                                .unwrap_or_default();
+                            rust_tests(
+                                &source,
+                                &file,
+                                &relative,
+                                Some(&target),
+                                Some(&module_path),
+                                &mut entries,
+                            );
+                        }
                     } else {
-                        (file.clone(), None)
-                    };
-                    rust_tests(
-                        &source,
-                        &file,
-                        &rust_file,
-                        unit_target.as_deref(),
-                        &mut entries,
-                    );
+                        rust_tests(&source, &file, &file, None, None, &mut entries);
+                    }
                 }
                 "py" => python_tests(&source, &file, &mut entries),
                 _ => js_tests(&source, &file, &mut entries),
@@ -204,39 +208,317 @@ impl Context<'_> {
         }
     }
 }
-// Read the Cargo target names without executing the project.
-fn cargo_unit_target(root: &Path, file: &str) -> io::Result<Option<String>> {
+#[derive(Debug)]
+struct CargoUnitTarget {
+    name: String,
+    path: String,
+    kind: &'static str,
+}
+
+// Read Cargo target declarations without compiling or executing the crate.
+// Unsupported/ambiguous layouts deliberately produce no test identity.
+fn cargo_unit_target(root: &Path, file: &str) -> io::Result<Option<CargoUnitTarget>> {
     let manifest = fs::read_to_string(root.join("Cargo.toml"))?;
     let mut section = "";
     let mut package = None;
-    let mut library = None;
+    let mut autobins = true;
+    let mut declarations = Vec::new();
+    let mut current: Option<(&'static str, String, Option<String>)> = None;
     for line in manifest.lines() {
         let line = line.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
         if line.starts_with('[') && line.ends_with(']') {
+            if let Some(declaration) = current.take() {
+                declarations.push(declaration);
+            }
             section = line;
+            current = match section {
+                "[lib]" => Some(("lib", String::new(), None)),
+                "[[bin]]" => Some(("bin", String::new(), None)),
+                "[[test]]" => Some(("test", String::new(), None)),
+                _ => None,
+            };
         } else if let Some((key, value)) = line.split_once('=') {
-            if key.trim() == "name" {
-                let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
-                if section == "[package]" {
-                    package = Some(value.to_owned());
+            let key = key.trim();
+            let value = value
+                .trim()
+                .trim_matches(|c| c == '"' || c == '\'')
+                .to_owned();
+            if section == "[package]" {
+                if key == "name" {
+                    package = Some(value);
+                } else if key == "autobins" {
+                    autobins = value != "false";
                 }
-                if section == "[lib]" {
-                    library = Some(value.to_owned());
+            } else if let Some((_, name, path)) = current.as_mut() {
+                if key == "name" {
+                    *name = value;
+                } else if key == "path" {
+                    *path = Some(value);
                 }
             }
         }
     }
-    Ok(if file == "src/main.rs" {
-        package.map(|name| name.replace('-', "_"))
+    if let Some(declaration) = current.take() {
+        declarations.push(declaration);
+    }
+    let mut targets: Vec<_> = declarations
+        .into_iter()
+        .filter_map(|(kind, name, path)| finish_target(root, kind, name, path, package.as_deref()))
+        .collect();
+
+    if let Some(name) = package.as_deref() {
+        if !targets.iter().any(|target| target.kind == "lib") && root.join("src/lib.rs").is_file() {
+            targets.push(CargoUnitTarget {
+                name: name.replace('-', "_"),
+                path: "src/lib.rs".into(),
+                kind: "lib",
+            });
+        }
+        if autobins
+            && root.join("src/main.rs").is_file()
+            && !targets
+                .iter()
+                .any(|target| target.kind == "bin" && target.path == "src/main.rs")
+        {
+            targets.push(CargoUnitTarget {
+                name: name.replace('-', "_"),
+                path: "src/main.rs".into(),
+                kind: "bin",
+            });
+        }
+    }
+    if autobins {
+        let bin_dir = root.join("src/bin");
+        if bin_dir.is_dir() {
+            for item in fs::read_dir(bin_dir)? {
+                let item = item?;
+                let filename = item.file_name().to_string_lossy().into_owned();
+                let (name, path) = if item.file_type()?.is_file() && filename.ends_with(".rs") {
+                    (
+                        filename.trim_end_matches(".rs").to_owned(),
+                        format!("src/bin/{filename}"),
+                    )
+                } else if item.file_type()?.is_dir() && item.path().join("main.rs").is_file() {
+                    (filename.clone(), format!("src/bin/{filename}/main.rs"))
+                } else {
+                    continue;
+                };
+                if !targets
+                    .iter()
+                    .any(|target| target.kind == "bin" && target.path == path)
+                {
+                    targets.push(CargoUnitTarget {
+                        name: name.replace('-', "_"),
+                        path,
+                        kind: "bin",
+                    });
+                }
+            }
+        }
+    }
+    // Cargo's default integration targets are the direct tests/*.rs files.
+    if let Some(name) = file
+        .strip_prefix("tests/")
+        .and_then(|path| path.strip_suffix(".rs"))
+    {
+        if !name.contains('/')
+            && !targets
+                .iter()
+                .any(|target| target.kind == "test" && target.path == file)
+        {
+            targets.push(CargoUnitTarget {
+                name: name.into(),
+                path: file.into(),
+                kind: "test",
+            });
+        }
+    }
+    let mut matches = targets
+        .into_iter()
+        .filter(|target| file == target.path || target_module_path(root, target, file).is_some());
+    let found = matches.next();
+    let second = matches.next();
+    if second.is_some() {
+        return Ok(None);
+    }
+    Ok(found)
+}
+
+fn finish_target(
+    root: &Path,
+    kind: &'static str,
+    name: String,
+    path: Option<String>,
+    package: Option<&str>,
+) -> Option<CargoUnitTarget> {
+    let raw_name = if name.is_empty() {
+        match kind {
+            "lib" => package?.to_owned(),
+            "bin" | "test" => path
+                .as_deref()?
+                .rsplit('/')
+                .next()?
+                .trim_end_matches(".rs")
+                .to_owned(),
+            _ => return None,
+        }
     } else {
-        library.or(package.map(|name| name.replace('-', "_")))
+        name
+    };
+    let path = path.unwrap_or_else(|| match kind {
+        "lib" => "src/lib.rs".into(),
+        "bin" => {
+            let flat = format!("src/bin/{raw_name}.rs");
+            let directory = format!("src/bin/{raw_name}/main.rs");
+            if root.join(&directory).is_file() {
+                directory
+            } else {
+                flat
+            }
+        }
+        "test" => format!("tests/{raw_name}.rs"),
+        _ => String::new(),
+    });
+    let contained = Path::new(&path).is_relative()
+        && Path::new(&path)
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)));
+    (contained && !path.is_empty()).then_some(CargoUnitTarget {
+        name: raw_name.replace('-', "_"),
+        path,
+        kind,
     })
 }
+
+fn target_module_path(root: &Path, target: &CargoUnitTarget, file: &str) -> Option<Vec<String>> {
+    if file == target.path {
+        return Some(Vec::new());
+    }
+    let source = fs::read_to_string(root.join(&target.path)).ok()?;
+    let tokens = lex_rust(&source);
+    let mut modules = BTreeMap::new();
+    let base = target
+        .path
+        .rsplit_once('/')
+        .map_or("", |(parent, _)| parent);
+    collect_module_paths(root, &tokens, 0, tokens.len(), base, &[], &mut modules)?;
+    modules.remove(file)
+}
+
+fn collect_module_paths(
+    root: &Path,
+    tokens: &[Token],
+    start: usize,
+    end: usize,
+    base: &str,
+    prefix: &[String],
+    found: &mut BTreeMap<String, Vec<String>>,
+) -> Option<()> {
+    let mut i = start;
+    while i < end {
+        if tokens[i].text == "#" && tokens.get(i + 1).is_some_and(|t| t.text == "[") {
+            let attr_end = close(tokens, i + 1)?;
+            if tokens[i + 2..attr_end]
+                .iter()
+                .any(|token| token.text == "path")
+            {
+                return None;
+            }
+            i = attr_end + 1;
+            continue;
+        }
+        if tokens[i].kind == Kind::Ident
+            && tokens.get(i + 1).is_some_and(|t| t.text == "!")
+            && tokens
+                .get(i + 2)
+                .is_some_and(|t| matches!(t.text.as_str(), "(" | "[" | "{"))
+        {
+            i = close(tokens, i + 2)? + 1;
+            continue;
+        }
+        if tokens[i].text == "mod" && tokens.get(i + 1).is_some_and(|t| t.kind == Kind::Ident) {
+            let name = tokens[i + 1].text.clone();
+            let mut child_prefix = prefix.to_vec();
+            child_prefix.push(name.clone());
+            match tokens.get(i + 2).map(|t| t.text.as_str()) {
+                Some(";") => {
+                    let candidates = [
+                        relative_child(base, &format!("{name}.rs")),
+                        relative_child(base, &format!("{name}/mod.rs")),
+                    ];
+                    let mut existing = candidates
+                        .into_iter()
+                        .filter(|candidate| root.join(candidate).is_file());
+                    let candidate = existing.next()?;
+                    if existing.next().is_some() {
+                        return None;
+                    }
+                    if found
+                        .insert(candidate.clone(), child_prefix.clone())
+                        .is_some()
+                    {
+                        return None;
+                    }
+                    let child_source = fs::read_to_string(root.join(&candidate)).ok()?;
+                    let child_tokens = lex_rust(&child_source);
+                    let child_base = relative_child(base, &name);
+                    collect_module_paths(
+                        root,
+                        &child_tokens,
+                        0,
+                        child_tokens.len(),
+                        &child_base,
+                        &child_prefix,
+                        found,
+                    )?;
+                    i += 3;
+                    continue;
+                }
+                Some("{") => {
+                    let open = i + 2;
+                    let close = close(tokens, open)?;
+                    let child_base = relative_child(base, &name);
+                    collect_module_paths(
+                        root,
+                        tokens,
+                        open + 1,
+                        close,
+                        &child_base,
+                        &child_prefix,
+                        found,
+                    )?;
+                    i = close + 1;
+                    continue;
+                }
+                _ => (),
+            }
+        }
+        if matches!(tokens[i].text.as_str(), "(" | "[" | "{") {
+            i = close(tokens, i)? + 1;
+        } else {
+            i += 1;
+        }
+    }
+    Some(())
+}
+
+fn relative_child(base: &str, child: &str) -> String {
+    if base.is_empty() {
+        child.to_owned()
+    } else {
+        format!("{base}/{child}")
+    }
+}
+
 fn rust_tests(
     source: &str,
     file: &str,
     rust_file: &str,
-    unit_target: Option<&str>,
+    unit_target: Option<&CargoUnitTarget>,
+    cargo_modules: Option<&[String]>,
     entries: &mut Vec<TestEntry>,
 ) {
     let stem = rust_file
@@ -244,28 +526,58 @@ fn rust_tests(
         .next()
         .unwrap()
         .trim_end_matches(".rs");
-    let integration = rust_file.starts_with("tests/");
+    let integration = unit_target.is_some_and(|target| target.kind == "test")
+        || unit_target.is_none() && rust_file.starts_with("tests/");
+    let target_file = unit_target.map_or_else(
+        || if integration { rust_file } else { "src/lib.rs" },
+        |target| target.path.as_str(),
+    );
     let context = Context {
         source,
         file,
         // libtest reports the harness file rather than each module's declaration file.
-        identity_file: if integration || rust_file == "src/main.rs" {
-            rust_file
-        } else {
-            "src/lib.rs"
-        },
+        identity_file: target_file,
         framework: "libtest",
-        target: if integration {
-            stem
-        } else if rust_file == "src/main.rs" {
-            unit_target.unwrap_or("bin")
-        } else {
-            unit_target.unwrap_or("lib")
-        },
+        target: unit_target.map_or_else(
+            || if integration { stem } else { "lib" },
+            |target| target.name.as_str(),
+        ),
         language: Language::Rust,
     };
     let mut modules = Vec::new();
-    if !integration {
+    if let Some(cargo_modules) = cargo_modules {
+        modules.extend_from_slice(cargo_modules);
+    } else if unit_target.is_some_and(|target| {
+        (target.kind == "bin" || target.kind == "lib" && target.path != "src/lib.rs")
+            && rust_file != target.path
+    }) {
+        let root_name = target_file
+            .rsplit('/')
+            .next()
+            .unwrap_or("")
+            .trim_end_matches(".rs");
+        let module_dir = if root_name == "main" {
+            target_file
+                .rsplit_once('/')
+                .map_or("", |(parent, _)| parent)
+                .to_owned()
+        } else {
+            let parent = target_file
+                .rsplit_once('/')
+                .map_or("", |(parent, _)| parent);
+            format!("{parent}/{root_name}")
+        };
+        if let Some(relative) = rust_file.strip_prefix(&format!("{module_dir}/")) {
+            modules.extend(relative.split('/').filter_map(|part| {
+                let name = part.trim_end_matches(".rs");
+                (!matches!(name, "main" | "mod")).then(|| name.to_owned())
+            }));
+        }
+    } else if !integration
+        && (unit_target.is_none()
+            || unit_target
+                .is_some_and(|target| target.kind == "lib" && target.path == "src/lib.rs"))
+    {
         let path = rust_file
             .strip_prefix("src/")
             .unwrap_or(rust_file)

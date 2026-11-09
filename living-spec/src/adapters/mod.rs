@@ -196,12 +196,6 @@ impl LibtestScope {
                 }
                 _ => binary,
             };
-            // Unit-test target names are logical harnesses, independent of package spelling.
-            let target = match source.trim() {
-                "unittests src/lib.rs" => "lib",
-                "unittests src/main.rs" => "bin",
-                _ => target,
-            };
             if !file.is_empty() && !target.is_empty() {
                 return Ok(Self::Binary {
                     target: target.into(),

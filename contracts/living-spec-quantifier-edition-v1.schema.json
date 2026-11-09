@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speccompanion.local/contracts/living-spec-quantifier-edition-v1.schema.json",
+  "title": "Living Spec Quantifier Edition v1",
+  "type": "object",
+  "required": ["schema", "manifest", "requirements"],
+  "properties": {
+    "schema": { "const": "living-spec.quantifier-edition/v1" },
+    "manifest": { "$ref": "#/$defs/manifest" },
+    "requirements": { "type": "array", "items": { "$ref": "#/$defs/report" } }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "manifest": {
+      "type": "object",
+      "required": ["catalog_version", "fixture_hashes", "seeds"],
+      "properties": {
+        "catalog_version": { "type": "string", "minLength": 1 },
+        "fixture_hashes": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Z][A-Z0-9]*-[0-9]{3,}$" },
+          "additionalProperties": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        },
+        "seeds": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Z][A-Z0-9]*-[0-9]{3,}$" },
+          "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 18446744073709551615 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "report": {
+      "type": "object",
+      "required": ["id", "text", "quantifier", "coverage", "result", "observations", "failing_subdomains", "witness"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]{3,}$" },
+        "text": { "type": "string" },
+        "quantifier": { "$ref": "living-spec-annotations-v1.schema.json#/$defs/quantifier" },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "result": { "enum": ["no-counterexample-in-tested-cases", "counterexample-found", "witness-found", "no-witness-among-tested-cases"] },
+        "observations": { "type": "array", "items": { "$ref": "#/$defs/observation" } },
+        "failing_subdomains": { "type": "array", "items": { "$ref": "living-spec-annotations-v1.schema.json#/$defs/domain" } },
+        "witness": { "oneOf": [{ "$ref": "#/$defs/observation" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["mode", "tested_cases", "distinct_tested", "finite_total", "seed", "untested_remainder"],
+      "properties": {
+        "mode": { "enum": ["exhaustive", "sampled"] },
+        "tested_cases": { "type": "integer", "minimum": 0 },
+        "distinct_tested": { "type": "integer", "minimum": 0 },
+        "finite_total": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "seed": { "oneOf": [{ "type": "integer", "minimum": 0, "maximum": 18446744073709551615 }, { "type": "null" }] },
+        "untested_remainder": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "observation": {
+      "type": "object",
+      "required": ["input", "output", "satisfied"],
+      "properties": {
+        "input": { "$ref": "living-spec-annotations-v1.schema.json#/$defs/caseValue" },
+        "output": { "$ref": "living-spec-annotations-v1.schema.json#/$defs/caseValue" },
+        "satisfied": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

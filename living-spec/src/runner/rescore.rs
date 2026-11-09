@@ -258,26 +258,10 @@ pub fn rescore_with_context(
     report.quantifier_reports = quantifier_reports(&spec, &annotations)?;
     for status in &report.statuses {
         let from = previous.get(&status.id).copied().unwrap_or(Badge::Unproven);
-        let current_revision = &spec
-            .lines
+        let failing = status
+            .tests
             .iter()
-            .find(|l| l.id == status.id)
-            .ok_or("qualification provider returned an unknown requirement")?
-            .revision;
-        let failing = status.tests.iter().find(|t| {
-            matches!(t.status, TestStatus::Failed | TestStatus::Errored)
-                && annotations.requirements.get(&status.id).is_some_and(|a| {
-                    a.links.iter().any(|l| {
-                        l.test_id == t.test_id
-                            && l.audit.is_accepted()
-                            && l.revision == *current_revision
-                            && l.audit.revision == *current_revision
-                            && fingerprints
-                                .get(&l.test_id)
-                                .is_some_and(|i| i.fingerprint == l.fingerprint)
-                    })
-                })
-        });
+            .find(|t| t.admissible && matches!(t.status, TestStatus::Failed | TestStatus::Errored));
         let unresolved = report
             .unresolved
             .iter()
@@ -285,7 +269,11 @@ pub fn rescore_with_context(
         let test_id = unresolved
             .map(|u| u.test_id.as_str())
             .or_else(|| failing.map(|t| t.test_id.as_str()))
-            .or_else(|| status.tests.first().map(|t| t.test_id.as_str()))
+            .or_else(|| {
+                (status.badge != Badge::Broken)
+                    .then(|| status.tests.first().map(|t| t.test_id.as_str()))
+                    .flatten()
+            })
             .unwrap_or("");
         let note = if status.badge == Badge::Broken {
             if unresolved.is_some() {
@@ -297,7 +285,12 @@ pub fn rescore_with_context(
                     .and_then(|o| o.failure_message.as_deref())
                     .and_then(|s| s.lines().next());
                 format!(
-                    "test {test_id} failed at {commit}{}",
+                    "test {} failed at {commit}{}",
+                    if test_id.is_empty() {
+                        "unknown"
+                    } else {
+                        test_id
+                    },
                     failure.map(|s| format!(": {s}")).unwrap_or_default()
                 )
             }

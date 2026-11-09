@@ -26,6 +26,68 @@ fn indexed(file: &str, source: &str) -> TestEntry {
     index.entries.into_iter().next().unwrap()
 }
 
+#[test]
+fn cfg_attr_should_panic_is_challenged() {
+    for attribute in [
+        "cfg_attr(test, should_panic)",
+        "custom::instrument",
+        "ignore = \"reason\"",
+        "should_panic(other = \"reason\")",
+    ] {
+        let entry = indexed("tests/export.rs", &format!(
+            "#[test] #[{attribute}] fn check_timestamp() {{ assert_eq!(export_timestamp(30), 30); }}"
+        ));
+        assert_eq!(entry.attributes, vec!["test", attribute]);
+        challenged_even_when_passed(&entry);
+    }
+    for attribute in [
+        "ignore",
+        "should_panic",
+        "should_panic(expected = \"oops\")",
+    ] {
+        let entry = indexed(
+            "tests/export.rs",
+            &format!("#[test] #[{attribute}] fn check_timestamp() {{ export_timestamp(30); }}"),
+        );
+        assert!(!entry.unsupported_attributes);
+        assert_eq!(entry.should_panic, attribute.starts_with("should_panic"));
+    }
+}
+
+#[test]
+fn cfg_gate_is_allowed() {
+    let entry = indexed(
+        "tests/export.rs",
+        "#[test] #[cfg(unix)] fn check_timestamp() { assert_eq!(export_timestamp(30), 30); }",
+    );
+    assert_eq!(entry.attributes, vec!["test", "cfg(unix)"]);
+    assert!(!entry.unsupported_attributes);
+}
+
+#[test]
+fn stringified_test_is_not_indexed() {
+    for source in [
+        "stringify!(#[test] fn smoke() {});",
+        "stringify![#[test] fn smoke() {}];",
+        "stringify! { #[test] fn smoke() {} }",
+        "macro_rules! example { () => { #[test] fn smoke() {} } }",
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("test.rs"), source).unwrap();
+        assert!(
+            TestIndex::build(dir.path()).unwrap().entries.is_empty(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn stringified_test_does_not_collide_with_real_test() {
+    let entry = indexed("test.rs", "stringify!(#[test] fn smoke() {}); #[test] fn smoke() { assert_eq!(export_timestamp(30), 30); }");
+    assert_eq!(entry.name, "test::smoke");
+    assert!(entry.body.contains("export_timestamp"));
+}
+
 fn challenged_even_when_passed(entry: &TestEntry) {
     let spec = Spec::parse("- [R-001] Export timestamp is 30.").unwrap();
     let requirement = &spec.lines[0];

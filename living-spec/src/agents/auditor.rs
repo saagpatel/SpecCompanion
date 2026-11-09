@@ -28,6 +28,9 @@ pub fn audit(requirement: &RequirementLine, link: &Link, entry: &TestEntry) -> A
     if entry.language == Language::Python && entry.decorated && !parametrize_only(&entry.source) {
         notes.push("unsupported test shape: Python decorator".into());
     }
+    if entry.language == Language::Rust && entry.unsupported_attributes {
+        notes.push("unsupported test shape: Rust attribute".into());
+    }
     for shape in &analysis.unsupported {
         notes.push(format!("unsupported test shape: {shape}"));
     }

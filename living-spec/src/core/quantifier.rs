@@ -52,7 +52,11 @@ pub struct Quantifier {
     pub domain: Domain,
     pub subject: String,
     pub predicate: PredicateRef,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_sampling",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub sampling: Option<Sampling>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -151,4 +155,9 @@ pub struct Report {
     pub observations: Vec<Observation>,
     pub failing_subdomains: Vec<Domain>,
     pub witness: Option<Observation>,
+}
+
+// Absence is optional; an explicitly present null is malformed input.
+fn present_sampling<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Sampling>, D::Error> {
+    Sampling::deserialize(d).map(Some)
 }

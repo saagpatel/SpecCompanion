@@ -24,6 +24,8 @@ pub struct TestEntry {
     pub body: String,
     pub language: Language,
     pub should_panic: bool,
+    pub attributes: Vec<String>,
+    pub unsupported_attributes: bool,
     pub decorated: bool,
     pub fingerprint: String,
     pub rename_hint: String,
@@ -204,6 +206,8 @@ impl Context<'_> {
             body,
             language: self.language,
             should_panic,
+            attributes: Vec::new(),
+            unsupported_attributes: false,
             decorated: false,
         }
     }
@@ -603,9 +607,7 @@ fn rust_scope(
         if tokens[i].text == "#" && tokens.get(i + 1).is_some_and(|t| t.text == "[") {
             if let Some(end) = close(tokens, i + 1) {
                 attr_start.get_or_insert(tokens[i].start);
-                if i + 2 < end {
-                    attributes.push(tokens[i + 2].text.as_str());
-                }
+                attributes.push(&tokens[i + 2..end]);
                 i = end + 1;
                 continue;
             }
@@ -626,17 +628,33 @@ fn rust_scope(
                 (i + 2..tokens.len()).find(|p| matches!(tokens[*p].text.as_str(), "{" | ";"))
             {
                 if let Some(end) = close(tokens, open) {
-                    if attributes.contains(&"test") {
+                    if attributes
+                        .iter()
+                        .any(|attr| rust_attribute(attr) == Some("test"))
+                    {
                         let mut name = modules.clone();
                         name.push(tokens[i + 1].text.clone());
-                        entries.push(context.entry(
+                        let mut entry = context.entry(
                             name.join("::"),
                             attr_start.unwrap_or(tokens[i].start),
                             tokens[end].end,
                             tokens[open].end,
                             tokens[end].start,
-                            attributes.contains(&"should_panic"),
-                        ));
+                            attributes
+                                .iter()
+                                .any(|attr| rust_attribute(attr) == Some("should_panic")),
+                        );
+                        entry.attributes = attributes
+                            .iter()
+                            .map(|attr| {
+                                context.source[attr.first().map_or(tokens[i].start, |t| t.start)
+                                    ..attr.last().map_or(tokens[i].start, |t| t.end)]
+                                    .to_owned()
+                            })
+                            .collect();
+                        entry.unsupported_attributes =
+                            attributes.iter().any(|attr| rust_attribute(attr).is_none());
+                        entries.push(entry);
                     }
                     i = end + 1;
                     attributes.clear();
@@ -645,7 +663,26 @@ fn rust_scope(
                 }
             }
         }
-        // Do not discover tests inside strings, macros, or arbitrary blocks.
+        // Macro invocations and macro_rules bodies are opaque token trees.
+        if tokens[i].text == "!" {
+            let mut open = i + 1;
+            if tokens.get(open).is_some_and(|t| t.kind == Kind::Ident) {
+                open += 1;
+            }
+            if tokens
+                .get(open)
+                .is_some_and(|t| matches!(t.text.as_str(), "(" | "[" | "{"))
+            {
+                let Some(end) = close(tokens, open) else {
+                    break;
+                };
+                i = end + 1;
+                attributes.clear();
+                attr_start = None;
+                continue;
+            }
+        }
+        // Do not discover tests inside strings or arbitrary blocks.
         if tokens[i].text == "{" {
             if let Some(end) = close(tokens, i) {
                 i = end;
@@ -656,6 +693,32 @@ fn rust_scope(
             attr_start = None;
         }
         i += 1;
+    }
+}
+fn rust_attribute(tokens: &[Token]) -> Option<&str> {
+    match tokens {
+        [name, open, .., end]
+            if name.text == "cfg"
+                && open.text == "("
+                && end.text == ")"
+                && close(tokens, 1) == Some(tokens.len() - 1) =>
+        {
+            Some("cfg")
+        }
+        [name] if matches!(name.text.as_str(), "test" | "ignore" | "should_panic") => {
+            Some(&name.text)
+        }
+        [name, open, expected, equals, value, end]
+            if name.text == "should_panic"
+                && open.text == "("
+                && expected.text == "expected"
+                && equals.text == "="
+                && value.kind == Kind::String
+                && end.text == ")" =>
+        {
+            Some("should_panic")
+        }
+        _ => None,
     }
 }
 fn python_tests(source: &str, file: &str, entries: &mut Vec<TestEntry>) {

@@ -1,0 +1,48 @@
+{
+  "id": "Q-007",
+  "text": "Deduplicating each declared vector leaves it unchanged when it has no adjacent duplicates.",
+  "quantifier": {
+    "kind": "finite-universal",
+    "domain": {
+      "type": "enum",
+      "values": [
+        {
+          "type": "vec-int",
+          "value": []
+        },
+        {
+          "type": "vec-int",
+          "value": [
+            0
+          ]
+        },
+        {
+          "type": "vec-int",
+          "value": [
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    "subject": "dedup_vec",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "field",
+          "source": "input"
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

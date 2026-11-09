@@ -1,0 +1,40 @@
+{
+  "id": "Q-030",
+  "text": "There is an integer vector whose sorted output is the vector [0].",
+  "quantifier": {
+    "kind": "existential",
+    "domain": {
+      "type": "unbounded",
+      "base": "vec-int",
+      "size_hint": 4
+    },
+    "subject": "sort_vec",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "vec-int",
+            "value": [
+              0
+            ]
+          }
+        }
+      }
+    },
+    "sampling": {
+      "seed": 30,
+      "samples": 12
+    }
+  },
+  "expected": {
+    "result": "witness-found",
+    "min_failures": 0
+  }
+}

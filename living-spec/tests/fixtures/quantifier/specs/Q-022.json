@@ -1,0 +1,38 @@
+{
+  "id": "Q-022",
+  "text": "clamp_buggy returns no result above 100 for any integer input.",
+  "quantifier": {
+    "kind": "infinite-universal",
+    "domain": {
+      "type": "unbounded",
+      "base": "int",
+      "size_hint": 4
+    },
+    "subject": "clamp_buggy",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "le",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "int",
+            "value": 100
+          }
+        }
+      }
+    },
+    "sampling": {
+      "seed": 22,
+      "samples": 12
+    }
+  },
+  "expected": {
+    "result": "counterexample-found",
+    "min_failures": 1
+  }
+}

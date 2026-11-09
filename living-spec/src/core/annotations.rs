@@ -187,7 +187,13 @@ pub struct Dependency {
 }
 impl Annotations {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
-        let annotations: Self = serde_json::from_reader(fs::File::open(path)?)?;
+        Self::from_bytes(&fs::read(path)?)
+    }
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Box<dyn std::error::Error>> {
+        super::json_input::reject_duplicate_keys(bytes).map_err(|error| {
+            format!("invalid annotation JSON; object keys must be unique: {error}")
+        })?;
+        let annotations: Self = serde_json::from_slice(bytes)?;
         if annotations.schema != "living-spec.annotations/v1" {
             return Err("unsupported annotations schema".into());
         }

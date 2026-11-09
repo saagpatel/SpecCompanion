@@ -13,6 +13,97 @@ use std::{collections::BTreeMap, fs, path::Path};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Result bytes and explicit raw-to-scoped identities captured before scoring.
+pub struct ResultsSnapshot {
+    file: Option<String>,
+    bytes: Vec<u8>,
+    format: Option<String>,
+    outcome_ids: BTreeMap<String, String>,
+    outcomes: Vec<TestOutcome>,
+}
+
+impl ResultsSnapshot {
+    pub fn from_bytes(
+        dir: &Path,
+        file: &Path,
+        bytes: Vec<u8>,
+        format: &str,
+        outcome_ids: BTreeMap<String, String>,
+    ) -> Result<Self> {
+        let mut outcomes =
+            parse_results(&bytes, format).ok_or("results input is malformed or incomplete")?;
+        let raw_ids: std::collections::BTreeSet<_> = outcomes
+            .iter()
+            .map(|outcome| outcome.test_id.clone())
+            .collect();
+        if !outcome_ids.is_empty()
+            && outcome_ids.keys().collect::<Vec<_>>() != raw_ids.iter().collect::<Vec<_>>()
+        {
+            return Err("results input identity mapping has missing or extra ids".into());
+        }
+        for outcome in &mut outcomes {
+            if let Some(id) = outcome_ids.get(&outcome.test_id) {
+                outcome.test_id.clone_from(id);
+            }
+        }
+        outcome_map(&outcomes)?;
+        Ok(Self {
+            file: Some(relative_file(dir, file)?),
+            bytes,
+            format: Some(format.into()),
+            outcome_ids,
+            outcomes,
+        })
+    }
+
+    /// Library callers without a backing file remain stale in file views.
+    /// Existing files must parse and reconcile exactly with the scored outcomes.
+    pub fn read(dir: &Path, source: &str, outcomes: &[TestOutcome]) -> Result<Self> {
+        match fs::read(source) {
+            Ok(bytes) => {
+                let format = ["libtest", "junit"]
+                    .into_iter()
+                    .find(|format| parse_results(&bytes, format).is_some())
+                    .ok_or("results input is malformed or incomplete")?;
+                let snapshot =
+                    Self::from_bytes(dir, Path::new(source), bytes, format, BTreeMap::new())?;
+                snapshot.validate(outcomes)?;
+                Ok(snapshot)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                outcome_map(outcomes)?;
+                Ok(Self {
+                    file: None,
+                    bytes: serde_json::to_vec(outcomes)?,
+                    format: None,
+                    outcome_ids: BTreeMap::new(),
+                    outcomes: outcomes.to_vec(),
+                })
+            }
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    pub fn validate(&self, outcomes: &[TestOutcome]) -> Result<()> {
+        if outcome_map(&self.outcomes)? != outcome_map(outcomes)? {
+            return Err("results input does not match the scored outcome set".into());
+        }
+        Ok(())
+    }
+}
+
+fn outcome_map(outcomes: &[TestOutcome]) -> Result<BTreeMap<&str, &TestOutcome>> {
+    let mut mapped = BTreeMap::new();
+    for outcome in outcomes {
+        if outcome.test_id.trim().is_empty()
+            || mapped.insert(outcome.test_id.as_str(), outcome).is_some()
+        {
+            return Err("results input has an empty or duplicate outcome identity".into());
+        }
+    }
+    Ok(mapped)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScoreInputs {
     pub digest: String,
@@ -123,56 +214,17 @@ fn select_outcomes(outcomes: &[TestOutcome], ids: &[String]) -> Vec<TestOutcome>
 
 impl ScoreInputs {
     pub fn capture(
-        dir: &Path,
+        spec_bytes: &[u8],
+        annotations: &Value,
+        results: &ResultsSnapshot,
         outcomes: &[TestOutcome],
         statuses: &[LineStatus],
         boundary: &[BoundaryReport],
         quantifier: &[QuantifierReport],
-        results_source: &str,
     ) -> Result<Self> {
-        let spec_bytes = fs::read(dir.join("spec.md"))?;
-        let spec = Spec::parse(std::str::from_utf8(&spec_bytes)?)?;
-        let annotations = canonical(&dir.join("annotations.json"))?;
-        let annotations_bytes = serde_json::to_vec(&annotations)?;
-        let (results_file, results_bytes) = match fs::read(results_source) {
-            Ok(bytes) => (Some(relative_file(dir, Path::new(results_source))?), bytes),
-            // Library callers can score outcomes without a backing file. A
-            // later file view cannot attest freshness of such a score.
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                (None, serde_json::to_vec(outcomes)?)
-            }
-            Err(error) => return Err(error.into()),
-        };
-        // Persist JUnit's raw-to-scoped identity mapping. Reading current results
-        // must not require source discovery or invoke evidence providers.
-        let parsed = ["libtest", "junit"].into_iter().find_map(|format| {
-            let parsed = parse_results(&results_bytes, format)?;
-            (parsed.len() == outcomes.len()
-                && parsed
-                    .iter()
-                    .zip(outcomes)
-                    .all(|(a, b)| a.status == b.status))
-            .then_some((format.to_owned(), parsed))
-        });
-        let (results_format, outcome_ids) = match parsed {
-            Some((format, parsed))
-                if parsed
-                    .iter()
-                    .zip(outcomes)
-                    .any(|(a, b)| a.test_id != b.test_id) =>
-            {
-                (
-                    Some(format),
-                    parsed
-                        .iter()
-                        .zip(outcomes)
-                        .map(|(a, b)| (a.test_id.clone(), b.test_id.clone()))
-                        .collect(),
-                )
-            }
-            Some((format, _)) => (Some(format), BTreeMap::new()),
-            None => (None, BTreeMap::new()),
-        };
+        results.validate(outcomes)?;
+        let spec = Spec::parse(std::str::from_utf8(spec_bytes)?)?;
+        let annotations_bytes = serde_json::to_vec(annotations)?;
         let mut requirements = BTreeMap::new();
         for line in &spec.lines {
             let annotation = &annotations["requirements"][&line.id];
@@ -218,16 +270,16 @@ impl ScoreInputs {
         }
         Ok(Self {
             digest: hash(&[
-                &spec_bytes,
+                spec_bytes,
                 &annotations_bytes,
-                &results_bytes,
+                &results.bytes,
                 VERSION.as_bytes(),
             ]),
             tool_version: VERSION.into(),
-            results_file,
-            results_digest: hash(&[&results_bytes]),
-            results_format,
-            outcome_ids,
+            results_file: results.file.clone(),
+            results_digest: hash(&[&results.bytes]),
+            results_format: results.format.clone(),
+            outcome_ids: results.outcome_ids.clone(),
             requirements,
         })
     }
@@ -274,6 +326,7 @@ impl ScoreInputs {
                             return None;
                         }
                     }
+                    outcome_map(&parsed).ok()?;
                     Some(parsed)
                 })
         };

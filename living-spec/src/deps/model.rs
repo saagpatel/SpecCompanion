@@ -72,7 +72,7 @@ impl DepGraph {
         result
     }
 
-    fn cycle_witness(&self, component: &[String]) -> Vec<String> {
+    pub(crate) fn cycle_witness(&self, component: &[String]) -> Vec<String> {
         let start = &component[0];
         let allowed: BTreeSet<_> = component.iter().map(String::as_str).collect();
         let mut path = vec![start.clone()];
@@ -102,7 +102,7 @@ impl DepGraph {
         unreachable!("a nontrivial strongly connected component has a cycle")
     }
 
-    fn strongly_connected_components(&self) -> Vec<Vec<String>> {
+    pub(crate) fn strongly_connected_components(&self) -> Vec<Vec<String>> {
         // Iterative Kosaraju traversal keeps graph depth bounded by heap memory,
         // rather than the process stack. Adjacency lists are sorted at load time,
         // and BTreeMap iteration keeps both passes deterministic.
@@ -162,10 +162,8 @@ impl DepGraph {
                     }
                 }
             }
-            if component.len() > 1 {
-                component.sort();
-                components.push(component);
-            }
+            component.sort();
+            components.push(component);
         }
         components
     }

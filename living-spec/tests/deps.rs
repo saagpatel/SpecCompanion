@@ -190,6 +190,7 @@ fn validates_dependency_report(schema: &Value, value: &Value, root: &Value) -> b
             "object" => value.is_object(),
             "string" => value.is_string(),
             "null" => value.is_null(),
+            "integer" => value.as_u64().is_some(),
             other => panic!("unsupported dependency report schema type: {other}"),
         };
         let matches = match kind {
@@ -460,6 +461,17 @@ fn diagnostic_prerequisite(
     (DepGraph::new(&spec, &annotations).unwrap(), statuses)
 }
 
+fn report_member<'a>(report: &'a report::DependencyReport, id: &str) -> &'a report::Prerequisite {
+    let members: Vec<_> = report
+        .groups
+        .iter()
+        .flat_map(|g| &g.members)
+        .filter(|p| p.id == id)
+        .collect();
+    assert_eq!(members.len(), 1, "each prerequisite is emitted once");
+    members[0]
+}
+
 #[test]
 fn finding_1_diagnostic_failures_are_not_the_cause_of_a_broken_prerequisite() {
     let (graph, mut statuses) = diagnostic_prerequisite("missing", None);
@@ -473,14 +485,14 @@ fn finding_1_diagnostic_failures_are_not_the_cause_of_a_broken_prerequisite() {
     let original_tests: Vec<_> = statuses.iter().map(|status| status.tests.clone()).collect();
     apply_qualified(&mut statuses, &graph);
     let reports = report::impacts(&graph, &statuses);
-    assert_eq!(reports[0].broken_prerequisites[0].failing_test, None);
-    assert!(reports[0].explanation.contains("link_unresolved"));
+    assert_eq!(report_member(&reports, "R-001").failing_test, None);
+    assert!(report::markdown(&reports).contains("link_unresolved"));
     let json = serde_json::to_value(&reports).unwrap();
     assert_eq!(
-        json[0]["selected_prerequisite"]["reasons"],
+        json["groups"][0]["members"][0]["reasons"],
         serde_json::json!(["link_challenged", "link_unresolved"])
     );
-    assert!(json[0]["selected_prerequisite"]["failing_test"].is_null());
+    assert!(json["groups"][0]["members"][0]["failing_test"].is_null());
     let markdown = report::markdown(&reports);
     assert!(markdown.contains("link_unresolved"));
     assert!(!markdown.contains("diagnostic failed"));
@@ -501,20 +513,20 @@ fn finding_1_diagnostic_failure_does_not_mask_an_admissible_failure() {
         assert!(statuses[0].tests[1].admissible);
         apply_qualified(&mut statuses, &graph);
         let reports = report::impacts(&graph, &statuses);
-        let cause = &reports[0].broken_prerequisites[0];
+        let cause = &report_member(&reports, "R-001");
         assert_eq!(
             cause.failing_test.as_deref(),
             Some("rust:synthetic:src/lib.rs:causal")
         );
         assert_eq!(cause.failing_test_status, Some(status));
-        assert!(!reports[0].explanation.contains("diagnostic failed"));
-        assert!(reports[0]
-            .explanation
-            .contains(if status == TestStatus::Failed {
+        assert!(!report::markdown(&reports).contains("diagnostic failed"));
+        assert!(
+            report::markdown(&reports).contains(if status == TestStatus::Failed {
                 "causal failed"
             } else {
                 "causal errored"
-            }));
+            })
+        );
     }
 }
 
@@ -531,8 +543,8 @@ fn finding_1_old_status_without_provenance_leaves_causal_failure_unknown() {
     assert!(!statuses[0].tests[0].admissible);
     apply_qualified(&mut statuses, &graph);
     let reports = report::impacts(&graph, &statuses);
-    assert_eq!(reports[0].broken_prerequisites[0].failing_test, None);
-    assert!(reports[0].explanation.contains("test_failed"));
+    assert_eq!(report_member(&reports, "R-001").failing_test, None);
+    assert!(report::markdown(&reports).contains("test_failed"));
     // CLI status loading must retain new provenance and default old files too.
     let dir = tempfile::tempdir_in("target").unwrap();
     let path = dir.path().join("status.json");
@@ -555,7 +567,7 @@ fn finding_3_dependency_exports_preserve_the_untested_boundary_reason() {
         assert_eq!(statuses[1].badge, Badge::Qualified);
         let reports = report::impacts(&graph, &statuses);
         let json = serde_json::to_value(&reports).unwrap();
-        let selected = &json[0]["selected_prerequisite"];
+        let selected = &json["groups"][0]["members"][0];
         assert_eq!(selected["id"], "R-001");
         assert_eq!(selected["text"], graph.texts["R-001"]);
         assert_eq!(selected["badge"], "unproven");
@@ -564,7 +576,11 @@ fn finding_3_dependency_exports_preserve_the_untested_boundary_reason() {
         let markdown = report::markdown(&reports);
         assert!(markdown.contains(&format!("unproven: {}", reason_text.as_str().unwrap())));
         assert!(markdown.contains(&graph.texts["R-001"]));
-        assert!(reports[0].broken_prerequisites.is_empty());
+        assert!(reports
+            .groups
+            .iter()
+            .flat_map(|g| &g.members)
+            .all(|p| p.badge != Badge::Broken));
         if reason == Reason::BoundaryGap {
             assert_eq!(
                 selected["boundary_reference"],
@@ -642,21 +658,28 @@ fn finding_drill2_dependency_report_schema_accepts_nonempty_prerequisites() {
         validates_dependency_report(&schema, &json, &schema),
         "serialized dependency reports with unproven and qualified prerequisites must satisfy the published schema"
     );
-    // These controls exercise both the original undeclared-field defect and
-    // the nullable prerequisite fields in the actual published schema.
+    // Reject missing declarations, malformed optional fields, and embedded paths.
     let mut old_schema = schema.clone();
-    old_schema["items"]["oneOf"][0]["properties"]
+    old_schema["$defs"]["claim"]["properties"]
         .as_object_mut()
         .unwrap()
-        .remove("unproven_prerequisites");
+        .remove("other_nonproven_count");
     assert!(!validates_dependency_report(
         &old_schema,
         &json,
         &old_schema
     ));
     let mut malformed = json.clone();
-    malformed[0]["qualified_prerequisites"][0]["boundary_reference"] = 42.into();
+    malformed["groups"][0]["members"][0]["boundary_reference"] = 42.into();
     assert!(!validates_dependency_report(&schema, &malformed, &schema));
+    let mut embedded_path = json.clone();
+    embedded_path["groups"][0]["members"][0]["reasons"] =
+        serde_json::json!([{"prerequisite_unproven":{"path":["R-003","R-001"]}}]);
+    assert!(!validates_dependency_report(
+        &schema,
+        &embedded_path,
+        &schema
+    ));
 
     assert!(markdown.contains("R-003 → R-001 (broken"));
     assert!(markdown.contains("- Unproven: R-002"));
@@ -664,16 +687,26 @@ fn finding_drill2_dependency_report_schema_accepts_nonempty_prerequisites() {
     assert!(markdown.contains("- Unproven: R-005"));
     assert!(markdown.contains("boundary_gap"));
     assert!(markdown.contains("annotations.json#/requirements/R-002/bounds"));
-    assert_eq!(json[0]["path"], serde_json::json!(["R-003", "R-001"]));
-    assert_eq!(json[0]["unproven_prerequisites"][0]["id"], "R-002");
-    assert_eq!(json[0]["unproven_prerequisites"][0]["badge"], "unproven");
     assert_eq!(
-        json[0]["unproven_prerequisites"][0]["boundary_reference"],
-        "annotations.json#/requirements/R-002/bounds"
+        json["claims"][0]["path"],
+        serde_json::json!(["R-003", "R-001"])
     );
-    assert_eq!(json[0]["unproven_prerequisites"][1]["id"], "R-005");
-    assert_eq!(json[0]["qualified_prerequisites"][0]["id"], "R-004");
-    assert_eq!(json[0]["broken_prerequisites"][0]["id"], "R-001");
+    assert_eq!(reports.claims[0].other_nonproven_count, 3);
+    for (id, badge) in [
+        ("R-001", Badge::Broken),
+        ("R-002", Badge::Unproven),
+        ("R-004", Badge::Qualified),
+        ("R-005", Badge::Unproven),
+    ] {
+        assert_eq!(report_member(&reports, id).badge, badge);
+    }
+    assert_eq!(
+        report_member(&reports, "R-002")
+            .boundary_reference
+            .as_deref(),
+        Some("annotations.json#/requirements/R-002/bounds")
+    );
+    assert!(report_member(&reports, "R-004").reasons.is_empty());
 }
 
 #[test]
@@ -728,4 +761,93 @@ fn finding_07_deps_2_fifty_thousand_proven_chain_finishes_without_qualification(
 
     assert!(statuses.iter().all(|status| status.badge == Badge::Proven));
     assert!(statuses.iter().all(|status| status.reasons.is_empty()));
+}
+
+#[test]
+fn report_size_is_linear_for_large_cycle() {
+    const N: usize = 1_000;
+    for cyclic in [true, false] {
+        let ids: Vec<_> = (0..N).map(|i| format!("R-{i:04}")).collect();
+        let mut edges: BTreeMap<_, _> = ids.iter().map(|id| (id.clone(), vec![])).collect();
+        for pair in ids.windows(2) {
+            edges.get_mut(&pair[0]).unwrap().push(pair[1].clone());
+        }
+        if cyclic {
+            edges.get_mut(&ids[N - 1]).unwrap().push(ids[0].clone());
+        }
+        let graph = DepGraph {
+            edges,
+            texts: ids
+                .iter()
+                .map(|id| (id.clone(), "Requirement.".into()))
+                .collect(),
+        };
+        let mut statuses: Vec<_> = ids
+            .iter()
+            .map(|id| LineStatus {
+                id: id.clone(),
+                badge: Badge::Proven,
+                reasons: vec![],
+                tests: vec![],
+            })
+            .collect();
+        if !cyclic {
+            statuses[N - 1].badge = Badge::Unproven;
+            statuses[N - 1].reasons.push(Reason::NoLink);
+        }
+        apply_qualified(&mut statuses, &graph);
+        let report = report::impacts(&graph, &statuses);
+        // Exercise the same streaming writers as the CLI, including every claim.
+        let mut json = Vec::new();
+        serde_json::to_writer(&mut json, &report).unwrap();
+        let mut md = Vec::new();
+        report::write_markdown(&mut md, &report).unwrap();
+        println!(
+            "{}: JSON {} bytes; Markdown {} bytes",
+            if cyclic { "cycle" } else { "chain" },
+            json.len(),
+            md.len()
+        );
+        assert!(json.len() < 300 * N, "JSON: {} bytes", json.len());
+        assert!(md.len() < 300 * N, "Markdown: {} bytes", md.len());
+        assert_eq!(report.claims.len(), N - usize::from(!cyclic));
+        assert_eq!(
+            report.groups.iter().map(|g| g.members.len()).sum::<usize>(),
+            N
+        );
+        assert_eq!(report.cycles.len(), usize::from(cyclic));
+        assert_eq!(report.groups.len(), if cyclic { 1 } else { N });
+        for (i, claim) in report.claims.iter().enumerate() {
+            let next = (i + 1) % N;
+            assert_eq!(claim.path, [ids[i].clone(), ids[next].clone()]);
+            assert_eq!(
+                claim.other_nonproven_count,
+                if cyclic { N - 2 } else { N - i - 2 }
+            );
+            assert_eq!(claim.cycles, if cyclic { vec![0] } else { vec![] });
+        }
+        let schema = dependency_report_schema("living-spec-dependency-report-v1.schema.json");
+        let value: Value = serde_json::from_slice(&json).unwrap();
+        assert!(validates_dependency_report(&schema, &value, &schema));
+        assert!(report
+            .groups
+            .iter()
+            .flat_map(|g| &g.members)
+            .all(|p| p.reasons.iter().all(|r| !matches!(
+                r,
+                Reason::PrerequisiteBroken { .. }
+                    | Reason::PrerequisiteUnproven { .. }
+                    | Reason::PrerequisiteQualified { .. }
+                    | Reason::DependencyCycle { .. }
+            ))));
+        if cyclic {
+            assert_eq!(report.cycles[0].len(), N + 1);
+            assert!(report.groups[0].edges.is_empty());
+        } else {
+            for pair in report.groups.windows(2) {
+                assert_eq!(pair[0].edges, vec![pair[1].id]);
+            }
+            assert!(report.groups.last().unwrap().edges.is_empty());
+        }
+    }
 }

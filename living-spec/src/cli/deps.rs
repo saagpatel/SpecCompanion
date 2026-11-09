@@ -8,7 +8,13 @@ use crate::{
     },
     deps::{model::DepGraph, propagate::apply_qualified, report},
 };
-use std::{collections::BTreeSet, error::Error, fs, path::Path};
+use std::{
+    collections::BTreeSet,
+    error::Error,
+    fs,
+    io::{self, BufWriter, Write},
+    path::Path,
+};
 
 pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     if args.len() < 2
@@ -125,19 +131,23 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                         .iter()
                         .map(|line| serde_json::json!({"id": line.id, "badge": "stale"}))
                         .collect();
-                    let mut text = String::from(
-                        "# Dependency impact report\n\nStatus is stale; rescore required.\n\n",
-                    );
-                    for line in &spec.lines {
-                        text.push_str(&format!("- {} — stale\n", line.id));
-                    }
-                    if let Some(path) = md {
-                        fs::write(path, &text)?;
+                    let mut output: Box<dyn Write> = if let Some(path) = md {
+                        Box::new(BufWriter::new(fs::File::create(path)?))
                     } else {
-                        print!("{text}");
+                        Box::new(BufWriter::new(io::stdout()))
+                    };
+                    write!(
+                        output,
+                        "# Dependency impact report\n\nStatus is stale; rescore required.\n\n"
+                    )?;
+                    for line in &spec.lines {
+                        writeln!(output, "- {} — stale", line.id)?;
                     }
+                    output.flush()?;
                     if let Some(path) = json {
-                        fs::write(path, serde_json::to_vec_pretty(&stale)?)?;
+                        let mut output = BufWriter::new(fs::File::create(path)?);
+                        serde_json::to_writer_pretty(&mut output, &stale)?;
+                        output.flush()?;
                     }
                     return Ok(());
                 }
@@ -159,14 +169,18 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             }
             apply_qualified(&mut lines, &graph);
             let reports = report::impacts(&graph, &lines);
-            let text = report::markdown(&reports);
-            if let Some(path) = md {
-                fs::write(path, &text)?;
+            let mut output: Box<dyn Write> = if let Some(path) = md {
+                Box::new(BufWriter::new(fs::File::create(path)?))
             } else {
-                print!("{text}");
-            }
+                Box::new(BufWriter::new(io::stdout()))
+            };
+            report::write_markdown(&mut output, &reports)?;
+            output.flush()?;
             if let Some(path) = json {
-                fs::write(path, serde_json::to_vec_pretty(&reports)?)?;
+                let mut output = BufWriter::new(fs::File::create(path)?);
+                // Compact streaming JSON keeps shared graph exports within the size budget.
+                serde_json::to_writer(&mut output, &reports)?;
+                output.flush()?;
             }
         }
         _ => unreachable!("deps command validated before loading"),

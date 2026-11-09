@@ -128,6 +128,8 @@ pub enum AuditVerdict {
 pub struct Dependency {
     pub id: String,
     pub evidence: String,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 impl Annotations {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
@@ -135,7 +137,8 @@ impl Annotations {
         if annotations.schema != "living-spec.annotations/v1" {
             return Err("unsupported annotations schema".into());
         }
-        for annotation in annotations.requirements.values() {
+        for (id, annotation) in &annotations.requirements {
+            validate_typed_sections(id, annotation)?;
             for link in &annotation.links {
                 if link.audit.extra.contains_key("override")
                     && link.audit.human_override_reason().is_none()
@@ -160,4 +163,123 @@ impl Annotations {
             .cloned()
             .collect()
     }
+}
+
+// Keep the original JSON for writes, but validate typed sections on every load.
+fn validate_typed_sections(
+    id: &str,
+    annotation: &RequirementAnnotations,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use serde::de::DeserializeOwned;
+    fn check<T: DeserializeOwned>(
+        value: Value,
+        path: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        fn find_field(value: &Value, key: &str, path: &str, found: &mut Vec<String>) {
+            match value {
+                Value::Object(fields) => {
+                    for (name, child) in fields {
+                        let next = format!("{path}/{}", name.replace('~', "~0").replace('/', "~1"));
+                        if name == key {
+                            found.push(next.clone());
+                        }
+                        find_field(child, key, &next, found);
+                    }
+                }
+                Value::Array(items) => {
+                    for (index, child) in items.iter().enumerate() {
+                        find_field(child, key, &format!("{path}/{index}"), found);
+                    }
+                }
+                _ => {}
+            }
+        }
+        serde_path_to_error::deserialize::<_, T>(value.clone())
+            .map(|_| ())
+            .map_err(|error| {
+                let message = error.inner().to_string();
+                // Internally tagged enums buffer their contents, losing nested serde paths.
+                // Locate the reported field in the original JSON and show all matches.
+                let key = message
+                    .strip_prefix("unknown field `")
+                    .and_then(|s| s.split('`').next())
+                    .or_else(|| {
+                        message
+                            .strip_prefix("invalid value: string \"")
+                            .and_then(|s| s.split('"').next())
+                    });
+                let mut locations = Vec::new();
+                if let Some(key) = key {
+                    find_field(&value, key, path, &mut locations);
+                }
+                if locations.is_empty() {
+                    format!("{path}.{}: {message}", error.path()).into()
+                } else {
+                    format!("{}: {message}", locations.join(", ")).into()
+                }
+            })
+    }
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Cases {
+        #[allow(dead_code)]
+        quantity: String,
+        #[allow(dead_code)]
+        cases: Vec<super::boundary::Example>,
+    }
+    #[derive(Deserialize)]
+    #[serde(tag = "origin", rename_all = "snake_case", deny_unknown_fields)]
+    enum Source {
+        Authored,
+        Inferred {
+            #[allow(dead_code)]
+            revision: String,
+        },
+    }
+    let base = format!("requirements[{id:?}]");
+    for (index, bound) in annotation.bounds.iter().enumerate() {
+        // Serde's internally tagged unit variants ignore extra keys even with
+        // deny_unknown_fields, so check the operation object explicitly.
+        if let Some(op) = bound.pointer("/kind/op").and_then(Value::as_object) {
+            let allowed: &[&str] = if op.get("type").and_then(Value::as_str) == Some("range") {
+                &["type", "lo", "hi", "inclusive_lo", "inclusive_hi"]
+            } else {
+                &["type"]
+            };
+            if let Some(key) = op.keys().find(|key| !allowed.contains(&key.as_str())) {
+                return Err(
+                    format!("{base}.bounds[{index}]/kind/op/{key}: unknown field `{key}`").into(),
+                );
+            }
+        }
+        check::<super::boundary::model::Bound>(bound.clone(), &format!("{base}.bounds[{index}]"))?;
+    }
+    if let Some(value) = &annotation.quantifier {
+        check::<super::quantifier::Quantifier>(value.clone(), &format!("{base}.quantifier"))?;
+    }
+    for (key, value) in &annotation.extra {
+        let path = format!("{base}.{key}");
+        match key.as_str() {
+            "boundary_cases" => check::<Vec<Cases>>(value.clone(), &path)?,
+            "boundary_links" => {
+                check::<Vec<super::boundary::coverage::CaseLink>>(value.clone(), &path)?
+            }
+            "bounds_source" => {
+                if let Some(source) = value.as_object() {
+                    let allowed: &[&str] =
+                        if source.get("origin").and_then(Value::as_str) == Some("inferred") {
+                            &["origin", "revision"]
+                        } else {
+                            &["origin"]
+                        };
+                    if let Some(key) = source.keys().find(|key| !allowed.contains(&key.as_str())) {
+                        return Err(format!("{path}/{key}: unknown field `{key}`").into());
+                    }
+                }
+                check::<Source>(value.clone(), &path)?
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }

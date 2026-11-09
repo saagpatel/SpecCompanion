@@ -174,8 +174,7 @@
                   "type": "string",
                   "pattern": "\\S"
                 }
-              },
-              "additionalProperties": false
+              }
             }
           }
         },

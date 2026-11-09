@@ -12,7 +12,8 @@ fi
 results=$spec_dir/.results/latest.txt
 trap 'exit 1' HUP INT TERM
 test_status=0
-sh -c "${LIVING_SPEC_TEST_CMD:-cargo test}" >"$results" 2>&1 || test_status=$?
+# Plain output: the results parser must not depend on the caller's colour settings.
+CARGO_TERM_COLOR=never NO_COLOR=1 sh -c "${LIVING_SPEC_TEST_CMD:-cargo test}" >"$results" 2>&1 || test_status=$?
 cat "$results"
 set -- rescore "$spec_dir" --results "$results" --format "${LIVING_SPEC_FORMAT:-libtest}"
 if [ -n "${LIVING_SPEC_FINGERPRINTS:-}" ]; then

@@ -437,6 +437,8 @@ fn score_detects_a_real_failure_in_a_temporary_crate_copy() {
         }
         let run = Command::new(env!("CARGO"))
             .current_dir(project)
+            .env("CARGO_TERM_COLOR", "never")
+            .env("NO_COLOR", "1")
             .args([
                 "test",
                 "--offline",

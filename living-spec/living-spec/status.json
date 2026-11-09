@@ -1,9 +1,9 @@
 {
   "inputs": {
-    "digest": "sha256:2656fbfc739722c84efafd0dbab4ef1af9edc8028899f643253a20207a1eb8ce",
+    "digest": "sha256:bbe568cfe75b8495ab145818528ad061fa1e244b02e807f1223836b6ded4db35",
     "tool_version": "0.1.0",
     "results_file": "../target/test-output.txt",
-    "results_digest": "sha256:6174bc45b916d0f3e9514125f791f86b1c5da69097d3a05af59dc82c6dac0b92",
+    "results_digest": "sha256:12a212d88db95bddbb19ca068108bfca751b0e2595750396eccff132ccac99f3",
     "results_format": "libtest",
     "outcome_ids": {},
     "requirements": {
@@ -587,7 +587,7 @@
     }
   },
   "schema": "living-spec.status/v1",
-  "commit": "343862c65d97afe90032f98cd3e6425c7e566a01",
+  "commit": "730e56848ee572d2d7455cc8c4fd076dba5da383",
   "audit": "fresh",
   "human_overrides": 0,
   "statuses": [

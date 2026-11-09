@@ -39,6 +39,9 @@ jobs:
         id: tests
         working-directory: living-spec
         shell: bash
+        env:
+          CARGO_TERM_COLOR: never
+          NO_COLOR: "1"
         run: set -o pipefail; cargo test --locked 2>&1 | tee test-output.txt
       - name: Score living spec
         id: score

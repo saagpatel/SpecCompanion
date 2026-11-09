@@ -36,7 +36,9 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
     let mut scope: Option<LibtestScope> = None;
     let mut target_pending = false;
 
-    for line in input.lines() {
+    for raw_line in input.lines() {
+        let line = strip_ansi_sequences(raw_line);
+        let line = line.as_str();
         let trimmed = line.trim();
         if trimmed.starts_with("Running ") || trimmed.starts_with("Doc-tests ") {
             if target_pending || suite_expected.is_some() || pending_stdout_test.is_some() {
@@ -171,6 +173,41 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
         }
     }
     Ok(outcomes)
+}
+
+fn strip_ansi_sequences(line: &str) -> String {
+    let bytes = line.as_bytes();
+    let mut clean = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == 0x1b && bytes.get(index + 1) == Some(&b'[') {
+            index += 2;
+            while index < bytes.len() {
+                let byte = bytes[index];
+                index += 1;
+                if (0x40..=0x7e).contains(&byte) {
+                    break;
+                }
+            }
+        } else if bytes[index] == 0x1b && bytes.get(index + 1) == Some(&b']') {
+            index += 2;
+            while index < bytes.len() {
+                if bytes[index] == 0x07 {
+                    index += 1;
+                    break;
+                }
+                if bytes[index] == 0x1b && bytes.get(index + 1) == Some(&b'\\') {
+                    index += 2;
+                    break;
+                }
+                index += 1;
+            }
+        } else {
+            clean.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8_lossy(&clean).into_owned()
 }
 
 fn is_libtest_timeout_notice(rest: &str) -> bool {

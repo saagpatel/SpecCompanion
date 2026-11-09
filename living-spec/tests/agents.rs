@@ -738,3 +738,82 @@ fn junit_each_titles_map_only_unambiguous_scoped_cases() {
         assert_eq!(ambiguous.junit_id(scope, "timestamp 30"), format!("{scope}::timestamp 30"));
     }
 }
+
+#[test]
+fn filtered_each_report_missing_case_is_not_proven() {
+    use living_spec::core::{
+        annotations::RequirementAnnotations,
+        badge::{score_line_at_revision, Badge, Reason},
+        test_identity::{TestOutcome, TestStatus},
+    };
+    use std::collections::BTreeSet;
+    let e = entry(
+        "tests/export.js",
+        "test.each([[1], [2]])('export %i', (v) => { expect(export_value(v)).toBe(v); });",
+    );
+    let index = TestIndex {
+        entries: vec![e.clone()],
+    };
+    let mut linked = link(&e);
+    linked.revision = revision("Export values.");
+    linked.audit.revision = linked.revision.clone();
+    linked.audit.verdict = AuditVerdict::Accepted;
+    let id = index.junit_id("jest:tests:tests/export.js", "export 1");
+    let result = score_line_at_revision(
+        "R-001",
+        &linked.revision,
+        &RequirementAnnotations {
+            links: vec![linked.clone()],
+            ..Default::default()
+        },
+        &[TestOutcome {
+            test_id: id,
+            status: TestStatus::Passed,
+            duration_ms: None,
+            failure_message: None,
+        }],
+        &index.identities(),
+        &BTreeSet::new(),
+    );
+    assert_eq!(result.badge, Badge::Unproven);
+    assert!(result.reasons.contains(&Reason::NotExecuted));
+}
+
+#[test]
+fn non_literal_each_table_is_challenged() {
+    for table in ["values", "make_values()", "[...values]"] {
+        let e = entry(
+            "tests/export.js",
+            &format!(
+                "test.each({table})('export %i', (v) => {{ expect(export_value(v)).toBe(v); }});"
+            ),
+        );
+        assert!(e.unknown_cases);
+        assert_eq!(
+            verdict("Export values.", &e).verdict,
+            AuditVerdict::Challenged
+        );
+    }
+    let e = entry(
+        "tests/export.js",
+        "test.each`value\n${values}`('export %i', (v) => { expect(export_value(v)).toBe(v); });",
+    );
+    assert!(e.unknown_cases);
+    assert_eq!(
+        verdict("Export values.", &e).verdict,
+        AuditVerdict::Challenged
+    );
+}
+
+#[test]
+fn pytest_parametrize_literal_cases_are_inventoried() {
+    let e = entry("tests/test_export.py", "@pytest.mark.parametrize('value', [1, 2])\ndef test_export(value):\n    assert export_value(value) == value\n");
+    let index = TestIndex {
+        entries: vec![e.clone()],
+    };
+    assert!(!e.unknown_cases);
+    for case in ["1", "2"] {
+        let id = index.junit_id("tests.test_export", &format!("test_export[{case}]"));
+        assert!(index.identities().contains_key(&id));
+    }
+}

@@ -1,4 +1,4 @@
-use super::syntax::{close, lex, lex_javascript, lex_rust, Kind, Token};
+use super::syntax::{close, lex, lex_javascript, lex_rust, split_args, Kind, Token};
 use crate::core::annotations::Link;
 use crate::core::test_identity::fingerprint;
 use regex::Regex;
@@ -27,6 +27,8 @@ pub struct TestEntry {
     pub attributes: Vec<String>,
     pub unsupported_attributes: bool,
     pub decorated: bool,
+    pub case_ids: Vec<String>,
+    pub unknown_cases: bool,
     pub fingerprint: String,
     pub rename_hint: String,
 }
@@ -53,18 +55,18 @@ impl TestIndex {
         }
     }
     pub fn identities(&self) -> crate::core::test_identity::Fingerprints {
-        self.entries
-            .iter()
-            .map(|entry| {
-                (
-                    entry.id.clone(),
-                    crate::core::test_identity::TestIdentity {
-                        fingerprint: entry.fingerprint.clone(),
-                        rename_hint: Some(entry.rename_hint.clone()),
-                    },
-                )
-            })
-            .collect()
+        let mut identities = crate::core::test_identity::Fingerprints::new();
+        for entry in &self.entries {
+            let identity = crate::core::test_identity::TestIdentity {
+                fingerprint: entry.fingerprint.clone(),
+                rename_hint: Some(entry.rename_hint.clone()),
+            };
+            identities.insert(entry.id.clone(), identity.clone());
+            for case in &entry.case_ids {
+                identities.insert(format!("{}#{case}", entry.id), identity.clone());
+            }
+        }
+        identities
     }
     /// Map explicit scoped metadata or pytest's file/class identity, never a bare name guess.
     pub fn junit_id(&self, class: &str, name: &str) -> String {
@@ -204,6 +206,89 @@ impl TestIndex {
         Ok(Self { entries })
     }
 }
+// Accept only scalar labels whose framework rendering is unambiguous.
+fn scalar_label(tokens: &[Token]) -> Option<String> {
+    match tokens {
+        [t] if t.kind == Kind::Number && t.text.chars().all(|c| c.is_ascii_digit()) => {
+            (t.text.parse::<u64>().ok()?.to_string() == t.text).then(|| t.text.clone())
+        }
+        [t] if t.kind == Kind::String
+            && (t.text.starts_with('\'') || t.text.starts_with('"'))
+            && !t.text.contains('\\')
+            && t.text.is_ascii()
+            && !t.text.chars().any(char::is_control)
+            && t.text.len() >= 2 =>
+        {
+            Some(t.text[1..t.text.len() - 1].to_owned())
+        }
+        _ => None,
+    }
+}
+fn literal_cases(tokens: &[Token], unwrap_rows: bool) -> Option<Vec<String>> {
+    if tokens.first()?.text != "[" || close(tokens, 0)? != tokens.len() - 1 {
+        return None;
+    }
+    let mut cases = Vec::new();
+    let rows = split_args(&tokens[1..tokens.len() - 1]);
+    for mut row in rows.iter().copied() {
+        if row.is_empty() {
+            return None;
+        }
+        if matches!(row[0].text.as_str(), "[" | "(") {
+            if !unwrap_rows {
+                return None;
+            }
+            if close(row, 0)? != row.len() - 1 {
+                return None;
+            }
+            row = &row[1..row.len() - 1];
+        }
+        let label = scalar_label(row)?;
+        if label.is_empty() || cases.contains(&label) {
+            return None;
+        }
+        cases.push(label);
+    }
+    (!cases.is_empty()).then_some(cases)
+}
+fn js_cases(tokens: &[Token], template: &str) -> Option<Vec<String>> {
+    let cases = literal_cases(tokens, true)?;
+    let placeholders: Vec<_> = template.match_indices('%').collect();
+    let (pos, _) = *placeholders.first()?;
+    if placeholders.len() != 1 {
+        return None;
+    }
+    let kind = *template.as_bytes().get(pos + 1)?;
+    if !matches!(kind, b's' | b'i' | b'd' | b'f') {
+        return None;
+    }
+    if kind != b's'
+        && cases
+            .iter()
+            .any(|c| c.parse::<u64>().ok().is_none_or(|n| n.to_string() != *c))
+    {
+        return None;
+    }
+    Some(cases)
+}
+fn python_cases(tokens: &[Token]) -> Option<Vec<String>> {
+    let prefix = ["@", "pytest", ".", "mark", ".", "parametrize", "("];
+    if tokens.len() < prefix.len() || !tokens.iter().zip(prefix).all(|(t, s)| t.text == s) {
+        return None;
+    }
+    let end = close(tokens, 6)?;
+    if end + 1 != tokens.len() {
+        return None;
+    }
+    let args = split_args(&tokens[7..end]);
+    if args.len() != 2 || args[0].len() != 1 || args[0][0].kind != Kind::String {
+        return None;
+    }
+    if scalar_label(args[0])?.contains(',') {
+        return None;
+    }
+    literal_cases(args[1], false)
+}
 // Only a single, bounded printf-style placeholder has an unambiguous case label.
 fn each_case<'a>(template: &str, title: &'a str) -> Option<&'a str> {
     let placeholders: Vec<_> = template.match_indices('%').collect();
@@ -266,6 +351,8 @@ impl Context<'_> {
             attributes: Vec::new(),
             unsupported_attributes: false,
             decorated: false,
+            case_ids: Vec::new(),
+            unknown_cases: false,
         }
     }
 }
@@ -854,6 +941,13 @@ fn python_tests(source: &str, file: &str, entries: &mut Vec<TestEntry>) {
                                     false,
                                 );
                                 entry.decorated = start != begin;
+                                if entry.decorated
+                                    && tokens[start..begin].iter().any(|t| t.text == "parametrize")
+                                {
+                                    let cases = python_cases(&tokens[start..begin]);
+                                    entry.unknown_cases = cases.is_none();
+                                    entry.case_ids = cases.unwrap_or_default();
+                                }
                                 entries.push(entry);
                             }
                         }
@@ -945,6 +1039,7 @@ fn js_scope(
         let kind = tokens[i].text.as_str();
         if matches!(kind, "describe" | "it" | "test") && (i == 0 || tokens[i - 1].text != ".") {
             let mut open = i + 1;
+            let mut each_table = None;
             if tokens[open].text == "."
                 && tokens
                     .get(open + 1)
@@ -958,8 +1053,18 @@ fn js_scope(
                 && tokens.get(open + 2).is_some_and(|t| t.text == "(")
             {
                 if let Some(end) = close(tokens, open + 2) {
+                    each_table = Some(&tokens[open + 3..end]);
                     open = end + 1;
                 }
+            } else if kind != "describe"
+                && tokens.get(open).is_some_and(|t| t.text == ".")
+                && tokens.get(open + 1).is_some_and(|t| t.text == "each")
+                && tokens
+                    .get(open + 2)
+                    .is_some_and(|t| t.text.starts_with('`'))
+            {
+                each_table = Some(&tokens[open + 2..open + 3]);
+                open += 3;
             }
             if tokens.get(open).is_some_and(|t| t.text == "(")
                 && tokens.get(open + 1).is_some_and(|t| t.kind == Kind::String)
@@ -980,14 +1085,20 @@ fn js_scope(
                             } else {
                                 let mut names = describes.clone();
                                 names.push(name);
-                                entries.push(context.entry(
+                                let mut entry = context.entry(
                                     names.join(" > "),
                                     tokens[i].start,
                                     tokens[end].end,
                                     tokens[body].end,
                                     tokens[body_end].start,
                                     false,
-                                ));
+                                );
+                                if let Some(table) = each_table {
+                                    let cases = js_cases(table, &entry.name);
+                                    entry.unknown_cases = cases.is_none();
+                                    entry.case_ids = cases.unwrap_or_default();
+                                }
+                                entries.push(entry);
                             }
                         }
                     }

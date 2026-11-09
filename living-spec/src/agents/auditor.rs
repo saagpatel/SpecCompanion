@@ -25,6 +25,9 @@ pub fn audit(requirement: &RequirementLine, link: &Link, entry: &TestEntry) -> A
     if let Some(shape) = early_exit(&tokens, entry.language) {
         notes.push(format!("unsupported test shape: {shape}"));
     }
+    if entry.unknown_cases {
+        notes.push("unsupported test shape: parameterized case inventory is unknown".into());
+    }
     if entry.language == Language::Python && entry.decorated && !parametrize_only(&entry.source) {
         notes.push("unsupported test shape: Python decorator".into());
     }

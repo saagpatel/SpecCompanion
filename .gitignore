@@ -28,3 +28,6 @@ coverage
 playwright-report
 test-results
 .lighthouseci
+
+# Standalone Living Spec crate
+living-spec/target/

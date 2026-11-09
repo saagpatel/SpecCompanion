@@ -1,0 +1,89 @@
+name: living-spec
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: living-spec
+      - name: Check module layers
+        id: layers
+        run: sh living-spec/scripts/check-layers.sh
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.4'
+      - name: Run CI regressions
+        id: regression
+        run: ruby living-spec/scripts/test-ci.rb
+      - name: Check formatting
+        id: format
+        working-directory: living-spec
+        run: cargo fmt -- --check
+      - name: Run clippy
+        id: clippy
+        working-directory: living-spec
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Run tests
+        id: tests
+        working-directory: living-spec
+        shell: bash
+        run: set -o pipefail; cargo test --locked 2>&1 | tee test-output.txt
+      - name: Score living spec
+        id: score
+        if: ${{ !cancelled() && (steps.tests.outcome == 'success' || steps.tests.outcome == 'failure') }}
+        run: >-
+          bash living-spec/scripts/score-ci.sh "$GITHUB_WORKSPACE" "$GITHUB_SHA"
+          "$GITHUB_WORKSPACE/living-spec/test-output.txt"
+          "$RUNNER_TEMP/living-spec-score"
+          "$RUNNER_TEMP/living-spec-diagnostics"
+      - name: Record diagnostics
+        if: ${{ always() }}
+        env:
+          LAYERS_OUTCOME: ${{ steps.layers.outcome }}
+          REGRESSION_OUTCOME: ${{ steps.regression.outcome }}
+          FORMAT_OUTCOME: ${{ steps.format.outcome }}
+          CLIPPY_OUTCOME: ${{ steps.clippy.outcome }}
+          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          SCORE_OUTCOME: ${{ steps.score.outcome }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/living-spec-diagnostics"
+          if [ -f living-spec/test-output.txt ]; then
+            cp living-spec/test-output.txt "$RUNNER_TEMP/living-spec-diagnostics/test-output.txt"
+          else
+            printf 'Test output was not produced because the test step did not complete.\n' > "$RUNNER_TEMP/living-spec-diagnostics/test-output.txt"
+          fi
+          {
+            printf 'Module layers: %s\n' "$LAYERS_OUTCOME"
+            printf 'CI regressions: %s\n' "$REGRESSION_OUTCOME"
+            printf 'Formatting: %s\n' "$FORMAT_OUTCOME"
+            printf 'Clippy: %s\n' "$CLIPPY_OUTCOME"
+            printf 'Tests: %s\n' "$TESTS_OUTCOME"
+            printf 'Scoring: %s\n' "$SCORE_OUTCOME"
+          } >> "$RUNNER_TEMP/living-spec-diagnostics/workflow-outcomes.txt"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.score.outputs.score_ready == 'true' }}
+        with:
+          name: living-spec-score
+          path: |
+            ${{ runner.temp }}/living-spec-score/score/spec/status.json
+            ${{ runner.temp }}/living-spec-score/score/spec.html
+            ${{ runner.temp }}/living-spec-score/score/spec/history.jsonl
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: living-spec-diagnostics
+          path: |
+            living-spec/test-output.txt
+            ${{ runner.temp }}/living-spec-diagnostics/

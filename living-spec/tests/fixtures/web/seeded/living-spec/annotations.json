@@ -1,0 +1,102 @@
+{
+  "schema": "living-spec.annotations/v1",
+  "requirements": {
+    "R-001": {
+      "links": [
+        {
+          "test_id": "rust:ledger:src/export.rs:keeps_timestamps",
+          "fingerprint": "sha256:seed-export",
+          "explanation": "Export preserves the clock fields.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [
+              "Checked the archive header."
+            ],
+            "revision": "sha256:79ff02bb3623b27b9c4f063d29757244f2223ff46256c193b5a902d6003802ea"
+          },
+          "revision": "sha256:79ff02bb3623b27b9c4f063d29757244f2223ff46256c193b5a902d6003802ea"
+        }
+      ]
+    },
+    "R-002": {
+      "links": [
+        {
+          "test_id": "rust:ledger:src/balance.rs:rejects_negative",
+          "fingerprint": "sha256:seed-balance",
+          "explanation": "A negative balance is rejected.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [
+              "The failure is a real balance bug."
+            ],
+            "revision": "sha256:f944122f05840400a84fd05ba83df9fc91c0e5dfbc87f3ccc9f45ec9a8593dc2"
+          },
+          "revision": "sha256:f944122f05840400a84fd05ba83df9fc91c0e5dfbc87f3ccc9f45ec9a8593dc2"
+        }
+      ]
+    },
+    "R-003": {
+      "links": [
+        {
+          "test_id": "rust:ledger:src/total.rs:cleared_total",
+          "fingerprint": "sha256:seed-total",
+          "explanation": "The cleared total is displayed.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [
+              "Happy path only; boundary still open."
+            ],
+            "revision": "sha256:9055df9283446de064b51f63974916e6eab7b248192ec60205b3517d478c3e3b"
+          },
+          "revision": "sha256:9055df9283446de064b51f63974916e6eab7b248192ec60205b3517d478c3e3b"
+        }
+      ],
+      "bounds": [
+        {"quantity":"total", "kind":{"type":"numeric", "value":"0", "unit":"items", "op":{"type":"ge"}, "step":{"value":"1", "unit":"items"}, "integer":true}}
+      ]
+    },
+    "R-004": {
+      "links": [
+        {
+          "test_id": "rust:ledger:src/text.rs:keeps_markup_literal",
+          "fingerprint": "sha256:seed-text",
+          "explanation": "Requirement text stays literal.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [],
+            "revision": "sha256:2c16b81416ba477b48990ce511daeb7b2db36c72e19081fecc99b360dc0930f0"
+          },
+          "revision": "sha256:2c16b81416ba477b48990ce511daeb7b2db36c72e19081fecc99b360dc0930f0"
+        }
+      ]
+    },
+    "R-005": {
+      "links": [
+        {
+          "test_id": "rust:ledger:src/total.rs:qualified_total",
+          "fingerprint": "sha256:seed-qualified",
+          "explanation": "The total stays visible.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "notes": [
+              "Depends on the balance rule."
+            ],
+            "revision": "sha256:1f7b483698c118538c554ee924641d1d8e92a40a64af45222a46ffe2e6e1f6aa"
+          },
+          "revision": "sha256:1f7b483698c118538c554ee924641d1d8e92a40a64af45222a46ffe2e6e1f6aa"
+        }
+      ],
+      "depends_on": [
+        {
+          "id": "R-002",
+          "evidence": "authored"
+        }
+      ]
+    }
+  }
+}

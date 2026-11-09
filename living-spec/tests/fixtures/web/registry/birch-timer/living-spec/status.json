@@ -1,0 +1,9 @@
+{
+  "schema": "living-spec.status/v1",
+  "lines": [
+    { "id": "BT-001", "badge": "proven", "tests": [{ "test_id": "rust:birch:src/lib.rs:starts", "status": "passed" }] },
+    { "id": "BT-002", "badge": "proven", "tests": [{ "test_id": "rust:birch:src/lib.rs:stops", "status": "passed" }] },
+    { "id": "BT-003", "badge": "proven", "tests": [{ "test_id": "rust:birch:src/lib.rs:remembers", "status": "passed" }] },
+    { "id": "BT-004", "badge": "unproven", "reasons": ["no_link"], "tests": [] }
+  ]
+}

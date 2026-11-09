@@ -101,9 +101,25 @@ pub fn score_line_at_revision(
             Resolution::Renamed { new_id } => new_id,
             _ => &link.test_id,
         };
+        let base = resolved
+            .split_once('#')
+            .map_or(resolved.as_str(), |(base, _)| base);
+        let case_prefix = format!("{base}#");
+        let cases: BTreeSet<&str> = identities
+            .keys()
+            .map(String::as_str)
+            .chain(outcomes.iter().map(|o| o.test_id.as_str()))
+            .filter(|id| id.starts_with(&case_prefix))
+            .collect();
         let matched = outcomes
             .iter()
-            .filter(|o| &o.test_id == resolved)
+            .filter(|o| {
+                if cases.is_empty() {
+                    &o.test_id == resolved
+                } else {
+                    cases.contains(o.test_id.as_str())
+                }
+            })
             .collect::<Vec<_>>();
         let link_admissible = link.audit.is_accepted()
             && !revision.is_empty()
@@ -144,7 +160,11 @@ pub fn score_line_at_revision(
         {
             reason(&mut result, Reason::HumanOverride);
         }
-        if matched.is_empty() {
+        if matched.is_empty()
+            || cases
+                .iter()
+                .any(|case| !matched.iter().any(|o| o.test_id == *case))
+        {
             reason(&mut result, Reason::NotExecuted);
         }
         for outcome in matched {

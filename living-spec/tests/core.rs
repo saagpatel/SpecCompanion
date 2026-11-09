@@ -420,6 +420,107 @@ fn parametrized_case_missing_is_not_proven() {
         Resolution::Unresolved
     );
 }
+
+fn sibling_case_score(
+    link_id: &str,
+    sibling: Option<TestStatus>,
+) -> living_spec::core::badge::LineStatus {
+    let mut linked = link();
+    linked.test_id = link_id.into();
+    let identity = TestIdentity {
+        fingerprint: linked.fingerprint.clone(),
+        rename_hint: None,
+    };
+    let identities = BTreeMap::from([
+        (link_id.into(), identity.clone()),
+        ("test#one".into(), identity.clone()),
+        ("test#two".into(), identity),
+    ]);
+    let mut first = outcome(TestStatus::Passed);
+    first.test_id = "test#one".into();
+    let mut outcomes = vec![first];
+    if let Some(status) = sibling {
+        let mut second = outcome(status);
+        second.test_id = "test#two".into();
+        outcomes.push(second);
+    }
+    score_line_at_revision(
+        "R-001",
+        &revision("requirement"),
+        &RequirementAnnotations {
+            links: vec![linked],
+            ..Default::default()
+        },
+        &outcomes,
+        &identities,
+        &BTreeSet::new(),
+    )
+}
+
+#[test]
+fn sibling_case_missing_is_not_proven() {
+    for link in ["test#one", "test"] {
+        let status = sibling_case_score(link, None);
+        assert_eq!(status.badge, Badge::Unproven);
+        assert!(status.reasons.contains(&Reason::NotExecuted));
+    }
+}
+
+#[test]
+fn sibling_case_skipped_is_not_proven() {
+    let status = sibling_case_score("test#one", Some(TestStatus::Skipped));
+    assert_eq!(status.badge, Badge::Unproven);
+    assert!(status.reasons.contains(&Reason::NotExecuted));
+}
+
+#[test]
+fn sibling_case_failing_is_broken() {
+    for failure in [TestStatus::Failed, TestStatus::Errored] {
+        let status = sibling_case_score("test#one", Some(failure));
+        assert_eq!(status.badge, Badge::Broken);
+        assert!(status.reasons.contains(&Reason::TestFailed));
+    }
+}
+
+#[test]
+fn all_sibling_cases_passing_is_proven() {
+    for link in ["test#one", "test"] {
+        assert_eq!(
+            sibling_case_score(link, Some(TestStatus::Passed)).badge,
+            Badge::Proven
+        );
+    }
+}
+
+#[test]
+fn outcome_only_sibling_case_is_included() {
+    let mut linked = link();
+    linked.test_id = "test#one".into();
+    let identities = BTreeMap::from([(
+        linked.test_id.clone(),
+        TestIdentity {
+            fingerprint: linked.fingerprint.clone(),
+            rename_hint: None,
+        },
+    )]);
+    let mut first = outcome(TestStatus::Passed);
+    first.test_id = "test#one".into();
+    let mut second = outcome(TestStatus::Failed);
+    second.test_id = "test#two".into();
+    let status = score_line_at_revision(
+        "R-001",
+        &revision("requirement"),
+        &RequirementAnnotations {
+            links: vec![linked],
+            ..Default::default()
+        },
+        &[first, second],
+        &identities,
+        &BTreeSet::new(),
+    );
+    assert_eq!(status.badge, Badge::Broken);
+    assert!(status.reasons.contains(&Reason::TestFailed));
+}
 #[test]
 fn challenged_failure_is_diagnostic_only() {
     let mut a = RequirementAnnotations {

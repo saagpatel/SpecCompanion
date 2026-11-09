@@ -255,7 +255,13 @@ fn validate_typed_sections(
         check::<super::boundary::model::Bound>(bound.clone(), &format!("{base}.bounds[{index}]"))?;
     }
     if let Some(value) = &annotation.quantifier {
-        check::<super::quantifier::Quantifier>(value.clone(), &format!("{base}.quantifier"))?;
+        let path = format!("{base}.quantifier");
+        if value.get("sampling").is_some_and(Value::is_null) {
+            return Err(format!("{path}.sampling: expected an object").into());
+        }
+        check::<super::quantifier::Quantifier>(value.clone(), &path)?;
+        let quantifier: super::quantifier::Quantifier = serde_json::from_value(value.clone())?;
+        validate_quantifier_schema(&quantifier, &path)?;
     }
     for (key, value) in &annotation.extra {
         let path = format!("{base}.{key}");
@@ -280,6 +286,76 @@ fn validate_typed_sections(
             }
             _ => {}
         }
+    }
+    Ok(())
+}
+
+fn validate_quantifier_schema(
+    quantifier: &super::quantifier::Quantifier,
+    path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use super::quantifier::{Domain, Kind};
+
+    const SUBJECTS: &[&str] = &[
+        "abs_i8",
+        "abs_wrapping_i8",
+        "clamp",
+        "clamp_buggy",
+        "saturating_add",
+        "percent_of",
+        "percent_of_buggy",
+        "utf8_roundtrip",
+        "utf8_roundtrip_buggy",
+        "sort_vec",
+        "sort_vec_buggy",
+        "dedup_vec",
+        "bytes_roundtrip",
+    ];
+    if !SUBJECTS.contains(&quantifier.subject.as_str()) {
+        return Err(format!("{path}.subject: unsupported fixture subject").into());
+    }
+    if let Some(sampling) = &quantifier.sampling {
+        if !(1..=10_000).contains(&sampling.samples) {
+            return Err(format!("{path}.sampling.samples: must be 1..10000").into());
+        }
+    }
+
+    fn finite(domain: &Domain) -> bool {
+        match domain {
+            Domain::Unbounded { .. } => false,
+            Domain::Product { parts } => parts.iter().all(finite),
+            _ => true,
+        }
+    }
+    let finite_domain = finite(&quantifier.domain);
+    match (
+        quantifier.kind,
+        finite_domain,
+        quantifier.sampling.is_some(),
+    ) {
+        (Kind::FiniteUniversal, false, _) => {
+            return Err(format!("{path}.domain: finite-universal requires a finite domain").into())
+        }
+        (Kind::FiniteUniversal, true, true) => {
+            return Err(format!("{path}.sampling: finite-universal does not allow sampling").into())
+        }
+        (Kind::InfiniteUniversal, true, _) => {
+            return Err(
+                format!("{path}.domain: infinite-universal requires an unbounded domain").into(),
+            )
+        }
+        (Kind::InfiniteUniversal, false, false) => {
+            return Err(format!("{path}.sampling: infinite-universal requires sampling").into())
+        }
+        (Kind::Existential, true, true) => {
+            return Err(
+                format!("{path}.sampling: finite existential does not allow sampling").into(),
+            )
+        }
+        (Kind::Existential, false, false) => {
+            return Err(format!("{path}.sampling: infinite existential requires sampling").into())
+        }
+        _ => {}
     }
     Ok(())
 }

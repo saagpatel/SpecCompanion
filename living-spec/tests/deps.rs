@@ -17,6 +17,127 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
 };
+
+fn report_fixture() -> tempfile::TempDir {
+    use living_spec::core::freshness::{ResultsSnapshot, ScoreInputs};
+    let dir = tempfile::tempdir_in("target").unwrap();
+    let spec = "- [R-001] First requirement.\n- [R-002] Second requirement.\n";
+    let annotations = serde_json::json!({"schema":"living-spec.annotations/v1", "requirements": {
+        "R-002": {"depends_on":[{"id":"R-001","evidence":"authored"}]}
+    }});
+    let results = include_str!("fixtures/runner/before.txt");
+    fs::write(dir.path().join("spec.md"), spec).unwrap();
+    fs::write(
+        dir.path().join("annotations.json"),
+        serde_json::to_vec(&annotations).unwrap(),
+    )
+    .unwrap();
+    let result_path = dir.path().join("results.txt");
+    fs::write(&result_path, results).unwrap();
+    let snapshot = ResultsSnapshot::from_bytes(
+        dir.path(),
+        &result_path,
+        results.as_bytes().to_vec(),
+        "libtest",
+        BTreeMap::new(),
+    )
+    .unwrap();
+    let lines = vec![
+        LineStatus {
+            id: "R-001".into(),
+            badge: Badge::Broken,
+            reasons: vec![Reason::LinkUnresolved],
+            tests: vec![],
+        },
+        LineStatus {
+            id: "R-002".into(),
+            badge: Badge::Qualified,
+            reasons: vec![Reason::PrerequisiteBroken {
+                path: vec!["R-002".into(), "R-001".into()],
+            }],
+            tests: vec![],
+        },
+    ];
+    let outcomes = living_spec::adapters::parse_libtest(results).unwrap();
+    let inputs = ScoreInputs::capture(
+        spec.as_bytes(),
+        &annotations,
+        &snapshot,
+        &outcomes,
+        &lines,
+        &[],
+        &[],
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("status.json"),
+        serde_json::to_vec(&serde_json::json!({"inputs":inputs,"statuses":lines})).unwrap(),
+    )
+    .unwrap();
+    dir
+}
+
+fn deps_report(dir: &std::path::Path, allow_stale: bool) -> std::process::Output {
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_living-spec"));
+    command
+        .arg("deps")
+        .arg("report")
+        .arg(dir)
+        .arg("--status")
+        .arg(dir.join("status.json"));
+    if allow_stale {
+        command.arg("--allow-stale");
+    }
+    command.output().unwrap()
+}
+
+#[test]
+fn removed_dependency_is_not_reported() {
+    let dir = report_fixture();
+    fs::write(
+        dir.path().join("annotations.json"),
+        r#"{"schema":"living-spec.annotations/v1","requirements":{}}"#,
+    )
+    .unwrap();
+    let rejected = deps_report(dir.path(), false);
+    assert_eq!(rejected.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("stale"));
+    let allowed = deps_report(dir.path(), true);
+    assert!(allowed.status.success());
+    let output = String::from_utf8(allowed.stdout).unwrap();
+    assert!(output.contains("R-002 — stale"));
+    assert!(!output.contains("R-002 → R-001"));
+}
+
+#[test]
+fn edited_requirement_is_stale_in_report() {
+    let dir = report_fixture();
+    fs::write(
+        dir.path().join("spec.md"),
+        "- [R-001] Edited requirement.\n- [R-002] Second requirement.\n",
+    )
+    .unwrap();
+    assert_eq!(deps_report(dir.path(), false).status.code(), Some(1));
+    let output = deps_report(dir.path(), true);
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("R-001 — stale") && text.contains("R-002 — stale"));
+    assert!(!text.contains("R-002 → R-001"));
+}
+
+#[test]
+fn unchanged_status_reports_current_paths() {
+    let dir = report_fixture();
+    let output = deps_report(dir.path(), false);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("R-002 → R-001"));
+}
 #[derive(Deserialize)]
 struct Fixture {
     spec: String,
@@ -524,7 +645,7 @@ fn finding_drill2_dependency_report_schema_accepts_nonempty_prerequisites() {
     // These controls exercise both the original undeclared-field defect and
     // the nullable prerequisite fields in the actual published schema.
     let mut old_schema = schema.clone();
-    old_schema["items"]["properties"]
+    old_schema["items"]["oneOf"][0]["properties"]
         .as_object_mut()
         .unwrap()
         .remove("unproven_prerequisites");

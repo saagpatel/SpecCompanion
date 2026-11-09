@@ -4,6 +4,8 @@
   "title": "Living Spec dependency impact report v1",
   "type": "array",
   "items": {
+    "oneOf": [
+    {
     "type": "object",
     "required": ["dependent_id", "dependent_text", "path", "explanation", "selected_prerequisite", "broken_prerequisites", "unproven_prerequisites", "qualified_prerequisites"],
     "additionalProperties": false,
@@ -17,6 +19,17 @@
       "unproven_prerequisites": { "type": "array", "items": { "$ref": "#/$defs/prerequisite" } },
       "qualified_prerequisites": { "type": "array", "items": { "$ref": "#/$defs/prerequisite" } }
     }
+    },
+    {
+      "type": "object",
+      "required": ["id", "badge"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "badge": { "const": "stale" }
+      }
+    }
+    ]
   },
   "$defs": {
     "prerequisite": {

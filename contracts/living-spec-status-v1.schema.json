@@ -259,6 +259,9 @@
         "digest": {
           "$ref": "#/$defs/digest"
         },
+        "own_badge": {
+          "enum": ["proven", "broken", "unproven"]
+        },
         "revision": {
           "$ref": "#/$defs/digest"
         },

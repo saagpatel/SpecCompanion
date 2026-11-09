@@ -1,0 +1,6 @@
+# Packet 32: two pipeline fixes from the part-8 review (PR #137)
+
+Read `.handoff/packets/00-architecture.md` (binding). Fix both at the root with named regressions, and keep `make verify` green and the dogfood at 33/33.
+
+1. **`living-spec/hooks/pre-push` deletes the results file** (around line 7) that `rescore` records in `status.json` as `inputs.results_file`, so after every hook run later renders and roll-ups mark the saved score stale. The hook must write test output to a stable, git-ignored path inside the spec directory (e.g. `<spec-dir>/.results/latest.txt`; add the ignore rule to `living-spec/.gitignore`, and to the spec dir's own `.gitignore` when the hook creates the directory) and never delete it. Regression: `hook_keeps_results_file_so_status_stays_fresh` (run the hook, then render: not stale).
+2. **Parametrized pytest JUnit names** (`src/pipeline/score.rs` around line 78, and the JUnit adapter). `test_timestamp[30]` must map to the indexed base function's scoped id plus `#30` (the same `base#case` form badge scoring already understands). Do the same for Jest/Vitest `each` titles where the adapter can recognize them, and leave anything ambiguous unmapped. A failing parametrized case then breaks its line and `score` exits 2. Regressions: `pytest_param_case_failure_breaks_line`, `pytest_param_cases_all_pass_prove_line`.

@@ -3,7 +3,9 @@ mod check;
 pub mod deps;
 mod link;
 mod render;
+pub mod rescore;
 mod rollup;
+mod score;
 use std::error::Error;
 pub mod boundary;
 pub mod quantifier;
@@ -65,6 +67,8 @@ pub fn run_with_registry_env(args: &[String], registry_env: Option<&str>) -> Res
         [command, rest @ ..] if command == "quantifier" => Ok(quantifier::run(rest)?),
         [command, rest @ ..] if command == "render" => render::run(rest),
         [command, rest @ ..] if command == "rollup" => rollup::run(rest, registry_env),
+        [command, rest @ ..] if command == "score" => score::run(rest),
+        [command, rest @ ..] if command == "rescore" => rescore::run(rest),
         _ => Err(Exit::Usage(
             "usage: living-spec check|score|rescore|render|rollup|boundary|deps|quantifier|link|audit <args>".into(),
         )

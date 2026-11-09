@@ -1,0 +1,32 @@
+#!/bin/sh
+# Opt in by copying this hook into your repository's hooks directory.
+set -u
+spec_dir=${LIVING_SPEC_DIR:-living-spec}
+binary=${LIVING_SPEC_BIN:-living-spec}
+results=$(mktemp "${TMPDIR:-/tmp}/living-spec-pre-push.XXXXXX") || exit 1
+trap 'rm -f "$results"' 0
+trap 'exit 1' HUP INT TERM
+test_status=0
+sh -c "${LIVING_SPEC_TEST_CMD:-cargo test}" >"$results" 2>&1 || test_status=$?
+cat "$results"
+set -- rescore "$spec_dir" --results "$results" --format "${LIVING_SPEC_FORMAT:-libtest}"
+if [ -n "${LIVING_SPEC_FINGERPRINTS:-}" ]; then
+    set -- "$@" --fingerprints "$LIVING_SPEC_FINGERPRINTS"
+else
+    set -- "$@" --tests "${LIVING_SPEC_TESTS:-.}"
+fi
+score_status=0
+"$binary" "$@" || score_status=$?
+if [ "$score_status" -eq 2 ]; then
+    echo "Push blocked: living spec has broken requirements." >&2
+    exit 2
+fi
+if [ "$score_status" -ne 0 ]; then
+    echo "Push blocked: living spec results could not be rescored." >&2
+    exit 1
+fi
+if [ "$test_status" -ne 0 ]; then
+    echo "Push blocked: project test command failed ($test_status)." >&2
+    exit 1
+fi
+exit 0

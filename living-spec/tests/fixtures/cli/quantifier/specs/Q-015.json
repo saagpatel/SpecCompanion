@@ -1,0 +1,35 @@
+{
+  "id": "Q-015",
+  "text": "A UTF-8 encode and decode round trip preserves every Unicode string exactly.",
+  "quantifier": {
+    "kind": "infinite-universal",
+    "domain": {
+      "type": "unbounded",
+      "base": "string",
+      "size_hint": 4
+    },
+    "subject": "utf8_roundtrip",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "field",
+          "source": "input"
+        }
+      }
+    },
+    "sampling": {
+      "seed": 15,
+      "samples": 12
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

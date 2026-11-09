@@ -1,0 +1,67 @@
+{
+  "schema": "living-spec.status/v1",
+  "lines": [
+    {
+      "id": "R-001",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "rust:ledger:src/export.rs:keeps_timestamps",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "R-002",
+      "badge": "broken",
+      "reasons": ["test_failed"],
+      "tests": [
+        {
+          "test_id": "rust:ledger:src/balance.rs:rejects_negative",
+          "status": "failed",
+          "duration_ms": 12
+        }
+      ]
+    },
+    {
+      "id": "R-003",
+      "badge": "unproven",
+      "reasons": ["boundary_gap"],
+      "tests": [
+        {
+          "test_id": "rust:ledger:src/total.rs:cleared_total",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "R-004",
+      "badge": "proven",
+      "reasons": [],
+      "tests": [
+        {
+          "test_id": "rust:ledger:src/text.rs:keeps_markup_literal",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "R-005",
+      "badge": "qualified",
+      "reasons": [
+        {
+          "prerequisite_broken": {
+            "path": ["R-005", "R-002"]
+          }
+        }
+      ],
+      "tests": [
+        {
+          "test_id": "rust:ledger:src/total.rs:qualified_total",
+          "status": "passed"
+        }
+      ]
+    }
+  ]
+}

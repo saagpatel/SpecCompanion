@@ -1,0 +1,34 @@
+{
+  "id": "Q-027",
+  "text": "There is an input from 0 through 3 whose percent_of result is 3.",
+  "quantifier": {
+    "kind": "existential",
+    "domain": {
+      "type": "int-range",
+      "lo": 0,
+      "hi": 3
+    },
+    "subject": "percent_of",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "int",
+            "value": 3
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "witness-found",
+    "min_failures": 0
+  }
+}

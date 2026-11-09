@@ -1,0 +1,45 @@
+{
+  "schema": "living-spec.annotations/v1",
+  "requirements": {
+    "R-001": {
+      "links": [
+        {
+          "test_id": "rust:fixture:tests/export.rs:exports::timestamps",
+          "fingerprint": "sha256:90f9ae5bd67b8dbb6343c3c9754025b028f397abf3d378986011bf87e4f1b80d",
+          "rename_hint": "sha256:b752edda70a9f44a74ce8dcd19a6891bfe02e040af06392835b36a5d3ada269f",
+          "revision": "sha256:bf66ab5ef145d6e62a066aa36f2b261606904decd2abbc8372612b21dbecb503",
+          "explanation": "Checks the authored export behavior.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:bf66ab5ef145d6e62a066aa36f2b261606904decd2abbc8372612b21dbecb503",
+            "notes": []
+          }
+        }
+      ],
+      "future": {
+        "preserved": true
+      }
+    },
+    "R-002": {
+      "links": [
+        {
+          "test_id": "rust:fixture:tests/export.rs:exports::order",
+          "fingerprint": "sha256:341f8cdf84706ea2e200bc56085f71dd26733a29991a284d08ad645dd3f608c1",
+          "rename_hint": "sha256:857030a449bb9051fa569c996eb8702783e989babaccb58836f9df29557bda4d",
+          "revision": "sha256:fbc8b4eae36593fce4a13af96602d0110891b191579aeb43de643ee4b1469586",
+          "explanation": "Checks the authored export behavior.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:fbc8b4eae36593fce4a13af96602d0110891b191579aeb43de643ee4b1469586",
+            "notes": []
+          }
+        }
+      ],
+      "future": {
+        "preserved": true
+      }
+    }
+  }
+}

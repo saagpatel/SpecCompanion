@@ -4,6 +4,7 @@ pub mod boundary;
 pub mod cli;
 pub mod core;
 pub mod deps;
+pub mod pipeline;
 pub mod quantifier;
 pub mod runner;
 pub mod web;

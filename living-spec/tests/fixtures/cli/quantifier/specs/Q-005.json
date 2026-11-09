@@ -1,0 +1,43 @@
+{
+  "id": "Q-005",
+  "text": "UTF-8 round-tripping preserves each of the declared strings.",
+  "quantifier": {
+    "kind": "finite-universal",
+    "domain": {
+      "type": "enum",
+      "values": [
+        {
+          "type": "string",
+          "value": ""
+        },
+        {
+          "type": "string",
+          "value": "a"
+        },
+        {
+          "type": "string",
+          "value": "é"
+        }
+      ]
+    },
+    "subject": "utf8_roundtrip",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "field",
+          "source": "input"
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

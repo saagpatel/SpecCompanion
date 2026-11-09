@@ -1,0 +1,10 @@
+{
+  "rust:fixture:tests/export.rs:exports::timestamps": {
+    "fingerprint": "sha256:90f9ae5bd67b8dbb6343c3c9754025b028f397abf3d378986011bf87e4f1b80d",
+    "rename_hint": "sha256:b752edda70a9f44a74ce8dcd19a6891bfe02e040af06392835b36a5d3ada269f"
+  },
+  "rust:fixture:tests/export.rs:exports::order": {
+    "fingerprint": "sha256:341f8cdf84706ea2e200bc56085f71dd26733a29991a284d08ad645dd3f608c1",
+    "rename_hint": "sha256:857030a449bb9051fa569c996eb8702783e989babaccb58836f9df29557bda4d"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "Q-025",
+  "text": "There is an integer from -2 through 2 whose clamp result is zero.",
+  "quantifier": {
+    "kind": "existential",
+    "domain": {
+      "type": "int-range",
+      "lo": -2,
+      "hi": 2
+    },
+    "subject": "clamp",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "int",
+            "value": 0
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "witness-found",
+    "min_failures": 0
+  }
+}

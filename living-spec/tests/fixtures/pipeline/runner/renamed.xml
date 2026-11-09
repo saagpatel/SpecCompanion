@@ -1,0 +1,1 @@
+<testsuite tests="2"><testcase classname="rust:fixture:tests/export.rs:exports" name="timestamps_renamed"/><testcase classname="rust:fixture:tests/export.rs:exports" name="order"/></testsuite>

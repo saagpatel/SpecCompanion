@@ -97,8 +97,11 @@ pub fn score_line_at_revision(
             Resolution::Renamed { new_id } => new_id,
             _ => &link.test_id,
         };
-        let outcome = outcomes.iter().find(|o| &o.test_id == resolved);
-        if let Some(o) = outcome {
+        let matched = outcomes
+            .iter()
+            .filter(|o| &o.test_id == resolved)
+            .collect::<Vec<_>>();
+        for o in &matched {
             result.tests.push(TestEvidence {
                 test_id: o.test_id.clone(),
                 status: o.status,
@@ -130,12 +133,15 @@ pub fn score_line_at_revision(
         {
             reason(&mut result, Reason::HumanOverride);
         }
-        match outcome.map(|o| o.status) {
-            Some(TestStatus::Failed | TestStatus::Errored) => {
-                reason(&mut result, Reason::TestFailed)
+        if matched.is_empty() {
+            reason(&mut result, Reason::NotExecuted);
+        }
+        for outcome in matched {
+            match outcome.status {
+                TestStatus::Failed | TestStatus::Errored => reason(&mut result, Reason::TestFailed),
+                TestStatus::Skipped => reason(&mut result, Reason::NotExecuted),
+                TestStatus::Passed => {}
             }
-            None | Some(TestStatus::Skipped) => reason(&mut result, Reason::NotExecuted),
-            Some(TestStatus::Passed) => {}
         }
     }
     if result.reasons.contains(&Reason::LinkUnresolved)

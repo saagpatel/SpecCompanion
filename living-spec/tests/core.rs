@@ -17,9 +17,7 @@ fn link() -> Link {
     Link {
         test_id: "test".into(),
         fingerprint: fingerprint("fn test() {\n    assert_eq!(actual(), expected());\n}"),
-        rename_hint: Some(rename_hint(
-            "fn test() {\n    assert_eq!(actual(), expected());\n}",
-        )),
+        rename_hint: rename_hint("fn test() {\n    assert_eq!(actual(), expected());\n}"),
         revision: revision("requirement"),
         explanation: "test".into(),
         proposed_by: "human".into(),
@@ -492,13 +490,126 @@ fn audit_revision_must_also_be_current() {
 #[test]
 fn declaration_only_hint_cannot_resolve_rename() {
     let mut l = link();
-    l.rename_hint = Some(rename_hint("fn old() { assert!(false); }"));
+    l.rename_hint = rename_hint("fn old() { assert!(false); }");
     let identity = TestIdentity {
         fingerprint: fingerprint("fn new() { assert!(true); }"),
-        rename_hint: Some(rename_hint("fn new() { assert!(true); }")),
+        rename_hint: rename_hint("fn new() { assert!(true); }"),
     };
     assert_eq!(
         resolve_link_with_identities(&l, &[], &BTreeMap::from([("new".into(), identity)])),
         Resolution::Unresolved
     );
+}
+
+#[test]
+fn rename_hint_keeps_code_on_declaration_line() {
+    for (old, renamed, changed, body) in [
+        (
+            "fn old() { assert_eq!(f(), 1);\n}",
+            "fn new() { assert_eq!(f(), 1);\n}",
+            "fn new() { assert_eq!(f(), 2);\n}",
+            " assert_eq!(f(), 1);\n}",
+        ),
+        (
+            "#[test]\nfn old() { assert_eq!(f(), 1);\n}",
+            "#[test]\nfn new() { assert_eq!(f(), 1);\n}",
+            "#[test]\nfn new() { assert_eq!(f(), 2);\n}",
+            " assert_eq!(f(), 1);\n}",
+        ),
+        (
+            "@mark\ndef old(): assert f() == 1\n",
+            "@mark\ndef new(): assert f() == 1\n",
+            "@mark\ndef new(): assert f() == 2\n",
+            " assert f() == 1\n",
+        ),
+        (
+            "it(\"old\", () => { expect(f()).toBe(1);\n});",
+            "it(\"new\", () => { expect(f()).toBe(1);\n});",
+            "it(\"new\", () => { expect(f()).toBe(2);\n});",
+            " expect(f()).toBe(1);\n});",
+        ),
+        (
+            "fn old(\n)\n{ assert_eq!(f(), 1);\n}",
+            "fn new(\n)\n{ assert_eq!(f(), 1);\n}",
+            "fn new(\n)\n{ assert_eq!(f(), 2);\n}",
+            " assert_eq!(f(), 1);\n}",
+        ),
+    ] {
+        let hint = rename_hint(old);
+        assert_eq!(hint, Some(fingerprint(body)));
+        assert_eq!(hint, rename_hint(renamed));
+        assert_ne!(hint, rename_hint(changed));
+        let mut l = link();
+        l.rename_hint = hint;
+        let identities = BTreeMap::from([(
+            "new".into(),
+            TestIdentity {
+                fingerprint: fingerprint(changed),
+                rename_hint: rename_hint(changed),
+            },
+        )]);
+        assert_eq!(
+            resolve_link_with_identities(&l, &[], &identities),
+            Resolution::Unresolved
+        );
+    }
+}
+
+#[test]
+fn uncertain_extraction_refuses_rename() {
+    for source in [
+        "declaration\nassert!(value);",
+        "fn old()",
+        "fn old() {",
+        "fn old() -> Result<(), Error> { assert!(value); }",
+        "def old(value={'key': 1}): assert value",
+        "it(title, () => { expect(value).toBe(1); });",
+        "it(\"old\", () => expect(value).toBe(1));",
+    ] {
+        assert_eq!(rename_hint(source), None, "{source}");
+        let mut l = link();
+        l.rename_hint = rename_hint(source);
+        let identities = BTreeMap::from([(
+            "new".into(),
+            TestIdentity {
+                fingerprint: fingerprint(source),
+                rename_hint: rename_hint(source),
+            },
+        )]);
+        assert_eq!(
+            resolve_link_with_identities(&l, &[], &identities),
+            Resolution::Unresolved
+        );
+    }
+}
+
+fn assert_duplicate_outcomes_are_broken(statuses: [TestStatus; 2]) {
+    let annotations = RequirementAnnotations {
+        links: vec![link()],
+        ..Default::default()
+    };
+    let mut outcomes = statuses.map(outcome);
+    outcomes[0].duration_ms = Some(1);
+    outcomes[1].duration_ms = Some(2);
+    let result = score(&annotations, &outcomes, &[]);
+    assert_eq!(result.badge, Badge::Broken);
+    assert!(result.reasons.contains(&Reason::TestFailed));
+    assert_eq!(result.tests.len(), 2);
+    for (evidence, outcome) in result.tests.iter().zip(outcomes) {
+        assert_eq!(evidence.test_id, outcome.test_id);
+        assert_eq!(evidence.status, outcome.status);
+        assert_eq!(evidence.duration_ms, outcome.duration_ms);
+    }
+}
+
+#[test]
+fn duplicate_outcome_pass_then_fail_is_broken() {
+    assert_duplicate_outcomes_are_broken([TestStatus::Passed, TestStatus::Failed]);
+    assert_duplicate_outcomes_are_broken([TestStatus::Passed, TestStatus::Errored]);
+}
+
+#[test]
+fn duplicate_outcome_fail_then_pass_is_broken() {
+    assert_duplicate_outcomes_are_broken([TestStatus::Failed, TestStatus::Passed]);
+    assert_duplicate_outcomes_are_broken([TestStatus::Errored, TestStatus::Passed]);
 }

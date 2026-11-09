@@ -41,9 +41,27 @@ pub fn fingerprint(source: &str) -> String {
         .join("\n");
     format!("sha256:{:x}", Sha256::digest(normalized.as_bytes()))
 }
-/// Source starts at the declaration; attributes belong to the indexer.
-pub fn rename_hint(source: &str) -> String {
-    fingerprint(source.split_once('\n').map_or("", |(_, body)| body))
+/// Strip only a recognized declaration, preserving code on its opening line.
+/// Unsupported signatures have no hint: guessing a body boundary can hide edits.
+pub fn rename_hint(source: &str) -> Option<String> {
+    use regex::Regex;
+    use std::sync::LazyLock;
+
+    // Deliberately bounded headers: complex attributes, defaults, return types,
+    // destructuring, and expression callbacks need a source-aware indexer.
+    static HEADER: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(concat!(
+            r#"(?x)\A\s*(?:"#,
+            r#"(?:\#\[[^\[\]"'\r\n]*\]\s*)*(?:async\s+)?fn\s+[A-Za-z_]\w*\s*\(\s*\)\s*\{"#,
+            r#"|(?:@[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\n\s*)*(?:async\s+)?def\s+[A-Za-z_]\w*\s*\(\s*(?:[A-Za-z_]\w*\s*(?:,\s*[A-Za-z_]\w*\s*)*,?\s*)?\)\s*:"#,
+            r#"|(?:it|test)(?:\.(?:only|skip))?\s*\(\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\s*,\s*(?:async\s+)?(?:\(\s*(?:[A-Za-z_]\w*\s*)?\)\s*=>|function(?:\s+[A-Za-z_]\w*)?\s*\(\s*\))\s*\{"#,
+            r#")"#,
+        ))
+        .expect("bounded declaration regex")
+    });
+    let header = HEADER.find(source)?;
+    let body = &source[header.end()..];
+    (!body.trim().is_empty()).then(|| fingerprint(body))
 }
 /// Compatibility entry point for digest-only callers. Renames require hints.
 pub fn resolve_link(

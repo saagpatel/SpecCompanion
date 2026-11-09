@@ -3,8 +3,13 @@
 set -u
 spec_dir=${LIVING_SPEC_DIR:-living-spec}
 binary=${LIVING_SPEC_BIN:-living-spec}
-results=$(mktemp "${TMPDIR:-/tmp}/living-spec-pre-push.XXXXXX") || exit 1
-trap 'rm -f "$results"' 0
+if [ ! -d "$spec_dir/.results" ]; then
+    mkdir -p "$spec_dir/.results" || exit 1
+fi
+if ! grep -Fxq '/.results/' "$spec_dir/.gitignore" 2>/dev/null; then
+    printf '\n/.results/\n' >>"$spec_dir/.gitignore" || exit 1
+fi
+results=$spec_dir/.results/latest.txt
 trap 'exit 1' HUP INT TERM
 test_status=0
 sh -c "${LIVING_SPEC_TEST_CMD:-cargo test}" >"$results" 2>&1 || test_status=$?

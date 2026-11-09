@@ -73,8 +73,8 @@ impl TestIndex {
         } else {
             format!("{class}::{name}")
         };
-        let mut matches = self.entries.iter().filter(|entry| {
-            entry.id == fallback
+        let mut matches = self.entries.iter().filter_map(|entry| {
+            if entry.id == fallback
                 || entry.id == format!("{class}:{name}")
                 || (entry.language == Language::Python
                     && format!("{class}.{name}")
@@ -83,9 +83,47 @@ impl TestIndex {
                             entry.file.trim_end_matches(".py").replace('/', "."),
                             entry.name.replace("::", ".")
                         ))
+            {
+                return Some(entry.id.clone());
+            }
+            if entry.language == Language::Python {
+                let (base, case) = name.strip_suffix(']')?.split_once('[')?;
+                if !case.is_empty()
+                    && !base.contains('[')
+                    && format!("{class}.{base}")
+                        == format!(
+                            "{}.{}",
+                            entry.file.trim_end_matches(".py").replace('/', "."),
+                            entry.name.replace("::", ".")
+                        )
+                {
+                    return Some(format!("{}#{case}", entry.id));
+                }
+            }
+            if entry.language == Language::JavaScript
+                && entry
+                    .id
+                    .rsplit_once(':')
+                    .is_some_and(|(scope, _)| scope == class)
+                && [
+                    "test.each",
+                    "it.each",
+                    "test.only.each",
+                    "it.only.each",
+                    "test.skip.each",
+                    "it.skip.each",
+                ]
+                .iter()
+                .any(|prefix| entry.source.starts_with(prefix))
+            {
+                if let Some(case) = each_case(&entry.name, name) {
+                    return Some(format!("{}#{case}", entry.id));
+                }
+            }
+            None
         });
         match (matches.next(), matches.next()) {
-            (Some(entry), None) => entry.id.clone(),
+            (Some(id), None) => id,
             _ => fallback,
         }
     }
@@ -165,6 +203,25 @@ impl TestIndex {
         }
         Ok(Self { entries })
     }
+}
+// Only a single, bounded printf-style placeholder has an unambiguous case label.
+fn each_case<'a>(template: &str, title: &'a str) -> Option<&'a str> {
+    let placeholders: Vec<_> = template.match_indices('%').collect();
+    let (position, _) = *placeholders.first()?;
+    if placeholders.len() != 1 {
+        return None;
+    }
+    let kind = template.as_bytes().get(position + 1).copied()?;
+    if !matches!(kind, b's' | b'i' | b'd' | b'f') {
+        return None;
+    }
+    let case = title
+        .strip_prefix(&template[..position])?
+        .strip_suffix(&template[position + 2..])?;
+    if case.is_empty() || (kind != b's' && case.parse::<f64>().is_err()) {
+        return None;
+    }
+    Some(case)
 }
 fn target(file: &str) -> &str {
     file.split_once('/').map_or("root", |(first, _)| first)
@@ -894,6 +951,15 @@ fn js_scope(
                     .is_some_and(|t| matches!(t.text.as_str(), "only" | "skip"))
             {
                 open += 2;
+            }
+            if kind != "describe"
+                && tokens.get(open).is_some_and(|t| t.text == ".")
+                && tokens.get(open + 1).is_some_and(|t| t.text == "each")
+                && tokens.get(open + 2).is_some_and(|t| t.text == "(")
+            {
+                if let Some(end) = close(tokens, open + 2) {
+                    open = end + 1;
+                }
             }
             if tokens.get(open).is_some_and(|t| t.text == "(")
                 && tokens.get(open + 1).is_some_and(|t| t.kind == Kind::String)

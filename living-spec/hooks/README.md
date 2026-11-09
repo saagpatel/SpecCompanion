@@ -6,6 +6,8 @@ or explicitly choose a hooks directory yourself. No tool changes `core.hooksPath
 
 The hook runs `LIVING_SPEC_TEST_CMD` (default `cargo test`) from the push working
 directory, captures stdout/stderr, prints it, and rescores even if tests fail.
+It keeps the capture at `<spec-dir>/.results/latest.txt` and adds `/.results/`
+to the spec directory's `.gitignore` so saved scores can be rendered later.
 It blocks on any currently broken requirement (exit 2), malformed results (exit 1),
 or a failed project test command (exit 1). Previously broken lines remain blocking.
 

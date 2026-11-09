@@ -722,3 +722,19 @@ fn junit_source_mapping_requires_scoped_or_unique_file_class_metadata() {
         "tests.test_export.TestExport::test_timestamp"
     );
 }
+
+#[test]
+fn junit_each_titles_map_only_unambiguous_scoped_cases() {
+    for (file, source, scope) in [
+        ("tests/example.js", "test.each([[30], [31]])('timestamp %i', (value) => { expect(timestamp(value)).toBe(value); });", "jest:tests:tests/example.js"),
+        ("tests/example.ts", "import { test } from 'vitest';\ntest.each([[30]])('timestamp %i', (value) => { expect(timestamp(value)).toBe(value); });", "vitest:tests:tests/example.ts"),
+    ] {
+        let e = entry(file, source);
+        let index = TestIndex { entries: vec![e.clone()] };
+        assert_eq!(index.junit_id(scope, "timestamp 30"), format!("{}#30", e.id));
+        assert_eq!(index.junit_id(scope, "timestamp unknown"), format!("{scope}::timestamp unknown"));
+        assert_eq!(index.junit_id("", "timestamp 30"), "timestamp 30");
+        let ambiguous = TestIndex { entries: vec![e.clone(), e] };
+        assert_eq!(ambiguous.junit_id(scope, "timestamp 30"), format!("{scope}::timestamp 30"));
+    }
+}

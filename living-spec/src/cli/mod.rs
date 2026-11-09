@@ -1,4 +1,6 @@
+mod audit;
 mod check;
+mod link;
 use std::error::Error;
 
 #[derive(Debug)]
@@ -51,6 +53,8 @@ pub fn run(args: &[String]) -> Result<(), Exit> {
 pub fn run_with_registry_env(args: &[String], _registry_env: Option<&str>) -> Result<(), Exit> {
     let result = match args {
         [command, dir] if command == "check" => check::run(std::slice::from_ref(dir)),
+        [command, rest @ ..] if command == "link" => link::run(rest),
+        [command, rest @ ..] if command == "audit" => audit::run(rest),
         _ => Err(Exit::Usage(
             "usage: living-spec check|score|rescore|render|rollup|boundary|deps|quantifier|link|audit <args>".into(),
         )

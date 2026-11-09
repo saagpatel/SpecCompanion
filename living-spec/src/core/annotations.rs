@@ -46,13 +46,24 @@ struct RequirementAnnotationsWire {
         skip_serializing_if = "Option::is_none"
     )]
     bounds: Option<Vec<Value>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_quantifier",
+        skip_serializing_if = "Option::is_none"
+    )]
     quantifier: Option<Value>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
 fn present_bounds<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<Value>>, D::Error> {
     Vec::deserialize(d).map(Some)
+}
+fn present_quantifier<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Value>, D::Error> {
+    let value = Value::deserialize(d)?;
+    if !value.is_object() {
+        return Err(serde::de::Error::custom("quantifier must be an object"));
+    }
+    Ok(Some(value))
 }
 impl From<RequirementAnnotationsWire> for RequirementAnnotations {
     fn from(wire: RequirementAnnotationsWire) -> Self {
@@ -101,9 +112,56 @@ pub struct Audit {
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }
-impl Audit {
-    /// Overrides are explicit authored decisions, separate from the auditor's verdict.
+impl Link {
+    /// A human decision is live only for the exact evidence binding reviewed.
     pub fn human_override_reason(&self) -> Option<&str> {
+        let value = self.audit.extra.get("override")?;
+        if value.get("test_id")?.as_str()? != self.test_id
+            || value.get("fingerprint")?.as_str()? != self.fingerprint
+            || value.get("revision")?.as_str()? != self.revision
+            || self.audit.revision != self.revision
+            || self.revision.is_empty()
+        {
+            return None;
+        }
+        self.audit.authored_override_reason()
+    }
+
+    pub fn is_accepted(&self) -> bool {
+        self.audit.verdict == AuditVerdict::Accepted || self.human_override_reason().is_some()
+    }
+
+    pub fn retire_stale_override(&mut self) {
+        if self.human_override_reason().is_none() {
+            self.invalidate_override();
+        }
+    }
+
+    /// Preserve the authored decision as diagnostics, never as acceptance.
+    pub fn invalidate_override(&mut self) -> Option<Value> {
+        let previous = self.audit.extra.remove("override")?;
+        let event = serde_json::json!({
+            "override": previous,
+            "test_id": self.test_id,
+            "fingerprint": self.fingerprint,
+            "revision": self.revision,
+            "audit_revision": self.audit.revision,
+        });
+        let history = self
+            .audit
+            .extra
+            .entry("invalidated_overrides".into())
+            .or_insert_with(|| serde_json::json!([]));
+        if !history.is_array() {
+            *history = serde_json::json!([history.clone()]);
+        }
+        history.as_array_mut().unwrap().push(event);
+        Some(previous)
+    }
+}
+impl Audit {
+    // Validate authorship only; acceptance also requires the containing Link binding.
+    fn authored_override_reason(&self) -> Option<&str> {
         let value = self.extra.get("override")?;
         if value.get("by")?.as_str()? != "human" {
             return None;
@@ -112,10 +170,6 @@ impl Audit {
             .get("reason")?
             .as_str()
             .filter(|s| !s.trim().is_empty())
-    }
-
-    pub fn is_accepted(&self) -> bool {
-        self.verdict == AuditVerdict::Accepted || self.human_override_reason().is_some()
     }
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -141,7 +195,7 @@ impl Annotations {
             validate_typed_sections(id, annotation)?;
             for link in &annotation.links {
                 if link.audit.extra.contains_key("override")
-                    && link.audit.human_override_reason().is_none()
+                    && link.audit.authored_override_reason().is_none()
                 {
                     return Err("audit.override requires by: human and a non-empty reason".into());
                 }

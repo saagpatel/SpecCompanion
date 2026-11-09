@@ -199,6 +199,10 @@
         "requirement": {
           "type": "string"
         },
+        "links_fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
         "bounds": {
           "type": "array",
           "items": {

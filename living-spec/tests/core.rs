@@ -60,12 +60,13 @@ fn score(
 }
 #[test]
 fn roundtrip_and_orphans() {
+    let expected_true = true;
     let root = Path::new("tests/fixtures/core/basic");
     let spec = Spec::parse(&fs::read_to_string(root.join("spec.md")).unwrap()).unwrap();
     assert_eq!(spec.lines.len(), 6);
     assert_eq!(spec.lines[3].heading_path, ["Behavior", "More"]);
     let a = Annotations::load(root.join("annotations.json")).unwrap();
-    assert!(a.orphans(&spec).is_empty());
+    assert_eq!(a.orphans(&spec).is_empty(), expected_true);
     let dir = tempfile::tempdir_in("target").unwrap();
     let path = dir.path().join("annotations.json");
     a.save(&path).unwrap();
@@ -74,7 +75,10 @@ fn roundtrip_and_orphans() {
         fs::read(&path).unwrap()
     );
     assert_eq!(a, Annotations::load(path).unwrap());
-    assert!(a.requirements["R-001"].extra.contains_key("future"));
+    assert_eq!(
+        a.requirements["R-001"].extra.contains_key("future"),
+        expected_true
+    );
     let orphan = Annotations::load("tests/fixtures/core/orphan/annotations.json").unwrap();
     assert_eq!(orphan.orphans(&spec), ["R-999"]);
 }
@@ -604,10 +608,10 @@ fn human_overrides_require_authorship_and_reason_and_preserve_other_gates() {
         .unwrap();
         assert!(Annotations::load(&path).is_err());
     }
-    a.links[0].audit.extra.insert(
-        "override".into(),
-        serde_json::json!({"by":"human", "reason":"Reviewed the assertion limitation"}),
-    );
+    let reviewed = &a.links[0];
+    let decision = serde_json::json!({"by":"human", "reason":"Reviewed the assertion limitation",
+        "test_id":reviewed.test_id, "fingerprint":reviewed.fingerprint, "revision":reviewed.revision});
+    a.links[0].audit.extra.insert("override".into(), decision);
     let accepted = score(&a, &[outcome(TestStatus::Passed)], &[]);
     assert_eq!(accepted.badge, Badge::Proven);
     assert!(accepted.reasons.contains(&Reason::HumanOverride));
@@ -647,11 +651,8 @@ fn human_overrides_require_authorship_and_reason_and_preserve_other_gates() {
 
 #[test]
 fn challenged_unresolved_link_still_breaks() {
-    let mut a = RequirementAnnotations {
-        links: vec![link()],
-        ..Default::default()
-    };
-    a.links[0].audit.verdict = AuditVerdict::Challenged;
+    let expected_true = true;
+    let a = challenged_link();
     let s = score_line_at_revision(
         "R-001",
         &revision("requirement"),
@@ -661,7 +662,16 @@ fn challenged_unresolved_link_still_breaks() {
         &BTreeSet::new(),
     );
     assert_eq!(s.badge, Badge::Broken);
-    assert!(s.reasons.contains(&Reason::LinkUnresolved));
+    assert_eq!(s.reasons.contains(&Reason::LinkUnresolved), expected_true);
+}
+
+fn challenged_link() -> RequirementAnnotations {
+    let mut annotations = RequirementAnnotations {
+        links: vec![link()],
+        ..Default::default()
+    };
+    annotations.links[0].audit.verdict = AuditVerdict::Challenged;
+    annotations
 }
 #[test]
 fn missing_current_digest_cannot_establish_proof() {
@@ -682,14 +692,21 @@ fn missing_current_digest_cannot_establish_proof() {
 }
 #[test]
 fn audit_revision_must_also_be_current() {
-    let mut a = RequirementAnnotations {
+    let expected_true = true;
+
+    let a = old_audit_revision();
+    let s = score(&a, &[outcome(TestStatus::Passed)], &[]);
+    assert_eq!(s.badge, Badge::Unproven);
+    assert_eq!(s.reasons.contains(&Reason::StaleRevision), expected_true);
+}
+
+fn old_audit_revision() -> RequirementAnnotations {
+    let mut annotations = RequirementAnnotations {
         links: vec![link()],
         ..Default::default()
     };
-    a.links[0].audit.revision = revision("old requirement");
-    let s = score(&a, &[outcome(TestStatus::Passed)], &[]);
-    assert_eq!(s.badge, Badge::Unproven);
-    assert!(s.reasons.contains(&Reason::StaleRevision));
+    annotations.links[0].audit.revision = revision("old requirement");
+    annotations
 }
 #[test]
 fn declaration_only_hint_cannot_resolve_rename() {

@@ -7,6 +7,7 @@ use super::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Badge {
@@ -30,7 +31,7 @@ pub enum Reason {
     PrerequisiteBroken { path: Vec<String> },
     PrerequisiteUnproven { path: Vec<String> },
     PrerequisiteQualified { path: Vec<String> },
-    DependencyCycle { path: Vec<String> },
+    DependencyCycle { path: Arc<Vec<String>> },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TestEvidence {
@@ -121,7 +122,7 @@ pub fn score_line_at_revision(
                 }
             })
             .collect::<Vec<_>>();
-        let link_admissible = link.audit.is_accepted()
+        let link_admissible = link.is_accepted()
             && !revision.is_empty()
             && link.revision == revision
             && link.audit.revision == revision
@@ -137,7 +138,7 @@ pub fn score_line_at_revision(
         if resolution == Resolution::Unresolved {
             reason(&mut result, Reason::LinkUnresolved);
         }
-        if !link.audit.is_accepted() {
+        if !link.is_accepted() {
             reason(&mut result, Reason::LinkChallenged);
             continue;
         }
@@ -155,8 +156,7 @@ pub fn score_line_at_revision(
             continue;
         }
         admissible += 1;
-        if link.audit.verdict == AuditVerdict::Challenged
-            && link.audit.human_override_reason().is_some()
+        if link.audit.verdict == AuditVerdict::Challenged && link.human_override_reason().is_some()
         {
             reason(&mut result, Reason::HumanOverride);
         }

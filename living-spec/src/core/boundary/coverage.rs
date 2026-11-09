@@ -5,6 +5,7 @@ use super::{
 use crate::core::test_identity::{TestOutcome, TestStatus};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,6 +57,9 @@ pub struct BoundCoverage {
 pub struct CoverageMap {
     pub requirement: String,
     pub bounds: Vec<BoundCoverage>,
+    /// Exact authored mapping used by this receipt; absent legacy receipts are stale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub links_fingerprint: Option<String>,
 }
 
 /// Only typed constructors count. Suffixes, multiplication and bare numbers do not.
@@ -158,6 +162,7 @@ pub fn coverage(
     let mut result = CoverageMap {
         requirement: requirement.into(),
         bounds: Vec::new(),
+        links_fingerprint: Some(links_fingerprint(links)),
     };
     // Duplicate receipts are malformed, never resolved by input order.
     let mut ids = BTreeSet::new();
@@ -275,4 +280,10 @@ impl CoverageMap {
         }
         text
     }
+}
+
+/// Bind every link field, including explicit units and source used for unit inference.
+pub fn links_fingerprint(links: &[CaseLink]) -> String {
+    let bytes = serde_json::to_vec(links).expect("boundary links serialize");
+    format!("sha256:{:x}", Sha256::digest(bytes))
 }

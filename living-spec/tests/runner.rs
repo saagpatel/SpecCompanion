@@ -279,9 +279,13 @@ fn unresolved_link_is_broken_never_dropped() {
 fn adapters_preserve_case_statuses() {
     let result = parse_junit("<testsuite><testcase name=\"fails\"><failure/></testcase><testcase name=\"errors\"><error/></testcase><testcase name=\"skips\"><skipped/></testcase></testsuite>").unwrap();
     assert_eq!(
-        result.iter().map(|o| o.status).collect::<Vec<_>>(),
+        statuses(&result),
         [TestStatus::Failed, TestStatus::Errored, TestStatus::Skipped]
     );
+}
+
+fn statuses(outcomes: &[living_spec::core::test_identity::TestOutcome]) -> Vec<TestStatus> {
+    outcomes.iter().map(|outcome| outcome.status).collect()
 }
 #[cfg(unix)]
 #[test]

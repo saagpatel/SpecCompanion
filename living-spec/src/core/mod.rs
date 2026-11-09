@@ -2,6 +2,7 @@ pub mod annotations;
 pub mod badge;
 pub mod boundary;
 pub mod history;
+pub mod json_input;
 pub mod providers;
 pub mod quantifier;
 pub mod spec;

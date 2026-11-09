@@ -171,8 +171,8 @@ pub fn rescore_with_context(
                 let mut changed_source = false;
                 match resolve_link_with_identities(link, outcomes, fingerprints) {
                     Resolution::Renamed { new_id } => {
+                        let previous_override = link.invalidate_override();
                         let old_id = std::mem::replace(&mut link.test_id, new_id.clone());
-                        let previous_override = link.audit.extra.remove("override");
                         // A fresh audit replaces this invalidated digest with the current one.
                         link.fingerprint.clear();
                         changed_source = true;
@@ -335,7 +335,7 @@ pub fn rescore_with_context(
                         .iter()
                         .filter(|link| {
                             link.audit.verdict == crate::core::annotations::AuditVerdict::Challenged
-                                && link.audit.human_override_reason().is_some()
+                                && link.human_override_reason().is_some()
                                 && link.revision == line.revision
                                 && link.audit.revision == line.revision
                                 && fingerprints.get(&link.test_id).is_some_and(|identity| {

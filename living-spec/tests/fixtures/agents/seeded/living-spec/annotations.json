@@ -1,0 +1,172 @@
+{
+  "schema": "living-spec.annotations/v1",
+  "requirements": {
+    "R-001": {
+      "links": [
+        {
+          "revision": "sha256:fa9b6a83de2f13a26436a58457c625f2a70c7f241dcc1565283e3bbf525b4474",
+          "rename_hint": "sha256:310a5325486851a2ce2d785d3425d3a6ceda5b145b8083bb8f506f040bcec734",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_exports_keep_original_timestamps",
+          "fingerprint": "sha256:5d3dd465d5c4721950527c853d715ae9ae7b834215cc362700b281ad999fedc7",
+          "explanation": "matched \"export\", \"keep\", \"original\", \"timestamp\" in test name; matched \"export\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:fa9b6a83de2f13a26436a58457c625f2a70c7f241dcc1565283e3bbf525b4474",
+            "verdict": "challenged",
+            "notes": [
+              "The test contains only placeholder assertions (literal or self-comparisons)."
+            ]
+          }
+        }
+      ]
+    },
+    "R-002": {
+      "links": [
+        {
+          "revision": "sha256:ecfb17475b7fc3388e2821fab0e6a0e7fd821906206721e8c72cf3a53f5a473c",
+          "rename_hint": "sha256:584debfc7d4e6a0ceb00359fc982f501d8f538fb0f5c74fd9bf59f22431fc3af",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_sessions_expire_after_30_seconds",
+          "fingerprint": "sha256:3e1965812f5a6d21252a5ce593f1ebec5618895f9f24694ceeed886b349269ed",
+          "explanation": "matched \"30\", \"after\", \"expire\", \"second\", \"session\" in test name; matched \"expire\", \"session\" in called identifiers; matched \"30\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:ecfb17475b7fc3388e2821fab0e6a0e7fd821906206721e8c72cf3a53f5a473c",
+            "verdict": "accepted",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs."
+            ]
+          }
+        }
+      ]
+    },
+    "R-003": {
+      "links": [
+        {
+          "revision": "sha256:b1cc580c0e8c78bcd428df6e2b69383d0992d3c023e966f804c4158e2727c900",
+          "rename_hint": "sha256:133fb482fa783a63492f60a7db6be06787087521de5dd5178eac11f32116fd67",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_passwords_shorter_than_8_are_rejected",
+          "fingerprint": "sha256:7b61552ee200e48e2e33931409bf59d3050fc76fb7e8afda64e12381b354ad55",
+          "explanation": "matched \"8\", \"password\", \"reject\", \"shorter\", \"than\" in test name; matched \"password\", \"reject\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:b1cc580c0e8c78bcd428df6e2b69383d0992d3c023e966f804c4158e2727c900",
+            "verdict": "accepted",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs."
+            ]
+          }
+        }
+      ]
+    },
+    "R-004": {
+      "links": [
+        {
+          "revision": "sha256:88a4c9ca5982b29f2b78ebf0752c022a23eda809d7bf42cf9df7a03d77f3f412",
+          "rename_hint": "sha256:5c200a8d520b1bdb3d5ab29bc758ecda76eb9b77c6f53c61906f47617f2393ed",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_clamp_maximum_100",
+          "fingerprint": "sha256:e8e63d05a9c863d4ed2533a47da749bfa1152c8d8d626eb26bf71ddd7272c313",
+          "explanation": "matched \"100\", \"clamp\", \"maximum\" in test name; matched \"clamp\", \"maximum\" in called identifiers; matched \"100\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:88a4c9ca5982b29f2b78ebf0752c022a23eda809d7bf42cf9df7a03d77f3f412",
+            "verdict": "accepted",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs."
+            ]
+          }
+        }
+      ]
+    },
+    "R-005": {
+      "links": [
+        {
+          "revision": "sha256:dd18dfdae4898195d1dfe46b6612327396e3c4165f776fbc77f1b95cc7f923f9",
+          "rename_hint": "sha256:a019238b13d23636e9795fb01262ac80bcf4401afc9f109ae6dc807054f131db",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_names_sort_alphabetically",
+          "fingerprint": "sha256:48e993f3df8d872e30a4a84d3fe2dfe08ffa99bf653d75c96c3ea6732de88461",
+          "explanation": "matched \"alphabetically\", \"name\", \"sort\" in test name; matched \"name\", \"sort\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:dd18dfdae4898195d1dfe46b6612327396e3c4165f776fbc77f1b95cc7f923f9",
+            "verdict": "accepted",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs."
+            ]
+          }
+        }
+      ]
+    },
+    "R-006": {
+      "links": [
+        {
+          "revision": "sha256:065b68d40534a2d866561b0663b3b5c78aa6c0828dd0dc46c4037b6b6dc065a0",
+          "rename_hint": "sha256:a67d3b9384fd470265bdf70cbef1f0ea47a00c02601c4c9dcae93d2284f471df",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_archives_retain_7_entries",
+          "fingerprint": "sha256:984ae15c2f212b87572f022d15fa137d0993901453dd62a81cb53b895cbf0f4e",
+          "explanation": "matched \"7\", \"archive\", \"entry\", \"retain\" in test name; matched \"archive\", \"retain\" in called identifiers; matched \"7\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:065b68d40534a2d866561b0663b3b5c78aa6c0828dd0dc46c4037b6b6dc065a0",
+            "verdict": "challenged",
+            "notes": [
+              "Assertions check unrelated values; no asserted expression derives from requirement terms."
+            ]
+          }
+        },
+        {
+          "revision": "sha256:065b68d40534a2d866561b0663b3b5c78aa6c0828dd0dc46c4037b6b6dc065a0",
+          "rename_hint": "sha256:133fb482fa783a63492f60a7db6be06787087521de5dd5178eac11f32116fd67",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_passwords_shorter_than_8_are_rejected",
+          "fingerprint": "sha256:7b61552ee200e48e2e33931409bf59d3050fc76fb7e8afda64e12381b354ad55",
+          "explanation": "matched \"7\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:065b68d40534a2d866561b0663b3b5c78aa6c0828dd0dc46c4037b6b6dc065a0",
+            "verdict": "challenged",
+            "notes": [
+              "Assertions check unrelated values; no asserted expression derives from requirement terms."
+            ]
+          }
+        }
+      ]
+    },
+    "R-007": {
+      "links": [
+        {
+          "revision": "sha256:3b217e5f24fc26855a13a1e43423972e6070b26acfbacae81154b342ffd1bb70",
+          "rename_hint": "sha256:08b99340ffb0793297678a34bf40d440e137e2db408cd2cf13c1c8ce081dfa71",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_csv_escapes_quotes",
+          "fingerprint": "sha256:fc7296946c7b24e6abef85efde88b2b62488faa260b8a5d7a4dad049a2e0323d",
+          "explanation": "matched \"csv\", \"escape\", \"quote\" in test name; matched \"csv\", \"escape\" in called identifiers",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:3b217e5f24fc26855a13a1e43423972e6070b26acfbacae81154b342ffd1bb70",
+            "verdict": "accepted",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs."
+            ]
+          }
+        }
+      ]
+    },
+    "R-008": {
+      "links": [
+        {
+          "revision": "sha256:ec801ea4c9c17d482c53c55d0053ab03e4a0a281719517ce722dc422dcd143c5",
+          "rename_hint": "sha256:fb51dfe81ef92c58df479941c2bcedd760912cd19c7d9b644f9fbe6ee6e36b12",
+          "test_id": "pytest:tests:tests/test_behaviour.py:test_pagination_size_20",
+          "fingerprint": "sha256:78d3c1b148a055c96d305db05d43df2f98d65a70389c4b0d9bba0d42a8d68dd4",
+          "explanation": "matched \"20\", \"pagination\", \"size\" in test name; matched \"pagination\", \"size\" in called identifiers; matched \"20\" in body literals",
+          "proposed_by": "linker",
+          "audit": {
+            "revision": "sha256:ec801ea4c9c17d482c53c55d0053ab03e4a0a281719517ce722dc422dcd143c5",
+            "verdict": "accepted",
+            "notes": [
+              "A supported non-placeholder assertion touches requirement terms and required numeric inputs."
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

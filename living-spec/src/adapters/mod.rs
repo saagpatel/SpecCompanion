@@ -109,8 +109,11 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
             if suite_expected.is_none() {
                 return Err(AdapterError("libtest case outside a running suite".into()));
             }
+            if is_libtest_timeout_notice(rest) {
+                continue;
+            }
             if let Some((id, result)) = rest.rsplit_once(" ... ") {
-                let id = scoped_libtest_id(scope.as_ref(), id.trim());
+                let id = scoped_libtest_id(scope.as_ref(), libtest_name(id.trim()));
                 let (token, suffix) = result
                     .split_once(char::is_whitespace)
                     .map_or((result, ""), |(a, b)| (a, b.trim()));
@@ -138,7 +141,10 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
             .and_then(|s| s.strip_suffix(" stdout ----"))
         {
             finish_failure_block(&mut current_failure, &mut failure_lines);
-            current_failure = Some((scoped_libtest_id(scope.as_ref(), id), Vec::new()));
+            current_failure = Some((
+                scoped_libtest_id(scope.as_ref(), libtest_name(id)),
+                Vec::new(),
+            ));
         } else if let Some((_, lines)) = current_failure.as_mut() {
             if !trimmed.is_empty() {
                 lines.push(trimmed.to_owned());
@@ -165,6 +171,38 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
         }
     }
     Ok(outcomes)
+}
+
+fn is_libtest_timeout_notice(rest: &str) -> bool {
+    rest.rsplit_once(" has been running for over ")
+        .and_then(|(name, duration)| duration.strip_suffix(" seconds").map(|n| (name, n)))
+        .is_some_and(|(name, n)| {
+            !name.is_empty() && !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+fn libtest_name(mut name: &str) -> &str {
+    loop {
+        if let Some(prefix) = name
+            .strip_suffix(" - should panic")
+            .or_else(|| name.strip_suffix(" - compile fail"))
+        {
+            name = prefix;
+        } else if let Some((prefix, line)) = name.rsplit_once(" (line ") {
+            if !prefix.contains(" - ")
+                && line
+                    .strip_suffix(')')
+                    .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+            {
+                name = prefix;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    name
 }
 
 enum LibtestScope {
@@ -535,8 +573,39 @@ where
                     return Err(AdapterError("text outside JUnit root".into()));
                 }
             }
+            Ok(Event::GeneralRef(event)) => {
+                let resolved = event
+                    .resolve_char_ref()
+                    .map_err(|e| AdapterError(format!("invalid JUnit reference: {e}")))?
+                    .map(|c| c.to_string())
+                    .or_else(|| {
+                        quick_xml::escape::resolve_predefined_entity(event.as_ref())
+                            .map(str::to_owned)
+                    })
+                    .ok_or_else(|| AdapterError("unresolved JUnit entity reference".into()))?;
+                if stack.is_empty() && !resolved.trim().is_empty() {
+                    return Err(AdapterError("text outside JUnit root".into()));
+                }
+                if stack
+                    .last()
+                    .is_some_and(|frame| frame.name == "failure" || frame.name == "error")
+                    && case_detail.is_none()
+                    && !resolved.trim().is_empty()
+                {
+                    case_detail = Some(resolved);
+                }
+            }
+            Ok(Event::DocType(_)) => {
+                return Err(AdapterError("JUnit DOCTYPE is not supported".into()))
+            }
             Ok(Event::Eof) => break,
-            Ok(_) => {}
+            Ok(
+                Event::Text(_)
+                | Event::CData(_)
+                | Event::Comment(_)
+                | Event::Decl(_)
+                | Event::PI(_),
+            ) => {}
             Err(error) => return Err(AdapterError(format!("invalid JUnit XML: {error}"))),
         }
     }

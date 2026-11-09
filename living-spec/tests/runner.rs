@@ -74,6 +74,76 @@ fn fingerprints() -> Fingerprints {
 }
 
 #[test]
+fn should_panic_failure_breaks_the_linked_line() {
+    let input = "running 2 tests\ntest rust:fixture:tests/export.rs:exports::timestamps - should panic ... FAILED\ntest rust:fixture:tests/export.rs:exports::order ... ok\n---- rust:fixture:tests/export.rs:exports::timestamps stdout ----\npanic diagnostic\ntest result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out\n";
+    let outcomes = parse_libtest(input).unwrap();
+    assert_eq!(
+        outcomes[0].failure_message.as_deref(),
+        Some("panic diagnostic")
+    );
+    let dir = copy_spec();
+    let report = rescore(dir.path(), &outcomes, &fingerprints(), "fixture", "panic").unwrap();
+    assert_eq!(report.statuses[0].badge, Badge::Broken);
+    assert_eq!(report.exit_code(), 2);
+    assert!(report
+        .transitions
+        .iter()
+        .any(|event| event.note.contains("panic diagnostic")));
+}
+
+#[test]
+fn should_panic_pass_proves_the_linked_line() {
+    let input = "running 2 tests\ntest rust:fixture:tests/export.rs:exports::timestamps - should panic ... ok\ntest rust:fixture:tests/export.rs:exports::order ... ok\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
+    let outcomes = parse_libtest(input).unwrap();
+    let dir = copy_spec();
+    let report = rescore(dir.path(), &outcomes, &fingerprints(), "fixture", "panic").unwrap();
+    assert_eq!(report.statuses[0].badge, Badge::Proven);
+    assert_eq!(report.exit_code(), 0);
+}
+
+#[test]
+fn libtest_timeout_notice_is_accepted() {
+    let input = "running 1 test\ntest module::slow has been running for over 60 seconds\ntest module::slow ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
+    let outcomes = parse_libtest(input).unwrap();
+    assert_eq!(outcomes.len(), 1);
+    assert_eq!(outcomes[0].test_id, "module::slow");
+}
+
+#[test]
+fn junit_entity_cannot_hide_a_failure() {
+    for xml in [
+        "<!DOCTYPE testsuite [<!ENTITY f \"<failure/>\">]><testsuite><testcase name=\"linked\">&f;</testcase></testsuite>",
+        "<testsuite><testcase name=\"linked\">&f;</testcase></testsuite>",
+        "<testsuite><testcase name=\"&f;\"/></testsuite>",
+    ] {
+        assert!(parse_junit(xml).is_err());
+    }
+    let outcomes = parse_junit(
+        "<testsuite><testcase name=\"a&amp;b&#49;\">&lt;&#x20;&gt;</testcase></testsuite>",
+    )
+    .unwrap();
+    assert_eq!(outcomes[0].test_id, "a&b1");
+    assert_eq!(outcomes[0].status, TestStatus::Passed);
+}
+
+#[test]
+fn libtest_display_suffixes_are_conservative() {
+    let input = "running 3 tests\ntest src/lib.rs - example (line 12) - compile fail ... ok\ntest module::case - unknown ... ok\ntest module::other - should panic ... ok\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
+    let outcomes = parse_libtest(input).unwrap();
+    assert_eq!(
+        outcomes
+            .iter()
+            .map(|o| o.test_id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "src/lib.rs - example (line 12)",
+            "module::case - unknown",
+            "module::other"
+        ]
+    );
+}
+
+#[test]
 fn history_names_the_failing_parametrized_case() {
     let dir = copy_spec();
     let base = "rust:fixture:tests/export.rs:exports::timestamps";

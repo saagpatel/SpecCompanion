@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speccompanion.local/contracts/living-spec-status-v1.schema.json",
+  "type": "object",
+  "required": [
+    "schema",
+    "commit",
+    "statuses"
+  ],
+  "properties": {
+    "schema": {
+      "const": "living-spec.status/v1"
+    },
+    "commit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "statuses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/status"
+      }
+    },
+    "audit": {
+      "enum": [
+        "fresh",
+        "stored"
+      ]
+    },
+    "human_overrides": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of current resolved challenged links accepted by an explicit human override."
+    },
+    "quantifier_reports": {
+      "type": "array",
+      "items": {
+        "$ref": "living-spec-quantifier-edition-v1.schema.json#/$defs/report"
+      }
+    },
+    "boundary_reports": {
+      "type": "array",
+      "items": {
+        "$ref": "living-spec-boundary-coverage-v1.schema.json#/$defs/coverage"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "badge": {
+      "enum": [
+        "proven",
+        "broken",
+        "unproven",
+        "qualified"
+      ]
+    },
+    "status": {
+      "type": "object",
+      "required": [
+        "id",
+        "badge",
+        "reasons",
+        "tests"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*-[0-9]{3,}$"
+        },
+        "badge": {
+          "$ref": "#/$defs/badge"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "no_link",
+                  "link_challenged",
+                  "stale_revision",
+                  "test_changed",
+                  "not_executed",
+                  "test_failed",
+                  "link_unresolved",
+                  "boundary_gap",
+                  "human_override"
+                ]
+              },
+              {
+                "$ref": "#/$defs/prerequisite_broken"
+              },
+              {
+                "$ref": "#/$defs/prerequisite_unproven"
+              },
+              {
+                "$ref": "#/$defs/prerequisite_qualified"
+              },
+              {
+                "$ref": "#/$defs/dependency_cycle"
+              }
+            ]
+          }
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "test_id",
+              "status",
+              "duration_ms"
+            ],
+            "properties": {
+              "test_id": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "errored",
+                  "skipped"
+                ]
+              },
+              "duration_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "admissible": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "prerequisite_broken": {
+      "type": "object",
+      "required": [
+        "prerequisite_broken"
+      ],
+      "properties": {
+        "prerequisite_broken": {
+          "$ref": "#/$defs/dependency_path"
+        }
+      },
+      "additionalProperties": false
+    },
+    "prerequisite_unproven": {
+      "type": "object",
+      "required": [
+        "prerequisite_unproven"
+      ],
+      "properties": {
+        "prerequisite_unproven": {
+          "$ref": "#/$defs/dependency_path"
+        }
+      },
+      "additionalProperties": false
+    },
+    "prerequisite_qualified": {
+      "type": "object",
+      "required": [
+        "prerequisite_qualified"
+      ],
+      "properties": {
+        "prerequisite_qualified": {
+          "$ref": "#/$defs/dependency_path"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency_cycle": {
+      "type": "object",
+      "required": [
+        "dependency_cycle"
+      ],
+      "properties": {
+        "dependency_cycle": {
+          "$ref": "#/$defs/dependency_path"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency_path": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

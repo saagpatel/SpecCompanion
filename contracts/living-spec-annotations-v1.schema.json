@@ -1,0 +1,1128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speccompanion.local/contracts/living-spec-annotations-v1.schema.json",
+  "type": "object",
+  "required": [
+    "schema",
+    "requirements"
+  ],
+  "properties": {
+    "schema": {
+      "const": "living-spec.annotations/v1"
+    },
+    "requirements": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9]*-[0-9]{3,}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/requirement"
+      }
+    }
+  },
+  "$defs": {
+    "requirement": {
+      "type": "object",
+      "properties": {
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dependency"
+          }
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bound",
+            "type": "object"
+          }
+        },
+        "quantifier": {
+          "type": "object",
+          "$ref": "#/$defs/quantifier"
+        },
+        "boundary_cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "quantity",
+              "cases"
+            ],
+            "properties": {
+              "quantity": {
+                "type": "string"
+              },
+              "cases": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/boundaryCase"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "boundary_links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/boundaryLink"
+          }
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": [
+        "test_id",
+        "fingerprint",
+        "explanation",
+        "proposed_by",
+        "audit",
+        "revision",
+        "rename_hint"
+      ],
+      "properties": {
+        "test_id": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "proposed_by": {
+          "enum": [
+            "linker",
+            "human"
+          ]
+        },
+        "audit": {
+          "type": "object",
+          "required": [
+            "verdict",
+            "notes",
+            "revision"
+          ],
+          "properties": {
+            "verdict": {
+              "enum": [
+                "accepted",
+                "challenged"
+              ]
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "revision": {
+              "type": "string"
+            },
+            "override": {
+              "type": "object",
+              "required": [
+                "by",
+                "reason"
+              ],
+              "properties": {
+                "by": {
+                  "const": "human"
+                },
+                "reason": {
+                  "type": "string",
+                  "pattern": "\\S"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "revision": {
+          "type": "string"
+        },
+        "rename_hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "required": [
+        "id",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]*-[0-9]{3,}$"
+        },
+        "evidence": {
+          "type": "string"
+        }
+      }
+    },
+    "bound": {
+      "type": "object",
+      "required": [
+        "quantity",
+        "kind"
+      ],
+      "properties": {
+        "quantity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "value",
+                "unit",
+                "op",
+                "step",
+                "integer"
+              ],
+              "properties": {
+                "type": {
+                  "const": "numeric"
+                },
+                "value": {
+                  "type": "string",
+                  "pattern": "^-?[0-9]+(?:\\.[0-9]{1,9})?$"
+                },
+                "unit": {
+                  "enum": [
+                    "ms",
+                    "s",
+                    "min",
+                    "h",
+                    "d",
+                    "B",
+                    "KB",
+                    "MB",
+                    "GB",
+                    "KiB",
+                    "MiB",
+                    "items",
+                    "chars",
+                    "lines",
+                    "retries",
+                    "files",
+                    "percent"
+                  ]
+                },
+                "op": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "type"
+                      ],
+                      "properties": {
+                        "type": {
+                          "enum": [
+                            "lt",
+                            "le",
+                            "gt",
+                            "ge",
+                            "eq"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "lo",
+                        "hi",
+                        "inclusive_lo",
+                        "inclusive_hi"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "range"
+                        },
+                        "lo": {
+                          "type": "string",
+                          "pattern": "^-?[0-9]+(?:\\.[0-9]{1,9})?$"
+                        },
+                        "hi": {
+                          "type": "string",
+                          "pattern": "^-?[0-9]+(?:\\.[0-9]{1,9})?$"
+                        },
+                        "inclusive_lo": {
+                          "type": "boolean"
+                        },
+                        "inclusive_hi": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "step": {
+                  "type": "object",
+                  "required": [
+                    "value",
+                    "unit"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "string",
+                      "pattern": "^-?[0-9]+(?:\\.[0-9]{1,9})?$"
+                    },
+                    "unit": {
+                      "enum": [
+                        "ms",
+                        "s",
+                        "min",
+                        "h",
+                        "d",
+                        "B",
+                        "KB",
+                        "MB",
+                        "GB",
+                        "KiB",
+                        "MiB",
+                        "items",
+                        "chars",
+                        "lines",
+                        "retries",
+                        "files",
+                        "percent"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "integer": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "allowed",
+                "closed"
+              ],
+              "properties": {
+                "type": {
+                  "const": "domain"
+                },
+                "allowed": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "closed": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "boundaryCase": {
+      "type": "object",
+      "required": [
+        "position",
+        "value",
+        "unit",
+        "expected"
+      ],
+      "properties": {
+        "position": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "unit": {
+          "oneOf": [
+            {
+              "enum": [
+                "ms",
+                "s",
+                "min",
+                "h",
+                "d",
+                "B",
+                "KB",
+                "MB",
+                "GB",
+                "KiB",
+                "MiB",
+                "items",
+                "chars",
+                "lines",
+                "retries",
+                "files",
+                "percent"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expected": {
+          "enum": [
+            "accepted",
+            "rejected"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "boundaryLink": {
+      "type": "object",
+      "required": [
+        "quantity",
+        "position",
+        "value",
+        "test_id"
+      ],
+      "properties": {
+        "quantity": {
+          "type": "string"
+        },
+        "position": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "unit": {
+          "oneOf": [
+            {
+              "enum": [
+                "ms",
+                "s",
+                "min",
+                "h",
+                "d",
+                "B",
+                "KB",
+                "MB",
+                "GB",
+                "KiB",
+                "MiB",
+                "items",
+                "chars",
+                "lines",
+                "retries",
+                "files",
+                "percent"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "test_id": {
+          "type": "string"
+        },
+        "test_body": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "quantifier": {
+      "type": "object",
+      "required": [
+        "kind",
+        "domain",
+        "subject",
+        "predicate"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "existential",
+            "finite-universal",
+            "infinite-universal"
+          ]
+        },
+        "domain": {
+          "$ref": "#/$defs/domain"
+        },
+        "subject": {
+          "enum": [
+            "abs_i8",
+            "abs_wrapping_i8",
+            "clamp",
+            "clamp_buggy",
+            "saturating_add",
+            "percent_of",
+            "percent_of_buggy",
+            "utf8_roundtrip",
+            "utf8_roundtrip_buggy",
+            "sort_vec",
+            "sort_vec_buggy",
+            "dedup_vec",
+            "bytes_roundtrip"
+          ]
+        },
+        "predicate": {
+          "$ref": "#/$defs/predicate"
+        },
+        "sampling": {
+          "$ref": "#/$defs/sampling"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "infinite-universal"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "sampling"
+            ],
+            "properties": {
+              "domain": {
+                "$ref": "#/$defs/infiniteDomain"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "finite-universal"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "sampling"
+              ]
+            },
+            "properties": {
+              "domain": {
+                "$ref": "#/$defs/finiteDomain"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "existential"
+              },
+              "domain": {
+                "$ref": "#/$defs/finiteDomain"
+              }
+            },
+            "required": [
+              "kind",
+              "domain"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "sampling"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "existential"
+              },
+              "domain": {
+                "$ref": "#/$defs/infiniteDomain"
+              }
+            },
+            "required": [
+              "kind",
+              "domain"
+            ]
+          },
+          "then": {
+            "required": [
+              "sampling"
+            ]
+          }
+        }
+      ]
+    },
+    "sampling": {
+      "type": "object",
+      "required": [
+        "seed",
+        "samples"
+      ],
+      "properties": {
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        }
+      },
+      "additionalProperties": false
+    },
+    "domain": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "lo",
+            "hi"
+          ],
+          "properties": {
+            "type": {
+              "const": "int-range"
+            },
+            "lo": {
+              "type": "integer",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
+            },
+            "hi": {
+              "type": "integer",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "values"
+          ],
+          "properties": {
+            "type": {
+              "const": "enum"
+            },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1000000,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/caseValue"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "parts"
+          ],
+          "properties": {
+            "type": {
+              "const": "product"
+            },
+            "parts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/domain"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "base",
+            "size_hint"
+          ],
+          "properties": {
+            "type": {
+              "const": "unbounded"
+            },
+            "base": {
+              "enum": [
+                "int",
+                "string",
+                "bytes",
+                "vec-int"
+              ]
+            },
+            "size_hint": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "finiteDomain": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "lo",
+            "hi"
+          ],
+          "properties": {
+            "type": {
+              "const": "int-range"
+            },
+            "lo": {
+              "type": "integer",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
+            },
+            "hi": {
+              "type": "integer",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "values"
+          ],
+          "properties": {
+            "type": {
+              "const": "enum"
+            },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1000000,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/caseValue"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "parts"
+          ],
+          "properties": {
+            "type": {
+              "const": "product"
+            },
+            "parts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/finiteDomain"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "infiniteDomain": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "base",
+            "size_hint"
+          ],
+          "properties": {
+            "type": {
+              "const": "unbounded"
+            },
+            "base": {
+              "enum": [
+                "int",
+                "string",
+                "bytes",
+                "vec-int"
+              ]
+            },
+            "size_hint": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "parts"
+          ],
+          "properties": {
+            "type": {
+              "const": "product"
+            },
+            "parts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/domain"
+              },
+              "contains": {
+                "$ref": "#/$defs/infiniteDomain"
+              },
+              "minContains": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "caseValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "int"
+            },
+            "value": {
+              "type": "integer",
+              "minimum": -9223372036854775808,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "bool"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "string"
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 256
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "bytes"
+            },
+            "value": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "vec-int"
+            },
+            "value": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "integer",
+                "minimum": -9223372036854775808,
+                "maximum": 9223372036854775807
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "tuple"
+            },
+            "value": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "items": {
+                "$ref": "#/$defs/caseValue"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "operand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "literal"
+            },
+            "value": {
+              "$ref": "#/$defs/caseValue"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "source"
+          ],
+          "properties": {
+            "kind": {
+              "const": "field"
+            },
+            "source": {
+              "enum": [
+                "input",
+                "output"
+              ]
+            },
+            "path": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "predicate": {
+      "type": "object",
+      "required": [
+        "version",
+        "expression"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "expression": {
+          "$ref": "#/$defs/expression"
+        }
+      },
+      "additionalProperties": false
+    },
+    "expression": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/comparison"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "value",
+            "set"
+          ],
+          "properties": {
+            "op": {
+              "const": "in"
+            },
+            "value": {
+              "$ref": "#/$defs/operand"
+            },
+            "set": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/caseValue"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "args"
+          ],
+          "properties": {
+            "op": {
+              "enum": [
+                "and",
+                "or"
+              ]
+            },
+            "args": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/expression"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "arg"
+          ],
+          "properties": {
+            "op": {
+              "const": "not"
+            },
+            "arg": {
+              "$ref": "#/$defs/expression"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "comparison": {
+      "type": "object",
+      "required": [
+        "op",
+        "left",
+        "right"
+      ],
+      "properties": {
+        "op": {
+          "enum": [
+            "eq",
+            "ne",
+            "lt",
+            "le",
+            "gt",
+            "ge"
+          ]
+        },
+        "left": {
+          "$ref": "#/$defs/operand"
+        },
+        "right": {
+          "$ref": "#/$defs/operand"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema": "living-spec.annotations/v1",
+  "requirements": {
+    "R-001": {
+      "links": [
+        {
+          "test_id": "suite::first",
+          "fingerprint": "sha256:abc",
+          "rename_hint": null,
+          "revision": "sha256:legacy-fixture",
+          "explanation": "First test",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:legacy-fixture",
+            "notes": []
+          }
+        }
+      ],
+      "future": {
+        "enabled": true
+      }
+    },
+    "R-002": {
+      "links": [
+        {
+          "test_id": "suite::second",
+          "fingerprint": "sha256:def",
+          "rename_hint": null,
+          "revision": "sha256:legacy-fixture",
+          "explanation": "Second test",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:legacy-fixture",
+            "notes": []
+          }
+        }
+      ]
+    }
+  }
+}

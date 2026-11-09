@@ -200,6 +200,23 @@ fn renamed_link_requires_reaudit() {
     );
     assert_eq!(result.badge, Badge::Unproven);
     assert_eq!(result.reasons, [Reason::TestChanged]);
+    assert_eq!(result.tests.len(), 1);
+    assert!(!result.tests[0].admissible);
+}
+
+#[test]
+fn unsupported_annotation_schema_rejected() {
+    let dir = tempfile::tempdir_in("target").unwrap();
+    let path = dir.path().join("annotations.json");
+    fs::write(
+        &path,
+        r#"{"schema":"living-spec.annotations/v2","requirements":{}}"#,
+    )
+    .unwrap();
+    assert!(Annotations::load(path)
+        .unwrap_err()
+        .to_string()
+        .contains("unsupported annotations schema"));
 }
 
 #[test]

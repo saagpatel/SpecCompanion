@@ -14,6 +14,10 @@ pub struct Annotations {
     pub extra: BTreeMap<String, Value>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(
+    from = "RequirementAnnotationsWire",
+    into = "RequirementAnnotationsWire"
+)]
 pub struct RequirementAnnotations {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<Link>,
@@ -21,10 +25,58 @@ pub struct RequirementAnnotations {
     pub depends_on: Vec<Dependency>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bounds: Vec<Value>,
+    /// Preserve absent bounds versus an explicitly authored empty override.
+    #[serde(skip)]
+    pub bounds_present: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quantifier: Option<Value>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RequirementAnnotationsWire {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    links: Vec<Link>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    depends_on: Vec<Dependency>,
+    #[serde(
+        default,
+        deserialize_with = "present_bounds",
+        skip_serializing_if = "Option::is_none"
+    )]
+    bounds: Option<Vec<Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    quantifier: Option<Value>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
+}
+fn present_bounds<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<Value>>, D::Error> {
+    Vec::deserialize(d).map(Some)
+}
+impl From<RequirementAnnotationsWire> for RequirementAnnotations {
+    fn from(wire: RequirementAnnotationsWire) -> Self {
+        Self {
+            bounds_present: wire.bounds.is_some(),
+            bounds: wire.bounds.unwrap_or_default(),
+            links: wire.links,
+            depends_on: wire.depends_on,
+            quantifier: wire.quantifier,
+            extra: wire.extra,
+        }
+    }
+}
+impl From<RequirementAnnotations> for RequirementAnnotationsWire {
+    fn from(annotation: RequirementAnnotations) -> Self {
+        Self {
+            bounds: (annotation.bounds_present || !annotation.bounds.is_empty())
+                .then_some(annotation.bounds),
+            links: annotation.links,
+            depends_on: annotation.depends_on,
+            quantifier: annotation.quantifier,
+            extra: annotation.extra,
+        }
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Link {
@@ -80,6 +132,9 @@ pub struct Dependency {
 impl Annotations {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
         let annotations: Self = serde_json::from_reader(fs::File::open(path)?)?;
+        if annotations.schema != "living-spec.annotations/v1" {
+            return Err("unsupported annotations schema".into());
+        }
         for annotation in annotations.requirements.values() {
             for link in &annotation.links {
                 if link.audit.extra.contains_key("override")

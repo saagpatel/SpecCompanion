@@ -109,7 +109,7 @@ pub fn score_line_at_revision(
             && !revision.is_empty()
             && link.revision == revision
             && link.audit.revision == revision
-            && matches!(resolution, Resolution::Exact | Resolution::Renamed { .. });
+            && matches!(resolution, Resolution::Exact);
         for o in &matched {
             result.tests.push(TestEvidence {
                 test_id: o.test_id.clone(),
@@ -130,12 +130,13 @@ pub fn score_line_at_revision(
             continue;
         }
         match resolution {
-            Resolution::Unresolved => continue,
             Resolution::Changed | Resolution::Renamed { .. } => {
                 reason(&mut result, Reason::TestChanged);
-                continue;
             }
-            Resolution::Exact => {}
+            Resolution::Unresolved | Resolution::Exact => {}
+        }
+        if !link_admissible {
+            continue;
         }
         admissible += 1;
         if link.audit.verdict == AuditVerdict::Challenged
@@ -159,7 +160,7 @@ pub fn score_line_at_revision(
     {
         result.badge = Badge::Broken;
     } else if admissible > 0 && !result.reasons.contains(&Reason::NotExecuted) {
-        if !annotations.bounds.is_empty() && boundary_gaps.contains(id) {
+        if boundary_gaps.contains(id) {
             reason(&mut result, Reason::BoundaryGap);
         } else {
             result.badge = Badge::Proven;

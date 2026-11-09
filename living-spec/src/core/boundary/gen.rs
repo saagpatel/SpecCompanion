@@ -79,7 +79,9 @@ pub fn generate(bound: &Bound) -> Result<Vec<Example>, BoundaryError> {
             let delta = step.unit.normalize(&step.value)?;
             let center = unit.normalize(value)?;
             if delta <= 0
-                || (*integer && (value.scaled()? % 1_000_000_000 != 0 || delta != 1_000_000_000))
+                || (*integer
+                    && (value.scaled()? % 1_000_000_000 != 0
+                        || delta != unit.factor() * 1_000_000_000))
             {
                 return Err(BoundaryError::InvalidBound(
                     "invalid step/integer value".into(),

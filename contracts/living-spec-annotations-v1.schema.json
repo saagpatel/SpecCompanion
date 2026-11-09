@@ -74,6 +74,39 @@
           "items": {
             "$ref": "#/$defs/boundaryLink"
           }
+        },
+        "bounds_source": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "origin"
+              ],
+              "properties": {
+                "origin": {
+                  "const": "authored"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "origin",
+                "revision"
+              ],
+              "properties": {
+                "origin": {
+                  "const": "inferred"
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
         }
       }
     },

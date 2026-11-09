@@ -419,11 +419,37 @@ fn stale_all(spec: &Spec, reason: &str) -> Freshness {
 }
 
 fn relative_file(base: &Path, file: &Path) -> Result<String> {
-    let base = fs::canonicalize(base)?;
-    let file = fs::canonicalize(file)?;
+    let cwd = std::env::current_dir()?;
+    let base = if base.is_absolute() {
+        base.to_path_buf()
+    } else {
+        cwd.join(base)
+    };
+    let file = if file.is_absolute() {
+        file.to_path_buf()
+    } else {
+        cwd.join(file)
+    };
     let left: Vec<_> = base.components().collect();
     let right: Vec<_> = file.components().collect();
     let common = left.iter().zip(&right).take_while(|(a, b)| a == b).count();
+    // Walking back through a symlink (or a lexical `..`) may not reach the
+    // shared prefix. Keep the absolute caller path in that case.
+    let mut prefix = std::path::PathBuf::new();
+    for component in &left[..common] {
+        prefix.push(component);
+    }
+    for component in &left[common..] {
+        prefix.push(component);
+        if !matches!(component, std::path::Component::Normal(_))
+            || fs::symlink_metadata(&prefix).map_or(true, |m| m.file_type().is_symlink())
+        {
+            return Ok(file.to_string_lossy().into_owned());
+        }
+    }
+    if common == 0 {
+        return Ok(file.to_string_lossy().into_owned());
+    }
     let mut path = std::path::PathBuf::new();
     for _ in common..left.len() {
         path.push("..");

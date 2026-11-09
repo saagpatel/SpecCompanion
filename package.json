@@ -87,7 +87,7 @@
     "tailwindcss": "^4.1.18",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.46.1",
-    "vite": "^7.3.5",
+    "vite": "^7.3.7",
     "web-vitals": "^5.1.0"
   },
   "pnpm": {

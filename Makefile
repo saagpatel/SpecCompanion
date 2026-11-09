@@ -25,6 +25,8 @@ living-spec-layers:
 living-spec-test: living-spec-layers
 	cd living-spec && cargo fmt -- --check
 	cd living-spec && cargo clippy --offline --locked --all-targets -- -D warnings
+	# CI pins the crate's MSRV (1.95); lint with it too when installed so CI-only lints surface locally.
+	if rustup toolchain list 2>/dev/null | grep -q '^1\.95\.0'; then cd living-spec && CARGO_TARGET_DIR=target/msrv cargo +1.95.0 clippy --offline --locked --all-targets -- -D warnings; fi
 	mkdir -p living-spec/target
 	cd living-spec && bash -o pipefail -c 'cargo test --offline --locked 2>&1 | tee target/test-output.txt'
 

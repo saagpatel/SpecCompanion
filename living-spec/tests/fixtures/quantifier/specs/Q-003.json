@@ -1,0 +1,34 @@
+{
+  "id": "Q-003",
+  "text": "Clamping each integer from -10 through 10 returns a value at most 100.",
+  "quantifier": {
+    "kind": "finite-universal",
+    "domain": {
+      "type": "int-range",
+      "lo": -10,
+      "hi": 10
+    },
+    "subject": "clamp",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "le",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "int",
+            "value": 100
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

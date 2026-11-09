@@ -1,0 +1,38 @@
+{
+  "id": "Q-014",
+  "text": "percent_of returns a nonnegative value for every integer input.",
+  "quantifier": {
+    "kind": "infinite-universal",
+    "domain": {
+      "type": "unbounded",
+      "base": "int",
+      "size_hint": 4
+    },
+    "subject": "percent_of",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "ge",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "int",
+            "value": 0
+          }
+        }
+      }
+    },
+    "sampling": {
+      "seed": 14,
+      "samples": 12
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

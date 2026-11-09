@@ -1,0 +1,38 @@
+{
+  "id": "Q-020",
+  "text": "percent_of_buggy returns no result above 100 for any integer input.",
+  "quantifier": {
+    "kind": "infinite-universal",
+    "domain": {
+      "type": "unbounded",
+      "base": "int",
+      "size_hint": 4
+    },
+    "subject": "percent_of_buggy",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "le",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "literal",
+          "value": {
+            "type": "int",
+            "value": 100
+          }
+        }
+      }
+    },
+    "sampling": {
+      "seed": 20,
+      "samples": 12
+    }
+  },
+  "expected": {
+    "result": "counterexample-found",
+    "min_failures": 1
+  }
+}

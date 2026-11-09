@@ -1,0 +1,35 @@
+{
+  "id": "Q-016",
+  "text": "A byte round trip preserves every possible byte sequence.",
+  "quantifier": {
+    "kind": "infinite-universal",
+    "domain": {
+      "type": "unbounded",
+      "base": "bytes",
+      "size_hint": 4
+    },
+    "subject": "bytes_roundtrip",
+    "predicate": {
+      "version": 1,
+      "expression": {
+        "op": "eq",
+        "left": {
+          "kind": "field",
+          "source": "output"
+        },
+        "right": {
+          "kind": "field",
+          "source": "input"
+        }
+      }
+    },
+    "sampling": {
+      "seed": 16,
+      "samples": 12
+    }
+  },
+  "expected": {
+    "result": "no-counterexample-in-tested-cases",
+    "min_failures": 0
+  }
+}

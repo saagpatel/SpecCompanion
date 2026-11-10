@@ -1,11 +1,13 @@
 {
   "inputs": {
-    "digest": "sha256:bbe568cfe75b8495ab145818528ad061fa1e244b02e807f1223836b6ded4db35",
+    "digest": "sha256:f68ed0192c6537f8a6859a4e84621c9baf7307b37ea1937c34e674dda96eee5e",
     "tool_version": "0.1.0",
     "results_file": "../target/test-output.txt",
-    "results_digest": "sha256:12a212d88db95bddbb19ca068108bfca751b0e2595750396eccff132ccac99f3",
+    "results_digest": "sha256:d2c1bb08fb271069b67924505202a603aadd949e28d35cb6e8fd6eb043aa77c7",
     "results_format": "libtest",
     "outcome_ids": {},
+    "mutation_digest": "sha256:d50116af24c30411f2f32c51d18a8be6ad6e9679c309c8bfd97987c7534e8f24",
+    "mutation_file": "mutation.json",
     "requirements": {
       "LS-001": {
         "digest": "sha256:25e8a3adc853ba5652dccc3eefa5f6a46512dfb2a88fe9175c14e5441d74c694",
@@ -22,7 +24,7 @@
           "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:d1d1cda292a90d6b26c9fba537327cde6b8e6f384c7c98373a7d738d38bfb27d"
+        "receipt_digest": "sha256:eee1207131b87f7cf5e76c78d699b55fb99f803b1dd41ae133d984007ed7f46d"
       },
       "LS-002": {
         "digest": "sha256:23a40237994a6575d2f6ecef6fa5d95fae7961f70fdb3e9ef3daabeccf8d13de",
@@ -39,7 +41,7 @@
           "libtest:core:tests/core.rs:fenced_examples_are_ignored"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:61d0052ac9d53e5764113bcd08400911cb0ae7ee7ff27c1e22ebc4bb41924e84"
+        "receipt_digest": "sha256:cdbdd1c2b62c9d07fa7f9dcd7bd36543ca02a816a6fdd780a1544cf779c92041"
       },
       "LS-003": {
         "digest": "sha256:fdfe728c4d4a255bb32cd52fc971890baf1af604b82c9a24565530496bff2930",
@@ -56,7 +58,7 @@
           "libtest:cli:tests/cli.rs:link_write_preserves_human_metadata_other_sections_and_is_idempotent"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:c91622dc6c430960d44b90c81e8aa6334f392c15cf0e739dd91808789bec548a"
+        "receipt_digest": "sha256:b1b0f9e021a50fb4faef70a62a93f82ea8372b7aedbab826c145db41c86ea78d"
       },
       "LS-004": {
         "digest": "sha256:9b166eec6bc652ee3078a63a73e4dc359b8d2f0903884e873ee979dcef9c8edd",
@@ -73,7 +75,7 @@
           "libtest:core:tests/core.rs:roundtrip_and_orphans"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:dc137103ced2b4013c1c66e771433a19427f6940cca9c8b847bd20106ad9f75b"
+        "receipt_digest": "sha256:1c1d52915cb5ce48a0df1d26ca554d79814c34019e1b5f14237e188bd5e5f87e"
       },
       "LS-005": {
         "digest": "sha256:2fe98df38b7299b8795f2095b81a6b2a6ff46eaa2bbd9785126e96eb587fcf18",
@@ -90,7 +92,7 @@
           "libtest:pipeline:tests/pipeline.rs:renamed_link_is_rewritten_with_history_note"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:ea871154b3616b6d210f0b03683a603088cdf2e1a5b3276f292c6db7f2801981"
+        "receipt_digest": "sha256:fe290ac45d49a0a7b09a8359f6857b4d0209f0aac120da1aeb776d085df8ab85"
       },
       "LS-006": {
         "digest": "sha256:7f7b6a06919eb9d337526c0ae438862cbac692a7e63fbf0325281c31cf26cb9d",
@@ -107,7 +109,7 @@
           "libtest:agents:tests/agents.rs:rust_python_and_javascript_index_entries_have_scoped_spans"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:045cf8f59f64cf63e48a57c789be1b8b19911c94ab3958cb1cd856c18a0cc591"
+        "receipt_digest": "sha256:72bc48780e521417339c509444be3365a1ead161e671757acf262c54a689db40"
       },
       "LS-007": {
         "digest": "sha256:a41ddea923844eb4410d7b5f02e1e31a73b9c39bf13b7d10ced64844c1f983d5",
@@ -124,7 +126,7 @@
           "libtest:agents_partial:tests/agents_partial.rs:revised_digests_preserve_literals_and_trailing_spaces"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:bc54721a3d1160c35cbfd7c9a3a226e3d463481ee4ffb8583fd49e7b9b255f1c"
+        "receipt_digest": "sha256:c2968c9b2f0c734f1a98c143d859aa30961daa22394c8ae9eb8fa747de7abff4"
       },
       "LS-008": {
         "digest": "sha256:bcf05d1d44e46028eab2c4cc09df2b6c36ecbc351b137ff50f4ced49e7ff7184",
@@ -141,7 +143,7 @@
           "libtest:core:tests/core.rs:ambiguous_rename_is_unresolved"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:7beba1ccbdf85c860e4acc4304eae9b53a3950a62563f9cba2823d11931f8fe9"
+        "receipt_digest": "sha256:e2ee1141269c72f72c0821aeb2e3943e72f7f6031303aed48682cfca39bc7b5d"
       },
       "LS-009": {
         "digest": "sha256:ab9c60c47775cea5c213459cf894023c0a9859a4161d4de33717da6f5dfda027",
@@ -158,7 +160,7 @@
           "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:475f678725d3f9e452d44354db1bdfacc9f779818f562b0c0f5714283dbf3398"
+        "receipt_digest": "sha256:e8a2593fc336e4754d6692e61a8cf130278ad8536ba9c9c487c095e01d3bda15"
       },
       "LS-010": {
         "digest": "sha256:8e4f615973ed648c6779776bd0c9b3ed94d83e554d28b1d3d1246c7f2360c4ab",
@@ -175,7 +177,7 @@
           "libtest:cli:tests/cli.rs:audit_cli_reports_challenge_usage_and_input_errors"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:118585e794570357e63791735c6f037a48e206cdc474f54994b32c11195e629d"
+        "receipt_digest": "sha256:1c16833d3152195cbfda5e8f4760000c7358ccfd88194cf5caa55d2b334058e6"
       },
       "LS-011": {
         "digest": "sha256:34e25ad2e2e31c43d7d3953d185a3172a8da86f1630d59284443faf945bf1a09",
@@ -192,7 +194,7 @@
           "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:43c31c28d5a9b7169e76ecb90d0924a5e08618f6442259b6e00e6af7836c22ab"
+        "receipt_digest": "sha256:2c640b8667f10a7f3721f27805bd1a283aec2c911121e882b5742ce29a2ad04d"
       },
       "LS-012": {
         "digest": "sha256:b38bbb153d47b0e131a5816ecfc3df0e77c00ab2cb6397e9b60ccff0cd7a698a",
@@ -209,7 +211,7 @@
           "libtest:living_spec:src/lib.rs:adapters::tests::libtest_scopes_same_name_to_each_binary_and_doc_tests"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:ce16b6201d0d6360a3a4db575448c3ab9e5eb48ce5a241d8e61b842435f9e453"
+        "receipt_digest": "sha256:064ea2f6c4d04f4588f05d4c7d9cb1da4de1cc7c521de5ba04e3d6e3cdd054a3"
       },
       "LS-013": {
         "digest": "sha256:5b3d226492e41447cabd31f55128bc3c8a90e6b16bc3bf186fb49efaf7b519a8",
@@ -226,7 +228,7 @@
           "libtest:runner:tests/runner.rs:adapters_preserve_case_statuses"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:7b430c8b9cc13927a7646bb468ed4b0fd4c3915c30cf0c17cdeabbdf02c79c57"
+        "receipt_digest": "sha256:0ced68aec5bb3174ec842cc326d53b91239fa233f664cc514a4098fe79158958"
       },
       "LS-014": {
         "digest": "sha256:7038f90fb14353a7e65616e1317d4ee217d69164e728cdecf71d993d1fa89a3a",
@@ -243,7 +245,7 @@
           "libtest:core:tests/core.rs:audit_revision_must_also_be_current"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:1e5c2e9e27705c1083631482c0ee2218ed0de32615f626030d3e5ca58271071d"
+        "receipt_digest": "sha256:71fb9a2db57fa79b1e4712b4aa9206218f69bea316ee7bf4ab38f1f0e4eae819"
       },
       "LS-015": {
         "digest": "sha256:7fa858b4cc4768ef21d8bc0d9c3ab17feafe5b119303d7fac76f4160e68b826e",
@@ -260,7 +262,7 @@
           "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:fe8c95cb9bf7f6bb1e0c8ec15404cd0b7399cae4af39d5e33d1e19b0a8b20245"
+        "receipt_digest": "sha256:fdc5ae471695819d56ced9c7ec526700adaa8d346c144dfceac03c9e03e0a93c"
       },
       "LS-016": {
         "digest": "sha256:da675fa0c3cc9a13c7dc17a48a2c16432f5fcd49234cb042d17388c86e325e36",
@@ -277,7 +279,7 @@
           "libtest:core:tests/core.rs:challenged_unresolved_link_still_breaks"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:4327b130c07a87fda8cfce52b37ca767ffdbc2fedb944f3ab4d2d920677ad592"
+        "receipt_digest": "sha256:1833520ec556157ea4b1cf37da4ef74c43585f36f1b5699ae4e77ba7f72143a9"
       },
       "LS-017": {
         "digest": "sha256:c1f99a27443b029280cb1028914eeeead36144933d777ee3f6f3b56a9d41d09f",
@@ -294,7 +296,7 @@
           "libtest:pipeline:tests/pipeline.rs:garbled_results_exit_1_without_writing_status"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:c924231700c391170b77abe158a6f7a62d26783c43d31b6fac6d2110a69b9606"
+        "receipt_digest": "sha256:52ca8b585e535bb11a85c1de96602486db488592f2817f1bcfbc8d5ae802f881"
       },
       "LS-018": {
         "digest": "sha256:64edcf2385f6becb3b745737795f3ee03e5827468ad7ba5eed14aa43310abf5b",
@@ -317,7 +319,7 @@
           "libtest:pipeline:tests/pipeline.rs:pre_push_hook_blocks_a_broken_scored_line"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:a40d8cc89adf5efa1be25066fbad58d655690fc0a5598ad320107107747ab923"
+        "receipt_digest": "sha256:2c281f18a1f3d255832e680db1423b53b85836fc56fd3280248a553f2720f6f7"
       },
       "LS-019": {
         "digest": "sha256:08f2a57558a10434abdf3167afd4869fb93b2c7bce68c371941d8ad69957ef77",
@@ -334,7 +336,7 @@
           "libtest:agents:tests/agents.rs:linker_proposal_resolves_and_explains_a_genuine_timestamp_test"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:47a6981d3fdff96bff213e00f5fb682f30e3040b18f08f0e7f6c1461baf61dde"
+        "receipt_digest": "sha256:19bb09f9b6d4f26c95cd807e37f62e234256ddf840f0940cf66e833ee0947dc7"
       },
       "LS-020": {
         "digest": "sha256:297266417a701673cda3b2a3896f2e8f6f35b297b59ed33d31b4ba80b79844d9",
@@ -351,7 +353,7 @@
           "libtest:web:tests/web.rs:script_in_a_requirement_is_escaped"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:fb2eda3c3adcf43d994c117a38b85a1acc45a1ed3d224639383917b62e4849c3"
+        "receipt_digest": "sha256:d2fc682a1983ee5a2cf0776ba60d66bbf2d0e11ad0a16036ad44f1626301322b"
       },
       "LS-021": {
         "digest": "sha256:97aa6188e723f9b80ac67e18ab27aac5b13d7a6227e3498c4d88002b2bed9cd3",
@@ -368,10 +370,10 @@
           "libtest:cli:tests/cli.rs:include_adds_a_root_and_registry_must_be_explicit"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:99b9979607a64922ccaf1d43cd284620e4f6ce351f53d2bc34d63172f5f0e761"
+        "receipt_digest": "sha256:bc5a08012c264c4ec89ae1233ae1cf6ecf8b879412d3817cfbf462f2243f6432"
       },
       "LS-022": {
-        "digest": "sha256:9aaa6b684f70d8e4fe3eb22b5b47541ba418715587d651ffd42c463f9909f599",
+        "digest": "sha256:9426063118ff0370cf20297017f0a4b7039048d6522e431788115c8c9bd191e5",
         "own_badge": "proven",
         "revision": "sha256:7181853d21a4c6c8f1ce7954ea032839b51308af44d7f6e66de26766904e7d34",
         "outcomes": [
@@ -385,7 +387,7 @@
           "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:909f8593c57e43634b3bac0703a558b3cc24408d05112f2d9404fc66ace4175b"
+        "receipt_digest": "sha256:33fe948a3713976d3ebe094bb12b431a5745521d40ef1d100d484f4e146fbacb"
       },
       "LS-023": {
         "digest": "sha256:b72be36defa7e0c4b8ea5f1403fd1e0467feaaee083d17d1c5439242b1995ccf",
@@ -408,7 +410,7 @@
           "libtest:boundary:tests/boundary.rs:delay_boundary_has_adjacent_cases_around_thirty_seconds"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:fec242144a00b8454a429d7740923444dd066bde3a2b02d292c4107a9c5c2985"
+        "receipt_digest": "sha256:3c0c118cefe14d4922e7acec2c5332d88ba6452b79569f77f22fc3536816b493"
       },
       "LS-024": {
         "digest": "sha256:ecca0445525ad82695d82be9a45af0d48f1961d83dd67edd523c708eca25a01f",
@@ -427,7 +429,7 @@
         "depends_on": [
           "LS-023"
         ],
-        "receipt_digest": "sha256:0527f4311d98d78cb75a86b93d0d45fc10cc131d129d6870f64a30ddd65bcc38"
+        "receipt_digest": "sha256:33461191563c6b9dbb1be49ac720673ccd356d8aafb6f3c8417a108907831cfa"
       },
       "LS-025": {
         "digest": "sha256:9d2dc612a4f9d80ca7a311b820e8e43dbe864b4f7cba2c989025bb332e68138d",
@@ -444,7 +446,7 @@
           "libtest:deps:tests/deps.rs:missing_evidence_is_error"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:efdc3293d572dfecc347ada7145e45dd14a1574c47876f74498dbf85a1ce9f91"
+        "receipt_digest": "sha256:a41fda68282da6973287ac01b1422213bff92d9e5bc6f53b209d4135b7e1378e"
       },
       "LS-026": {
         "digest": "sha256:a36cbdda4e33f2051e4eccb2f4c8d5dfcc78fc41bf3b88486903cab217f7342a",
@@ -461,7 +463,7 @@
           "libtest:web:tests/web.rs:seeded_view_reports_counts_and_broken_drilldown"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:8faf55c5c2a25694c139ff3da58d940f40da2da1846221260cb1482eea2c85cf"
+        "receipt_digest": "sha256:87a5417dfd0400119a46f74e14aa986b14cbbe1c668bfe6480c2cf140f8b7dcc"
       },
       "LS-027": {
         "digest": "sha256:172e980564969db4c0694b0efcbafc4d9086b48640650ba286211fe420af4d59",
@@ -478,7 +480,7 @@
           "libtest:cli:tests/cli.rs:quantifier_cli_dispatches_checks_and_writes_each_export"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:a902486ced5477a8ad98dd99d536cf1064b0ceeba7e827f33336fd9aaa4e2b1b"
+        "receipt_digest": "sha256:24c464cbd55db182b568348169a8bca55d8af4d71329de7788fc2924deb48ef6"
       },
       "LS-028": {
         "digest": "sha256:18f9ae17dcbd23e9e01e2314d22e205ebeeed38243d3ead0186ddd1b84a14a50",
@@ -495,7 +497,7 @@
           "libtest:quantifier:tests/quantifier.rs:sampled_quantifier_records_seed_and_untested_remainder"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:4abfda00a4a60199a7df3985d15237de084dd9468dd578409c441ca9986444f9"
+        "receipt_digest": "sha256:660585b4a591cb737723cdb4c3a496800142152e85afa6971b6430360dca50a5"
       },
       "LS-029": {
         "digest": "sha256:957677d8b0d5e7c3b33623c41ccc8a03997e8c09dc048bd6abe751a643ee818f",
@@ -514,7 +516,7 @@
         "depends_on": [
           "LS-025"
         ],
-        "receipt_digest": "sha256:fe56eba50c5f9c19888d34542e623065aa51c047c41a4197abf03306d60f2251"
+        "receipt_digest": "sha256:21c0e1bbdf5d82c7c2adb34273aa3f6a94d821e998d916354fdcfd19d01bc170"
       },
       "LS-030": {
         "digest": "sha256:f12619ddce944e89fbd59e3015539c8731905a59f189f41a051014e932626707",
@@ -531,7 +533,7 @@
           "libtest:pipeline:tests/pipeline.rs:malformed_previous_status_is_not_reset"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:ecb854fecd67cad6446a4eb952eb1dd1ce9b53a83f1cb02e50a55a112c7be292"
+        "receipt_digest": "sha256:e4f42d1318d6565bac636e72db1b0aea81bf9e9a34ed35b8bcdd3c09a5e44145"
       },
       "LS-031": {
         "digest": "sha256:4e69ccd4e280abf7a524cfc094ec6f78cb1a8c67ee970595c0577c0dadba2612",
@@ -548,7 +550,7 @@
           "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:9685bb6084155f7933ab5e2f36fa8ff05df104b0b2b5985f6ecd7ac0694814c1"
+        "receipt_digest": "sha256:37f205d0b4e7138a3467a3e36536dc7a99934848c0abbcabd01e99be716c0e31"
       },
       "LS-032": {
         "digest": "sha256:e47cf04dd84f4e5da333d2cbd7ec92a6db45e62910927dc63c51c538bdc41883",
@@ -565,10 +567,10 @@
           "libtest:cli:tests/cli.rs:check_command_still_reports_orphans"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:4fc21e08dc14843ddf1017e2105ad11035bcdffb34946a9e38a68fdbf1dcd2a8"
+        "receipt_digest": "sha256:0f1ad29ce5f6d5e4662d9899cecfcde00c4a5762e77750f5d06dc2a2f8d2089a"
       },
       "LS-033": {
-        "digest": "sha256:3e9c9cfaf9c685e8b1f6de1b7d1807c6f0347ba32adf82dd73faae0002625026",
+        "digest": "sha256:bef3e98450c8a4cd0d5a7946e582c6dd748d6553d5a7709f40b102311b6f8f73",
         "own_badge": "proven",
         "revision": "sha256:a0e4205f8312b7b6a89d67351be939dbe9bfe78a1964f0900985b4abd589e951",
         "outcomes": [
@@ -582,12 +584,12 @@
           "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec"
         ],
         "depends_on": [],
-        "receipt_digest": "sha256:1f393b7b41053c0c6ccc007ec79a0761ae1ff4cbb57fe96fef2a67ae828e0fbd"
+        "receipt_digest": "sha256:8e14393ea3ccfbe934c6a69a21f102d027293ff8a9303c471c821121909ae9f2"
       }
     }
   },
   "schema": "living-spec.status/v1",
-  "commit": "730e56848ee572d2d7455cc8c4fd076dba5da383",
+  "commit": "b4f6f92047c454e95f08a68cc06d0c0b09a3cd06",
   "audit": "fresh",
   "human_overrides": 0,
   "statuses": [
@@ -602,7 +604,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-002",
@@ -615,7 +623,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-003",
@@ -628,7 +642,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-004",
@@ -641,7 +661,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-005",
@@ -654,7 +680,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-006",
@@ -667,7 +699,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-007",
@@ -680,7 +718,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-008",
@@ -693,7 +737,80 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "survived",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": [
+          {
+            "id": "m-a39d724fb0c4",
+            "file": "src/core/test_identity.rs",
+            "function": "resolve_link_with_identities",
+            "line": 101,
+            "ordinal": 48,
+            "operator": "cmp_flip",
+            "original": "==",
+            "replacement": "!=",
+            "outcome": "survived"
+          },
+          {
+            "id": "m-5fb288f0a0c0",
+            "file": "src/core/test_identity.rs",
+            "function": "resolve_link_with_identities",
+            "line": 121,
+            "ordinal": 189,
+            "operator": "bool_swap",
+            "original": "&&",
+            "replacement": "||",
+            "outcome": "survived"
+          },
+          {
+            "id": "m-c62504b4817d",
+            "file": "src/core/test_identity.rs",
+            "function": "resolve_link_with_identities",
+            "line": 107,
+            "ordinal": 80,
+            "operator": "cmp_flip",
+            "original": "==",
+            "replacement": "!=",
+            "outcome": "survived"
+          },
+          {
+            "id": "m-1e20852ab841",
+            "file": "src/core/test_identity.rs",
+            "function": "resolve_link_with_identities",
+            "line": 114,
+            "ordinal": 113,
+            "operator": "cmp_flip",
+            "original": "==",
+            "replacement": "!=",
+            "outcome": "survived"
+          },
+          {
+            "id": "m-7753246a4d14",
+            "file": "src/core/test_identity.rs",
+            "function": "resolve_link_with_identities",
+            "line": 121,
+            "ordinal": 184,
+            "operator": "cmp_flip",
+            "original": "==",
+            "replacement": "!=",
+            "outcome": "survived"
+          },
+          {
+            "id": "m-a24e25cad52e",
+            "file": "src/core/test_identity.rs",
+            "function": "resolve_link_with_identities",
+            "line": 121,
+            "ordinal": 194,
+            "operator": "cmp_flip",
+            "original": "==",
+            "replacement": "!=",
+            "outcome": "survived"
+          }
+        ]
+      }
     },
     {
       "id": "LS-009",
@@ -706,7 +823,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-010",
@@ -719,7 +842,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-011",
@@ -732,7 +861,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-012",
@@ -745,7 +880,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-013",
@@ -758,7 +899,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-014",
@@ -771,7 +918,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-015",
@@ -784,7 +937,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-016",
@@ -797,7 +956,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-017",
@@ -810,7 +975,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-018",
@@ -829,7 +1000,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-019",
@@ -842,7 +1019,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-020",
@@ -855,7 +1038,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-021",
@@ -868,7 +1057,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "error",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-022",
@@ -881,7 +1076,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "mutation_checked",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-023",
@@ -894,7 +1095,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "error",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-024",
@@ -907,7 +1114,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-025",
@@ -920,7 +1133,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-026",
@@ -933,7 +1152,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-027",
@@ -946,7 +1171,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-028",
@@ -959,7 +1190,36 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "survived",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": [
+          {
+            "id": "m-b157926af7d8",
+            "file": "src/quantifier/mod.rs",
+            "function": "check_claim",
+            "line": 148,
+            "ordinal": 39,
+            "operator": "cmp_flip",
+            "original": "!=",
+            "replacement": "==",
+            "outcome": "survived"
+          },
+          {
+            "id": "m-6736ec4b8387",
+            "file": "src/quantifier/mod.rs",
+            "function": "check_claim",
+            "line": 148,
+            "ordinal": 33,
+            "operator": "bool_swap",
+            "original": "&&",
+            "replacement": "||",
+            "outcome": "survived"
+          }
+        ]
+      }
     },
     {
       "id": "LS-029",
@@ -972,7 +1232,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-030",
@@ -985,7 +1251,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-031",
@@ -998,7 +1270,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-032",
@@ -1011,7 +1289,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "unsupported",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     },
     {
       "id": "LS-033",
@@ -1024,7 +1308,13 @@
           "duration_ms": null,
           "admissible": true
         }
-      ]
+      ],
+      "mutation": {
+        "state": "mutation_checked",
+        "waived": 0,
+        "signed_off": 0,
+        "survivors": []
+      }
     }
   ],
   "quantifier_reports": [

@@ -1,0 +1,651 @@
+{
+  "schema": "living-spec.mutation/v1",
+  "engine": "rust-cargo-v1",
+  "links": [
+    {
+      "requirement": "LS-001",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link",
+      "test_fingerprint": "sha256:a3d3382f6960db339605b3f76052f9de1938c6509c7cac5a7475c711142f294c",
+      "requirement_revision": "sha256:7076593f36f4dd0a7d1899c203ebbde8f08e61ec6724714175b803ff6e47fe85",
+      "subject_digest": "sha256:bea4499940f3058b1d4b05da9fc6d9e9641a9fe19527bddbf4bb93d601ae2845",
+      "target": {
+        "kind": "test",
+        "name": "pipeline"
+      },
+      "baseline_passes": 2,
+      "status": "unsupported",
+      "reason": "no viable mutants",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-002",
+      "test_id": "libtest:core:tests/core.rs:fenced_examples_are_ignored",
+      "test_fingerprint": "sha256:a3b8d5c64811bec09c7b9c8c9a5d8420194dbc951ad7be954074d20df1061623",
+      "requirement_revision": "sha256:4f384f5d759d9c79c6a68a513c49950f54ed6e230418f157b06273327334e7bc",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-003",
+      "test_id": "libtest:cli:tests/cli.rs:link_write_preserves_human_metadata_other_sections_and_is_idempotent",
+      "test_fingerprint": "sha256:9951265a9bb5bb26452536ccca5ff4de697a2e017f1e4750d6a12d6e65a0e44a",
+      "requirement_revision": "sha256:ccd2636f815ae51b5ca984a1ba84cd4dc438a8c572897367f9236cd6f5863bc7",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-004",
+      "test_id": "libtest:core:tests/core.rs:roundtrip_and_orphans",
+      "test_fingerprint": "sha256:90c8f21315f073799e3893cfe62c236febc8f340195f57187232fdfb45a72ecd",
+      "requirement_revision": "sha256:1fdbd98daeaae2f62930829b4f416a156d7fa18316be8ce31bfa4ffdd19df137",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-005",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:renamed_link_is_rewritten_with_history_note",
+      "test_fingerprint": "sha256:a93dd4bcb4a5e1c1ca8590ad5338b535238496f0ed697eafdec808c1052bd0e7",
+      "requirement_revision": "sha256:e72cd99cde3660baefe3b6771c5b7d1db983190f4117ad42398de57766f08931",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-006",
+      "test_id": "libtest:agents:tests/agents.rs:rust_python_and_javascript_index_entries_have_scoped_spans",
+      "test_fingerprint": "sha256:51bd70e65f880e1b45cf16e0832f8f01a9f7026e9d81e666cf7c8607db3de384",
+      "requirement_revision": "sha256:3bdc2d0b2bb7444dd55492ebc08785bb2f6ee4865891d598c0096d8802fa3af6",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-007",
+      "test_id": "libtest:agents_partial:tests/agents_partial.rs:revised_digests_preserve_literals_and_trailing_spaces",
+      "test_fingerprint": "sha256:2b76712b1d9cf956749e64b27b553b000c660fa1bad7208b6e4afd12334f2a68",
+      "requirement_revision": "sha256:2f2f8bd1c2587ee53c14ac46fc3e36cfc4e6f75cbb0d30eacd1a1d5253428a43",
+      "subject_digest": "sha256:f38a4debc93b6d90997cbb4513709990530b751d7e10f3fd2b961d05bba40aca",
+      "target": {
+        "kind": "test",
+        "name": "agents_partial"
+      },
+      "baseline_passes": 2,
+      "status": "unsupported",
+      "reason": "no viable mutants",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-008",
+      "test_id": "libtest:core:tests/core.rs:ambiguous_rename_is_unresolved",
+      "test_fingerprint": "sha256:d41df928155331acbb70c2a73c07a2cfe0fff2f27425d4520210e59a0df42e8e",
+      "requirement_revision": "sha256:fc71e2af5f55d6f089328c3b548fd306a0b0a0e65a1513816c1078b9acca7524",
+      "subject_digest": "sha256:41217e23e992fb80092751e9cacc211c6e9d13e4c283b58db3c3ac24b3f345a3",
+      "target": {
+        "kind": "test",
+        "name": "core"
+      },
+      "baseline_passes": 2,
+      "status": "survived",
+      "mutants": [
+        {
+          "id": "m-a39d724fb0c4",
+          "file": "src/core/test_identity.rs",
+          "function": "resolve_link_with_identities",
+          "line": 101,
+          "ordinal": 48,
+          "operator": "cmp_flip",
+          "original": "==",
+          "replacement": "!=",
+          "outcome": "survived"
+        },
+        {
+          "id": "m-b2a37d991233",
+          "file": "src/core/test_identity.rs",
+          "function": "resolve_link_with_identities",
+          "line": 127,
+          "ordinal": 246,
+          "operator": "arith_swap",
+          "original": "*",
+          "replacement": "/",
+          "outcome": "unviable"
+        },
+        {
+          "id": "m-5fb288f0a0c0",
+          "file": "src/core/test_identity.rs",
+          "function": "resolve_link_with_identities",
+          "line": 121,
+          "ordinal": 189,
+          "operator": "bool_swap",
+          "original": "&&",
+          "replacement": "||",
+          "outcome": "survived"
+        },
+        {
+          "id": "m-c62504b4817d",
+          "file": "src/core/test_identity.rs",
+          "function": "resolve_link_with_identities",
+          "line": 107,
+          "ordinal": 80,
+          "operator": "cmp_flip",
+          "original": "==",
+          "replacement": "!=",
+          "outcome": "survived"
+        },
+        {
+          "id": "m-1e20852ab841",
+          "file": "src/core/test_identity.rs",
+          "function": "resolve_link_with_identities",
+          "line": 114,
+          "ordinal": 113,
+          "operator": "cmp_flip",
+          "original": "==",
+          "replacement": "!=",
+          "outcome": "survived"
+        },
+        {
+          "id": "m-7753246a4d14",
+          "file": "src/core/test_identity.rs",
+          "function": "resolve_link_with_identities",
+          "line": 121,
+          "ordinal": 184,
+          "operator": "cmp_flip",
+          "original": "==",
+          "replacement": "!=",
+          "outcome": "survived"
+        },
+        {
+          "id": "m-a24e25cad52e",
+          "file": "src/core/test_identity.rs",
+          "function": "resolve_link_with_identities",
+          "line": 121,
+          "ordinal": 194,
+          "operator": "cmp_flip",
+          "original": "==",
+          "replacement": "!=",
+          "outcome": "survived"
+        },
+        {
+          "id": "m-627b0573eb9b",
+          "file": "src/core/test_identity.rs",
+          "function": "resolve_link_with_identities",
+          "line": 124,
+          "ordinal": 219,
+          "operator": "cmp_flip",
+          "original": "<",
+          "replacement": ">=",
+          "outcome": "unviable"
+        }
+      ]
+    },
+    {
+      "requirement": "LS-009",
+      "test_id": "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged",
+      "test_fingerprint": "sha256:803e5c8d325426df350545e69a40e8053578f9cd86243643c0b7e7f5bef29dff",
+      "requirement_revision": "sha256:7d3b61f1f33a730de67f18e78f03fbff204d8ee64aa58b3865c06482859d6b65",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-010",
+      "test_id": "libtest:cli:tests/cli.rs:audit_cli_reports_challenge_usage_and_input_errors",
+      "test_fingerprint": "sha256:1c54e9676113b762d1bc7f3253d24edbd010c2ad704e338841bac75d5d5642f0",
+      "requirement_revision": "sha256:f4ac61ac7e45459d5dda6a22df6d63bbf69b36e46ab1aebaad23d3709a7787d5",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-011",
+      "test_id": "libtest:agents:tests/agents.rs:rust_irrelevant_and_unsupported_assertions_are_challenged",
+      "test_fingerprint": "sha256:803e5c8d325426df350545e69a40e8053578f9cd86243643c0b7e7f5bef29dff",
+      "requirement_revision": "sha256:05f5f5313444072bfc06af35283eb4fb698396c6cab7712ff2c88e8d411e7bf4",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-012",
+      "test_id": "libtest:living_spec:src/lib.rs:adapters::tests::libtest_scopes_same_name_to_each_binary_and_doc_tests",
+      "test_fingerprint": "sha256:1a55bf49127c9c27caceef976b1f4d2e52fb204949d72a23cc6100fe2d5401f9",
+      "requirement_revision": "sha256:e4fe066a3df92a606177f4015ff30cede7da3648adf76daf1b7524fd0b7e2179",
+      "subject_digest": "sha256:a96c83c102266362f4d4f6f3d2f4f718c1e03d10e6b2a3108da8a4afb3946fca",
+      "target": {
+        "kind": "lib",
+        "name": "living_spec"
+      },
+      "baseline_passes": 2,
+      "status": "unsupported",
+      "reason": "no viable mutants",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-013",
+      "test_id": "libtest:runner:tests/runner.rs:adapters_preserve_case_statuses",
+      "test_fingerprint": "sha256:3a6971d260bdff72cc6ae4ca8262df03faff8983e70ce7d58065a5bd582b8817",
+      "requirement_revision": "sha256:acce2eb60232d4fefe08a8fd7cefee696bd9d871b3ce87ea8b3dcfe57b9980d9",
+      "subject_digest": "sha256:52bb7e7b7875b0df0d71296b69053852ec6cf3fabecb0e329685933cd48466b7",
+      "target": {
+        "kind": "test",
+        "name": "runner"
+      },
+      "baseline_passes": 2,
+      "status": "unsupported",
+      "reason": "no viable mutants",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-014",
+      "test_id": "libtest:core:tests/core.rs:audit_revision_must_also_be_current",
+      "test_fingerprint": "sha256:e99228d76dc490c6ab5dbc8c3f91b594416c104142ad8bdaa27c3a7aa196a6f9",
+      "requirement_revision": "sha256:ea1446e24c180c3fb6b1a8907783a5d10ce80254091ce21b6fe5685628597a5d",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-015",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_audits_changed_rust_source_before_admitting_the_link",
+      "test_fingerprint": "sha256:a3d3382f6960db339605b3f76052f9de1938c6509c7cac5a7475c711142f294c",
+      "requirement_revision": "sha256:dec309c5206e5eb703d4b878b72b8db789846aa9a48c12d3455bcea6cd28b1b8",
+      "subject_digest": "sha256:bea4499940f3058b1d4b05da9fc6d9e9641a9fe19527bddbf4bb93d601ae2845",
+      "target": {
+        "kind": "test",
+        "name": "pipeline"
+      },
+      "baseline_passes": 2,
+      "status": "unsupported",
+      "reason": "no viable mutants",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-016",
+      "test_id": "libtest:core:tests/core.rs:challenged_unresolved_link_still_breaks",
+      "test_fingerprint": "sha256:24dc9c3610009ff06410cb2833e3f17d1a98cece0aea00ef218750dfba00f8a8",
+      "requirement_revision": "sha256:e3f0422f60ee0487c932bab4d169611b7d6c44f9649e79edd6a65507d3f2b88b",
+      "subject_digest": "sha256:c44638232996bd459d082e5f8e08c32a399c8c429ee044da0a4e07fe89c4e208",
+      "target": {
+        "kind": "test",
+        "name": "core"
+      },
+      "baseline_passes": 2,
+      "status": "unsupported",
+      "reason": "no viable mutants",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-017",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:garbled_results_exit_1_without_writing_status",
+      "test_fingerprint": "sha256:3d4d70b59ef5f51c17b2c2c2c1abb32d917674a68c7fe666da74d5a151462c90",
+      "requirement_revision": "sha256:fb3f9056d97df40d7a61947f6d3ac54ac07f903aff548cbafba1e3bb19dae039",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-018",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:hook_blocks_a_broken_line",
+      "test_fingerprint": "sha256:df13a83f216c87b668013aa0e80a23eb542c9a4c7fde4301e884433619705ce1",
+      "requirement_revision": "sha256:eb4d72936741bea2ab911af3862033161f9994d30ee998b3e95e65c6dfb4d3b5",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-018",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:pre_push_hook_blocks_a_broken_scored_line",
+      "test_fingerprint": "sha256:a107e55c10085901c6df89fe3132e2210de376d40db240df01670b79789e0d2c",
+      "requirement_revision": "sha256:eb4d72936741bea2ab911af3862033161f9994d30ee998b3e95e65c6dfb4d3b5",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-019",
+      "test_id": "libtest:agents:tests/agents.rs:linker_proposal_resolves_and_explains_a_genuine_timestamp_test",
+      "test_fingerprint": "sha256:3e8f7513dc0615aafdfb86a85eada8e290df2513a3ae81b8fd5e9b44ba74d1b1",
+      "requirement_revision": "sha256:e00ef95d082a5cc726049f9c2dcc82b1d6fa54bb9ea00778f7369787993acba9",
+      "subject_digest": "sha256:59c3354bc6d49d8be4f2d98539daf29b416af8fc3d6ff6a7505c09fff6f5951b",
+      "target": {
+        "kind": "test",
+        "name": "agents"
+      },
+      "baseline_passes": 2,
+      "status": "unsupported",
+      "reason": "no viable mutants",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-020",
+      "test_id": "libtest:web:tests/web.rs:script_in_a_requirement_is_escaped",
+      "test_fingerprint": "sha256:30e12dee412931e10f14da958c3e5eaace07f012e3dc4357ec81421b4d5ca1e6",
+      "requirement_revision": "sha256:30a0d7e1e158fcaa270db410207671e4f3aa6965147929e17948e36cc1c6fabd",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-021",
+      "test_id": "libtest:cli:tests/cli.rs:include_adds_a_root_and_registry_must_be_explicit",
+      "test_fingerprint": "sha256:8a14719c4b07ad330c3e7540a9956811437e9ca7e717a33a73dff68335707600",
+      "requirement_revision": "sha256:ba16a8ebbbda7b7759e5f35d2a5dfa73aadb3f844ff122c38c33a5cf7ac17415",
+      "subject_digest": "sha256:f2e70a0b46e4a0039feadef8592c92d9945a6a9568fb6484418bb7a73a6095c8",
+      "target": {
+        "kind": "test",
+        "name": "cli"
+      },
+      "baseline_passes": 0,
+      "status": "error",
+      "reason": "baseline failed or flaky",
+      "infra_failure": "baseline failed or flaky",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-022",
+      "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
+      "test_fingerprint": "sha256:e81f3034c518f656eff967c1273a01c8a864fffb49e807cdc784a4fac2c6da1b",
+      "requirement_revision": "sha256:7181853d21a4c6c8f1ce7954ea032839b51308af44d7f6e66de26766904e7d34",
+      "subject_digest": "sha256:3a246458f5b78e708a08be1790d0d7a810a957d1b5e368b126b120a448a4a7b9",
+      "target": {
+        "kind": "test",
+        "name": "web"
+      },
+      "baseline_passes": 2,
+      "status": "checked",
+      "mutants": [
+        {
+          "id": "m-56fd5cc2a853",
+          "file": "src/web/rollup.rs",
+          "function": "render_rollup",
+          "line": 198,
+          "ordinal": 356,
+          "operator": "cmp_flip",
+          "original": "!=",
+          "replacement": "==",
+          "outcome": "killed"
+        }
+      ]
+    },
+    {
+      "requirement": "LS-023",
+      "test_id": "libtest:boundary:tests/boundary.rs:delay_boundary_has_adjacent_cases_around_thirty_seconds",
+      "test_fingerprint": "sha256:89ce0074415ea77b3bc861a29048c78ee87fcef792affd0bb12985d3364533ac",
+      "requirement_revision": "sha256:e211daa25a3e90721650531d75e4adfc918b3f19c53445d60fad769786f85d3d",
+      "subject_digest": "sha256:3df26c5c056b1b37270aa0fb87523eec0e7ac3bc2be0f34621b2391273040e97",
+      "target": {
+        "kind": "test",
+        "name": "boundary"
+      },
+      "baseline_passes": 0,
+      "status": "error",
+      "reason": "baseline failed or flaky",
+      "infra_failure": "baseline failed or flaky",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-024",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:rescore_applies_boundary_and_dependency_rules",
+      "test_fingerprint": "sha256:c79d2f90e77e6bcb56ebf2c7d60510e8882e16580ed371f7b190838ae688b84f",
+      "requirement_revision": "sha256:46cfb9bfe9e74c705978c90a70df222d91a5625792fc7674924f80713eaef087",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-025",
+      "test_id": "libtest:deps:tests/deps.rs:missing_evidence_is_error",
+      "test_fingerprint": "sha256:0bf67bbf6930faa63e5730f095a8cbe7ed9f5d96f430e71ed290bc69cd840b08",
+      "requirement_revision": "sha256:7084823a37d09ccbf520cb6ef42b01b9976a48c383ce34b1472a893bbbff9361",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-026",
+      "test_id": "libtest:web:tests/web.rs:seeded_view_reports_counts_and_broken_drilldown",
+      "test_fingerprint": "sha256:7bf6bc2108b25b720cbb43531543321b3ff585a794f1fd2b8ffcdc7984cd77f4",
+      "requirement_revision": "sha256:c9b71f25556c67d2a851fd1f1bb4cd8e5d8c440dfef2206c8976f22ea28f4147",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-027",
+      "test_id": "libtest:cli:tests/cli.rs:quantifier_cli_dispatches_checks_and_writes_each_export",
+      "test_fingerprint": "sha256:e07c57f6d8144fdb54035918bc549397c5fd93a176f2f5dc58b45d85b8012493",
+      "requirement_revision": "sha256:2611b00c68b4f2b868c6bb44385f1ffce837ce62a69a4c764ef9843f1b9b85f9",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-028",
+      "test_id": "libtest:quantifier:tests/quantifier.rs:sampled_quantifier_records_seed_and_untested_remainder",
+      "test_fingerprint": "sha256:10cc5566de95f22b82b442ab861286f5b3a137ff23c7d6321c81144dada4cb02",
+      "requirement_revision": "sha256:c76a6547790feb4a6a4a3b5e94ab4bf55af3a07ecabe13931a6854b27fd499f7",
+      "subject_digest": "sha256:7f003ac2e5dec5e89c189915a9956d173a6811a16c31adaec95fbc91361c1d11",
+      "target": {
+        "kind": "test",
+        "name": "quantifier"
+      },
+      "baseline_passes": 2,
+      "status": "survived",
+      "mutants": [
+        {
+          "id": "m-b157926af7d8",
+          "file": "src/quantifier/mod.rs",
+          "function": "check_claim",
+          "line": 148,
+          "ordinal": 39,
+          "operator": "cmp_flip",
+          "original": "!=",
+          "replacement": "==",
+          "outcome": "survived"
+        },
+        {
+          "id": "m-6736ec4b8387",
+          "file": "src/quantifier/mod.rs",
+          "function": "check_claim",
+          "line": 148,
+          "ordinal": 33,
+          "operator": "bool_swap",
+          "original": "&&",
+          "replacement": "||",
+          "outcome": "survived"
+        }
+      ]
+    },
+    {
+      "requirement": "LS-029",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage",
+      "test_fingerprint": "sha256:46efb2921b3a7422fe556f193bb49aae530654212f44c9712ff44028754c141c",
+      "requirement_revision": "sha256:c9583b4b53eca44eafa1a34a5a856f7e91882d4d1bfab2af01c25bdc36816ac6",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-030",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:malformed_previous_status_is_not_reset",
+      "test_fingerprint": "sha256:da5ab00fb9565528b8830c885270f3b24144d9f8fb2e1e21b4b3e660509b8444",
+      "requirement_revision": "sha256:cf5e0821aed8ba840f97364bc73d425b777547a60067bdd311b6e961bbfb8b6b",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-031",
+      "test_id": "libtest:pipeline:tests/pipeline.rs:score_and_rescore_share_boundary_dependencies_and_quantifier_coverage",
+      "test_fingerprint": "sha256:46efb2921b3a7422fe556f193bb49aae530654212f44c9712ff44028754c141c",
+      "requirement_revision": "sha256:9dcc499dab57cfa59b028887bf5abcae1e6b1bc3f12e3a281dc571e9208447e5",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-032",
+      "test_id": "libtest:cli:tests/cli.rs:check_command_still_reports_orphans",
+      "test_fingerprint": "sha256:b9437962dd58f2286123013414549bf19883d614802ca7d1e0392dd2a46e97b3",
+      "requirement_revision": "sha256:be50b7da751ee37a60e617056ada3ad1564013e9be2415d86a368cb5ca9e75a1",
+      "subject_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": {
+        "kind": "lib",
+        "name": "unknown"
+      },
+      "baseline_passes": 0,
+      "status": "unsupported",
+      "reason": "no resolvable subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-033",
+      "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
+      "test_fingerprint": "sha256:e81f3034c518f656eff967c1273a01c8a864fffb49e807cdc784a4fac2c6da1b",
+      "requirement_revision": "sha256:a0e4205f8312b7b6a89d67351be939dbe9bfe78a1964f0900985b4abd589e951",
+      "subject_digest": "sha256:3a246458f5b78e708a08be1790d0d7a810a957d1b5e368b126b120a448a4a7b9",
+      "target": {
+        "kind": "test",
+        "name": "web"
+      },
+      "baseline_passes": 2,
+      "status": "checked",
+      "mutants": [
+        {
+          "id": "m-56fd5cc2a853",
+          "file": "src/web/rollup.rs",
+          "function": "render_rollup",
+          "line": 198,
+          "ordinal": 356,
+          "operator": "cmp_flip",
+          "original": "!=",
+          "replacement": "==",
+          "outcome": "killed"
+        }
+      ]
+    }
+  ],
+  "signoffs": []
+}

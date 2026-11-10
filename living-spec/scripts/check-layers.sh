@@ -3,18 +3,19 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
-for layer in core adapters agents runner boundary deps quantifier web pipeline cli; do
+for layer in core adapters agents mutation runner boundary deps quantifier web pipeline cli; do
     case "$layer" in
         core) allowed='core' ;;
         adapters) allowed='core adapters' ;;
         agents) allowed='core adapters agents' ;;
+        mutation) allowed='core adapters agents mutation' ;;
         runner) allowed='core adapters runner' ;;
         boundary) allowed='core adapters boundary' ;;
         deps) allowed='core deps' ;;
         quantifier) allowed='core quantifier' ;;
         web) allowed='core web' ;;
-        pipeline) allowed='core adapters agents runner boundary deps quantifier web pipeline' ;;
-        cli) allowed='core adapters agents runner boundary deps quantifier web pipeline cli' ;;
+        pipeline) allowed='core adapters agents runner boundary deps quantifier web mutation pipeline' ;;
+        cli) allowed='core adapters agents runner boundary deps quantifier web mutation pipeline cli' ;;
     esac
     find "$root/src/$layer" -name '*.rs' -type f -exec grep -l -E 'crate[[:space:]]*::' {} + |
     while IFS= read -r source; do

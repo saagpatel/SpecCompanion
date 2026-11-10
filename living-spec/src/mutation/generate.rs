@@ -124,6 +124,49 @@ pub fn generate(
     result
 }
 
+/// Select candidates across all functions, cycling through operators in order.
+pub fn candidates_for(subject: &super::subject::Subject, max_mutants: usize) -> Vec<Candidate> {
+    let mut functions = subject.functions.iter().collect::<Vec<_>>();
+    functions
+        .sort_by(|a, b| (&a.file, a.span.start, &a.name).cmp(&(&b.file, b.span.start, &b.name)));
+    let mut groups: [Vec<Candidate>; 4] = Default::default();
+    for function in functions {
+        for candidate in generate(
+            &function.source,
+            &function.file,
+            &function.name,
+            function.span.clone(),
+            usize::MAX,
+        ) {
+            let group = match candidate.mutant.operator {
+                Operator::CmpFlip => 0,
+                Operator::ArithSwap => 1,
+                Operator::BoolSwap => 2,
+                Operator::IntBump => 3,
+            };
+            groups[group].push(candidate);
+        }
+    }
+    let mut groups = groups.into_iter().map(Vec::into_iter).collect::<Vec<_>>();
+    let mut result = Vec::new();
+    while result.len() < max_mutants {
+        let mut advanced = false;
+        for group in &mut groups {
+            if result.len() == max_mutants {
+                break;
+            }
+            if let Some(candidate) = group.next() {
+                result.push(candidate);
+                advanced = true;
+            }
+        }
+        if !advanced {
+            break;
+        }
+    }
+    result
+}
+
 /// Replace one UTF-8 byte span, returning None for an invalid range.
 pub fn apply(source: &str, span: Range<usize>, replacement: &str) -> Option<String> {
     if span.start > span.end {

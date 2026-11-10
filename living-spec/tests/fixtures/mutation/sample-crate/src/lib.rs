@@ -1,6 +1,6 @@
 pub fn clamp(value: i32) -> i32 {
     if value < 0 {
-        0
+        1
     } else if value > 10 {
         10
     } else {
@@ -44,6 +44,6 @@ pub fn text_sample() -> &'static str {
 mod tests {
     #[test]
     fn unit_test_code_is_not_a_subject() {
-        assert_eq!(super::clamp(-1), 0);
+        assert_eq!(super::clamp(-1), 1);
     }
 }

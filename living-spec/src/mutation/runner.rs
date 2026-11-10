@@ -249,18 +249,62 @@ mod tests {
             .args(["--test", "tests/needs_target.rs", "-o"])
             .arg(&test_binary)
             .current_dir(&runner.copy)
-            .status()
+            .output()
             .unwrap();
-        assert!(compile.success());
+        assert!(
+            compile.status.success(),
+            "rustc failed: stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&compile.stdout),
+            String::from_utf8_lossy(&compile.stderr)
+        );
         let run = Command::new(test_binary)
             .current_dir(&runner.copy)
-            .status()
+            .output()
             .unwrap();
-        assert!(run.success());
+        assert!(
+            run.status.success(),
+            "test binary failed: stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
         assert_eq!(
             fs::read_to_string(copied_target.join("test-file")).unwrap(),
             "ok"
         );
         assert_ne!(copied_target, runner.target);
+    }
+
+    #[test]
+    fn nested_test_binary_output_never_reaches_parent_log() {
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "mutation::runner::tests::copy_has_empty_target_dir_for_tests_that_need_it",
+                "--exact",
+                "--nocapture",
+            ])
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "stdout: {stdout}\nstderr: {stderr}"
+        );
+        let suite_headers: Vec<_> = stdout
+            .lines()
+            .filter(|line| {
+                line.strip_prefix("running ")
+                    .and_then(|line| {
+                        line.strip_suffix(" test")
+                            .or_else(|| line.strip_suffix(" tests"))
+                    })
+                    .is_some_and(|count| count.parse::<usize>().is_ok())
+            })
+            .collect();
+        assert_eq!(
+            suite_headers,
+            ["running 1 test"],
+            "stdout: {stdout}\nstderr: {stderr}"
+        );
     }
 }

@@ -722,8 +722,122 @@ fn parameterized_case_link_mutate_signoff_score() {
     python_signoff_case(true);
 }
 
+fn javascript_hash_fixture() -> (tempfile::TempDir, PathBuf, PathBuf, String) {
+    let dir = temp();
+    let spec = dir.path().join("spec");
+    let tests = dir.path().join("tests");
+    fs::create_dir(&spec).unwrap();
+    fs::create_dir(&tests).unwrap();
+    let text = "- [LS-001] Export preserves the value.\n";
+    fs::write(spec.join("spec.md"), text).unwrap();
+    fs::write(
+        tests.join("export.test.js"),
+        "test('exports #tag', () => { expect(exportValue(30)).toBe(30); });\n",
+    )
+    .unwrap();
+    let entry = TestIndex::build(&tests).unwrap().entries.remove(0);
+    let revision = &Spec::parse(text).unwrap().lines[0].revision;
+    let annotations = json!({"schema":"living-spec.annotations/v1","requirements":{"LS-001":{"links":[{
+        "test_id":entry.id,"fingerprint":entry.fingerprint,"revision":revision,
+        "rename_hint":entry.rename_hint,"explanation":"reviewed","proposed_by":"human",
+        "audit":{"verdict":"accepted","revision":revision,"notes":[]}
+    }]}}});
+    fs::write(
+        spec.join("annotations.json"),
+        serde_json::to_vec_pretty(&annotations).unwrap(),
+    )
+    .unwrap();
+    (dir, spec, tests, entry.id)
+}
+
 #[test]
-fn rust_case_is_unsupported_without_spawning_cargo_and_can_be_signed_off() {
+fn javascript_title_with_hash_stays_proven_without_mutation_flag() {
+    let (_dir, spec, tests, id) = javascript_hash_fixture();
+    let results = spec.join("results.xml");
+    let (class, name) = id.rsplit_once(':').unwrap();
+    fs::write(
+        &results,
+        format!(
+            "<testsuite tests=\"1\"><testcase classname=\"{class}\" name=\"{name}\"/></testsuite>"
+        ),
+    )
+    .unwrap();
+    cli::run(
+        &[
+            "score",
+            spec.to_str().unwrap(),
+            "--results",
+            results.to_str().unwrap(),
+            "--format",
+            "junit",
+            "--tests",
+            tests.to_str().unwrap(),
+        ]
+        .map(str::to_owned),
+    )
+    .unwrap();
+    let status: serde_json::Value =
+        serde_json::from_slice(&fs::read(spec.join("status.json")).unwrap()).unwrap();
+    assert_eq!(status["statuses"][0]["badge"], "proven");
+    let annotations: serde_json::Value =
+        serde_json::from_slice(&fs::read(spec.join("annotations.json")).unwrap()).unwrap();
+    assert_eq!(
+        annotations["requirements"]["LS-001"]["links"][0]["test_id"],
+        id
+    );
+    assert_eq!(
+        annotations["requirements"]["LS-001"]["links"][0]["audit"]["verdict"],
+        "accepted"
+    );
+}
+
+#[test]
+fn javascript_title_with_hash_can_be_mutated_and_signed_off() {
+    let (_dir, spec, tests, id) = javascript_hash_fixture();
+    cli::run(
+        &[
+            "mutate",
+            spec.to_str().unwrap(),
+            "--tests",
+            tests.to_str().unwrap(),
+        ]
+        .map(str::to_owned),
+    )
+    .unwrap();
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    assert_eq!(file.links[0].test_id, id);
+    assert_eq!(file.links[0].status, LinkStatus::Unsupported);
+    cli::run(
+        &[
+            "signoff",
+            spec.to_str().unwrap(),
+            "link",
+            "LS-001",
+            &id,
+            "--tests",
+            tests.to_str().unwrap(),
+            "--reason",
+            "reviewed",
+            "--signed-by",
+            "reviewer",
+        ]
+        .map(str::to_owned),
+    )
+    .unwrap();
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    assert!(matches!(&file.signoffs[0], Signoff::Link { test_id, .. } if test_id == &id));
+}
+
+#[test]
+fn unknown_hash_suffix_does_not_match_base_prefix() {
+    let (_dir, _spec, tests, id) = javascript_hash_fixture();
+    let index = TestIndex::build(&tests).unwrap();
+    assert!(index.resolve_test_id(&format!("{id}#unknown")).is_none());
+    assert_eq!(index.resolve_test_id(&id).unwrap().id, id);
+}
+
+#[test]
+fn unknown_rust_case_is_unresolved_without_spawning_cargo_or_signoff() {
     let (_temp, root, spec, base) = setup();
     let id = format!("{base}#case");
     let path = spec.join("annotations.json");
@@ -745,9 +859,7 @@ fn rust_case_is_unsupported_without_spawning_cargo_and_can_be_signed_off() {
     }
     mutate(&root, &spec, &cargo).unwrap();
     let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
-    assert_eq!(file.links[0].test_id, id);
-    assert_eq!(file.links[0].status, LinkStatus::Unsupported);
-    assert_eq!(file.links[0].reason.as_deref(), Some("parameterized case"));
+    assert!(file.links.is_empty());
     assert!(!marker.exists());
     cli::run(
         &[
@@ -765,5 +877,5 @@ fn rust_case_is_unsupported_without_spawning_cargo_and_can_be_signed_off() {
         ]
         .map(str::to_owned),
     )
-    .unwrap();
+    .unwrap_err();
 }

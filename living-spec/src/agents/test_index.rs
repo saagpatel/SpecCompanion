@@ -129,6 +129,14 @@ impl TestIndex {
             _ => fallback,
         }
     }
+    /// Resolve an exact id before considering a parameterized case suffix.
+    pub fn resolve_test_id(&self, id: &str) -> Option<&TestEntry> {
+        self.get(id).or_else(|| {
+            let (base, _) = id.rsplit_once('#')?;
+            self.get(base)
+                .filter(|entry| !entry.case_ids.is_empty() || entry.unknown_cases)
+        })
+    }
     pub fn get(&self, id: &str) -> Option<&TestEntry> {
         self.entries.iter().find(|entry| entry.id == id)
     }

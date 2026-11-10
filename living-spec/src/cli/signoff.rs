@@ -69,11 +69,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     let tests_root = identity_root(&scan_root);
     let index = TestIndex::build(&scan_root)?;
     let entry = index
-        .get(
-            test_id
-                .split_once('#')
-                .map_or(test_id.as_str(), |(base, _)| base),
-        )
+        .resolve_test_id(test_id)
         .ok_or_else(|| format!("test not found: {test_id}"))?;
     if entry.fingerprint != link.fingerprint {
         return Err("test fingerprint is stale".into());

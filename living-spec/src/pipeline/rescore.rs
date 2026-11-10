@@ -209,10 +209,10 @@ impl MutationTierProvider for PipelineMutationProvider<'_> {
                     {
                         return None;
                     }
-                    let base_id = link
-                        .test_id
-                        .split_once('#')
-                        .map_or(link.test_id.as_str(), |(base, _)| base);
+                    let entry = self
+                        .index
+                        .and_then(|index| index.resolve_test_id(&link.test_id));
+                    let base_id = entry.map_or(link.test_id.as_str(), |entry| entry.id.as_str());
                     let case_prefix = format!("{base_id}#");
                     let has_cases = self
                         .identities
@@ -232,7 +232,6 @@ impl MutationTierProvider for PipelineMutationProvider<'_> {
                     }) {
                         return None;
                     }
-                    let entry = self.index.and_then(|index| index.get(base_id));
                     let subject_digest = entry.and_then(|entry| {
                         crate::mutation::subject::subject_digest_for(entry, &self.tests_root)
                             .ok()
@@ -276,11 +275,7 @@ struct SourceReauditor<'a>(&'a TestIndex);
 
 impl Reauditor for SourceReauditor<'_> {
     fn reaudit(&self, line: &RequirementLine, link: &mut Link, changed_source: bool) {
-        let base_id = link
-            .test_id
-            .split_once('#')
-            .map_or(link.test_id.as_str(), |(base, _)| base);
-        if let Some(entry) = self.0.get(base_id) {
+        if let Some(entry) = self.0.resolve_test_id(&link.test_id) {
             link.retire_stale_override();
             if changed_source
                 || link.fingerprint != entry.fingerprint

@@ -160,11 +160,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                 );
                 continue;
             }
-            let base_id = link
-                .test_id
-                .split_once('#')
-                .map_or(link.test_id.as_str(), |(base, _)| base);
-            let Some(entry) = index.get(base_id) else {
+            let Some(entry) = index.resolve_test_id(&link.test_id) else {
                 println!("{requirement} {} skipped: unresolved test", link.test_id);
                 continue;
             };

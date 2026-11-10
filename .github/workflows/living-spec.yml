@@ -3,11 +3,35 @@ name: living-spec
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  mutation:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: never
+      NO_COLOR: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: living-spec
+      - name: Run opt-in mutation checks
+        run: make living-spec-mutate
+      - name: Score mutation evidence
+        run: make living-spec-score-mutation
+      - uses: actions/upload-artifact@v4
+        with:
+          name: living-spec-mutation
+          path: living-spec/living-spec/mutation.json
+
   score:
     runs-on: ubuntu-latest
     steps:

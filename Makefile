@@ -1,4 +1,4 @@
-.PHONY: build test lint clean check run verify living-spec-layers living-spec-test living-spec-score living-spec-refresh
+.PHONY: build test lint clean check run verify living-spec-layers living-spec-test living-spec-score living-spec-refresh living-spec-mutate living-spec-score-mutation
 
 build:
 	cargo build --locked --manifest-path src-tauri/Cargo.toml --release
@@ -34,9 +34,20 @@ living-spec-test: living-spec-layers
 living-spec-score: living-spec-test
 	rm -rf living-spec/target/dogfood && cp -R living-spec/living-spec living-spec/target/dogfood
 	cd living-spec && cargo run --offline --locked -q -- score target/dogfood --results target/test-output.txt --format libtest --tests . --html target/dogfood/spec.html
+	@if test -f living-spec/living-spec/mutation.json; then ruby living-spec/scripts/report-mutation-binding.rb living-spec/living-spec/status.json living-spec/living-spec/mutation.json; fi
 
 # Refreshes the committed dogfood status, history and page after a complete score.
 living-spec-refresh: living-spec-test
 	bash living-spec/scripts/refresh-dogfood.sh "$(CURDIR)" living-spec/target/test-output.txt
+
+# Explicitly opt-in: mutation execution rebuilds the crate for each selected mutant.
+living-spec-mutate:
+	cd living-spec && CARGO_TERM_COLOR=never NO_COLOR=1 cargo run --offline --locked -q -- mutate living-spec --tests . --jobs 2 --out living-spec/mutation.json $(MUTATE_ARGS)
+
+# Score a scratch copy so this target never rewrites committed dogfood status.
+living-spec-score-mutation: living-spec-test
+	rm -rf living-spec/target/dogfood-mutation && cp -R living-spec/living-spec living-spec/target/dogfood-mutation
+	cd living-spec && cargo run --offline --locked -q -- score target/dogfood-mutation --results target/test-output.txt --format libtest --tests . --mutation --html target/dogfood-mutation/spec.html
+	ruby -rjson -e 's=JSON.parse(File.read(ARGV.fetch(0))); c=Hash.new(0); s.fetch("statuses").each { |x| c[x.dig("mutation", "state") || "none"] += 1 }; puts "mutation_checked: #{c["mutation_checked"]}, survived: #{c["survived"]}, stale: #{c["stale"]}"' living-spec/target/dogfood-mutation/status.json
 
 verify: living-spec-score

@@ -1,6 +1,9 @@
 #!/usr/bin/env ruby
 require 'fileutils'
+require 'digest'
 require 'json'
+require 'open3'
+require 'rbconfig'
 require 'tmpdir'
 require 'yaml'
 
@@ -15,6 +18,8 @@ end
 
 def score_ready_requires_successful_complete_score
   workflow = YAML.load_file(WORKFLOW)
+  triggers = workflow['on'] || workflow[true]
+  assert(triggers && triggers.key?('workflow_dispatch'), 'workflow has a manual trigger')
   job = workflow.fetch('jobs').fetch('score')
   steps = job.fetch('steps')
   score = steps.find { |step| step['name'] == 'Score living spec' }
@@ -130,6 +135,46 @@ def score_ready_requires_successful_complete_score
 
 end
 
+def mutation_job_is_manual_and_uploads_evidence
+  workflow = YAML.load_file(WORKFLOW)
+  job = workflow.fetch('jobs').fetch('mutation')
+  assert(job.fetch('if').include?("github.event_name == 'workflow_dispatch'"), 'mutation job is manual-only')
+  assert(job.dig('env', 'CARGO_TERM_COLOR') == 'never' && job.dig('env', 'NO_COLOR') == '1', 'mutation job disables cargo color')
+  steps = job.fetch('steps')
+  assert(steps.any? { |step| step['run'] == 'make living-spec-mutate' }, 'manual job runs mutation command')
+  assert(steps.any? { |step| step['run'] == 'make living-spec-score-mutation' }, 'manual job scores mutation evidence')
+  upload = steps.find { |step| step.dig('with', 'name') == 'living-spec-mutation' }
+  assert(upload && upload.dig('with', 'path') == 'living-spec/living-spec/mutation.json', 'manual job uploads mutation file')
+  makefile = File.read(File.join(ROOT, 'Makefile'))
+  assert(makefile.lines.find { |line| line.start_with?('verify:') } == "verify: living-spec-score\n", 'mutation stays outside verify')
+  score_lines = makefile.lines.drop_while { |line| !line.start_with?('living-spec-score:') }
+  score_recipe = score_lines.drop(1).take_while { |line| line.start_with?("\t") }
+  assert(score_recipe.none? { |line| line.include?('--mutation ') }, 'verify does not ingest mutation evidence')
+  assert(score_recipe.any? { |line| line.include?('report-mutation-binding.rb') }, 'verify reports mutation byte freshness')
+end
+
+def mutation_binding_report_is_informational
+  script = File.join(ROOT, 'living-spec/scripts/report-mutation-binding.rb')
+  FileUtils.mkdir_p(File.join(ROOT, 'living-spec/target'))
+  Dir.mktmpdir('living-spec-mutation-binding', File.join(ROOT, 'living-spec/target')) do |tmp|
+    status = File.join(tmp, 'status.json')
+    mutation = File.join(tmp, 'mutation.json')
+    File.write(mutation, '{malformed')
+    digest = "sha256:#{Digest::SHA256.hexdigest(File.binread(mutation))}"
+    File.write(status, JSON.generate('inputs' => { 'mutation_digest' => digest }))
+    output, error, process = Open3.capture3(RbConfig.ruby, script, status, mutation)
+    assert(process.success? && error.empty? && output.include?('current') && output.include?('contents are not validated'), 'matching bytes report current without parsing payload')
+
+    File.write(status, JSON.generate('inputs' => { 'mutation_digest' => "sha256:#{'0' * 64}" }))
+    output, _error, process = Open3.capture3(RbConfig.ruby, script, status, mutation)
+    assert(process.success? && output.include?('stale or unrecorded'), 'changed bytes report stale without failing')
+
+    File.write(status, '{malformed status')
+    output, _error, process = Open3.capture3(RbConfig.ruby, script, status, mutation)
+    assert(process.success? && output.include?('stale or unrecorded'), 'unreadable binding stays informational')
+  end
+end
+
 def refresh_records_broken_status
   makefile = File.read(File.join(ROOT, 'Makefile'))
   assert(makefile.include?('living-spec/scripts/refresh-dogfood.sh'), 'refresh target delegates to staged refresh script')
@@ -151,15 +196,21 @@ def refresh_records_broken_status
       set -eu
       score_dir=
       html=
+      mutation=
       while [ "$#" -gt 0 ]; do
         case "$1" in
           score) score_dir=$2; shift 2 ;;
           --html) html=$2; shift 2 ;;
+          --mutation) mutation=$2; shift 2 ;;
           *) shift ;;
         esac
       done
+      printf '%s\n' "$mutation" >> "${FAKE_MUTATION_LOG:?}"
       test -n "$score_dir" && test -n "$html"
-      test "$(cat "$score_dir/history.jsonl")" = "prior history"
+      case "$(cat "$score_dir/history.jsonl")" in
+        "prior history"*) ;;
+        *) exit 1 ;;
+      esac
       printf '{"commit":"new","inputs":{"results_file":"staged"}}' > "$score_dir/status.json"
       printf 'new annotations' > "$score_dir/annotations.json"
       echo 'new history' >> "$score_dir/history.jsonl"
@@ -169,16 +220,17 @@ def refresh_records_broken_status
       exit 1
     SH
     FileUtils.chmod(0o755, fake_cargo)
+    mutation_log = File.join(tmp, 'mutation-args')
 
     { 'failure' => 1 }.each do |mode, exit_code|
-      system({ 'FAKE_REFRESH_MODE' => mode }, 'bash', REFRESH_SCRIPT, repo, results, fake_cargo, out: File::NULL, err: File::NULL)
+      system({ 'FAKE_REFRESH_MODE' => mode, 'FAKE_MUTATION_LOG' => mutation_log }, 'bash', REFRESH_SCRIPT, repo, results, fake_cargo, out: File::NULL, err: File::NULL)
       assert($?.exitstatus == exit_code, "#{mode} staged score returns its error")
       { 'annotations.json' => "fixture-annotations.json\n", 'history.jsonl' => "prior history\n", 'status.json' => 'prior status', 'spec.html' => 'prior html' }.each do |name, expected|
         assert(File.read(File.join(source, name)) == expected, "#{mode} score preserves committed #{name}")
       end
     end
 
-    ok = system({ 'FAKE_REFRESH_MODE' => 'broken' }, 'bash', REFRESH_SCRIPT, repo, results, fake_cargo, out: File::NULL, err: File::NULL)
+    ok = system({ 'FAKE_REFRESH_MODE' => 'broken', 'FAKE_MUTATION_LOG' => mutation_log }, 'bash', REFRESH_SCRIPT, repo, results, fake_cargo, out: File::NULL, err: File::NULL)
     assert(!ok && $?.exitstatus == 2, 'refresh_records_broken_status returns broken score')
     assert(File.read(File.join(source, 'history.jsonl')) == "prior history\nnew history\n", 'successful refresh appends history')
     status = JSON.parse(File.read(File.join(source, 'status.json')))
@@ -186,10 +238,20 @@ def refresh_records_broken_status
     assert(File.read(File.join(source, 'annotations.json')) == 'new annotations', 'successful refresh keeps the annotations bound by its status')
     assert(File.expand_path(status.dig('inputs', 'results_file'), source) == results, 'refresh result locator remains valid after staging')
     assert(File.read(File.join(source, 'spec.html')) == 'new html', 'successful refresh replaces page')
+    assert(File.read(mutation_log).lines.all? { |line| line == "\n" }, 'refresh omits mutation option when evidence is absent')
+
+    File.write(File.join(source, 'mutation.json'), '{"fixture":true}')
+    ok = system({ 'FAKE_REFRESH_MODE' => 'success', 'FAKE_MUTATION_LOG' => mutation_log }, 'bash', REFRESH_SCRIPT, repo, results, fake_cargo, out: File::NULL, err: File::NULL)
+    assert(ok, 'refresh succeeds when mutation evidence is present')
+    assert(File.read(mutation_log).lines.last&.end_with?("/spec/mutation.json\n"), 'refresh scores the staged mutation file')
   end
 end
 
 score_ready_requires_successful_complete_score
 puts 'score_ready_requires_successful_complete_score passed.'
+mutation_job_is_manual_and_uploads_evidence
+puts 'mutation_job_is_manual_and_uploads_evidence passed.'
+mutation_binding_report_is_informational
+puts 'mutation_binding_report_is_informational passed.'
 refresh_records_broken_status
 puts 'refresh_records_broken_status passed.'

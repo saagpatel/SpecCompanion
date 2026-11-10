@@ -2,7 +2,7 @@ use living_spec::{
     agents::test_index::TestIndex,
     cli,
     core::{
-        mutation::{LinkStatus, MutationFile, Signoff},
+        mutation::{LinkRecord, LinkStatus, MutationFile, Signoff, Target, TargetKind},
         spec::Spec,
     },
 };
@@ -98,6 +98,24 @@ fn mutate(root: &Path, spec: &Path, cargo: &Path) -> Result<(), living_spec::cli
         "1".into(),
         "--only".into(),
         "LS-001".into(),
+        "--cargo".into(),
+        cargo.to_string_lossy().into_owned(),
+    ])
+}
+
+fn mutate_scoped(
+    root: &Path,
+    spec: &Path,
+    requested_crate: &Path,
+    cargo: &Path,
+) -> Result<(), living_spec::cli::Exit> {
+    cli::run(&[
+        "mutate".into(),
+        spec.to_string_lossy().into_owned(),
+        "--tests".into(),
+        root.to_string_lossy().into_owned(),
+        "--crate".into(),
+        requested_crate.to_string_lossy().into_owned(),
         "--cargo".into(),
         cargo.to_string_lossy().into_owned(),
     ])
@@ -208,6 +226,170 @@ fn survivor_does_not_fail_exit_code_and_link_signoff_is_rejected() {
     assert!(
         matches!(&signoff_file.signoffs[0], Signoff::Mutant { subject_digest, .. } if subject_digest == &signoff_file.links[0].subject_digest)
     );
+}
+
+#[test]
+fn crate_scope_preserves_existing_record_for_unsupported_test_in_other_crate() {
+    let dir = temp();
+    let root = dir.path().join("project");
+    let selected = root.join("selected");
+    let other = root.join("other");
+    fs::create_dir_all(selected.join("src")).unwrap();
+    fs::create_dir_all(selected.join("tests")).unwrap();
+    fs::create_dir_all(other.join("tests")).unwrap();
+    fs::write(
+        selected.join("Cargo.toml"),
+        "[package]\nname = \"selected\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    fs::write(selected.join("src/lib.rs"), "pub fn unused() {}\n").unwrap();
+    fs::write(
+        selected.join("tests/no_subject.rs"),
+        "#[test]\nfn unsupported_selected_test() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        other.join("Cargo.toml"),
+        "[package]\nname = \"other\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    fs::write(
+        other.join("tests/unsupported.py"),
+        "def test_outside(): pass\n",
+    )
+    .unwrap();
+
+    let spec_dir = root.join("spec");
+    fs::create_dir_all(&spec_dir).unwrap();
+    fs::write(
+        spec_dir.join("spec.md"),
+        "- [LS-001] Scoped mutation does not replace another crate's record.\n",
+    )
+    .unwrap();
+    let spec = Spec::parse(&fs::read_to_string(spec_dir.join("spec.md")).unwrap()).unwrap();
+    let index = TestIndex::build(&root).unwrap();
+    let selected_entry = index
+        .entries
+        .iter()
+        .find(|entry| entry.name == "unsupported_selected_test")
+        .unwrap();
+    let other_entry = index
+        .entries
+        .iter()
+        .find(|entry| entry.name == "test_outside")
+        .unwrap();
+    let revision = &spec.lines[0].revision;
+    let annotations = json!({
+        "schema":"living-spec.annotations/v1",
+        "requirements":{"LS-001":{"links":[
+            {"test_id":selected_entry.id,"fingerprint":selected_entry.fingerprint,"revision":revision,
+             "rename_hint":selected_entry.rename_hint,"explanation":"selected crate test","proposed_by":"human",
+             "audit":{"verdict":"accepted","revision":revision,"notes":[]}},
+            {"test_id":other_entry.id,"fingerprint":other_entry.fingerprint,"revision":revision,
+             "rename_hint":other_entry.rename_hint,"explanation":"outside unsupported test","proposed_by":"human",
+             "audit":{"verdict":"accepted","revision":revision,"notes":[]}}
+        ]}}
+    });
+    fs::write(
+        spec_dir.join("annotations.json"),
+        serde_json::to_vec_pretty(&annotations).unwrap(),
+    )
+    .unwrap();
+    let outside_record = LinkRecord {
+        requirement: "LS-001".into(),
+        test_id: other_entry.id.clone(),
+        test_fingerprint: other_entry.fingerprint.clone(),
+        requirement_revision: revision.clone(),
+        subject_digest: "sha256:existing-subject".into(),
+        target: Target {
+            kind: TargetKind::Test,
+            name: "unsupported".into(),
+        },
+        baseline_passes: 2,
+        status: LinkStatus::Error,
+        reason: Some("preserve this existing error".into()),
+        infra_failure: Some("prior runner failure".into()),
+        mutants: vec![],
+    };
+    let mutation_path = spec_dir.join("mutation.json");
+    fs::write(
+        &mutation_path,
+        MutationFile {
+            schema: "living-spec.mutation/v1".into(),
+            engine: "rust-cargo-v1".into(),
+            links: vec![outside_record.clone()],
+            signoffs: vec![],
+        }
+        .to_pretty_bytes()
+        .unwrap(),
+    )
+    .unwrap();
+    let cargo = root.join("unused-cargo-stub");
+    fs::write(&cargo, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&cargo, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    mutate_scoped(&root, &spec_dir, &selected, &cargo).unwrap();
+
+    let saved = MutationFile::from_bytes(&fs::read(mutation_path).unwrap()).unwrap();
+    assert!(saved.links.contains(&outside_record));
+    assert_eq!(saved.links.len(), 2);
+    assert!(saved
+        .links
+        .iter()
+        .any(|record| record.test_id == selected_entry.id
+            && record.status == LinkStatus::Unsupported));
+}
+
+#[test]
+fn completed_mutation_run_writes_error_links_and_returns_success() {
+    let (_temp, root, spec, test_id) = setup();
+    let cargo = cargo_stub(&root, false);
+    fs::write(&cargo, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&cargo, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_living-spec"))
+        .args([
+            "mutate",
+            spec.to_str().unwrap(),
+            "--tests",
+            root.to_str().unwrap(),
+            "--crate",
+            root.to_str().unwrap(),
+            "--jobs",
+            "2",
+            "--max-mutants",
+            "1",
+            "--only",
+            "LS-001",
+            "--cargo",
+            cargo.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "completed error links must not fail the CLI: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains(
+        "mutation run complete: 1 links run, 0 checked, 0 survived, 0 unsupported, 1 error"
+    ));
+
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    let record = file
+        .links
+        .iter()
+        .find(|record| record.test_id == test_id)
+        .unwrap();
+    assert_eq!(record.status, LinkStatus::Error);
 }
 
 #[test]

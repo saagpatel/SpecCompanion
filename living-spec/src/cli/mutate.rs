@@ -17,7 +17,7 @@ use std::{
     time::Duration,
 };
 
-const USAGE: &str = "usage: living-spec mutate <spec dir> --tests <root> [--crate <dir>] [--max-mutants N] [--jobs N] [--timeout-secs N] [--only REQ-ID]... [--out <file>]";
+const USAGE: &str = "usage: living-spec mutate <spec dir> --tests <root> [--crate <dir>] [--max-mutants N] [--jobs N] [--timeout-secs N] [--only REQ-ID]... [--out <file>] (completed runs record error links and exit successfully)";
 
 struct Args {
     dir: PathBuf,
@@ -182,14 +182,15 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                 continue;
             }
             if let Some(requested_crate) = &requested_crate {
-                if let Ok(subject) = crate::mutation::subject::resolve_subject(entry, tests_root) {
-                    if subject.package_dir.canonicalize().ok().as_ref() != Some(requested_crate) {
-                        println!(
-                            "{requirement} {} skipped: outside requested crate",
-                            link.test_id
-                        );
-                        continue;
-                    }
+                let package = test_package_dir(entry, tests_root);
+                if package.as_ref() != Some(requested_crate) {
+                    let reason = if package.is_some() {
+                        "outside requested crate"
+                    } else {
+                        "test package unresolved"
+                    };
+                    println!("{requirement} {} skipped: {reason}", link.test_id);
+                    continue;
                 }
             }
             selected.push((
@@ -252,6 +253,10 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         .iter()
         .filter(|(_, link)| link.status == crate::core::mutation::LinkStatus::Survived)
         .count();
+    let unsupported = records
+        .iter()
+        .filter(|(_, link)| link.status == crate::core::mutation::LinkStatus::Unsupported)
+        .count();
     for (_, record) in &records {
         print_record(record);
     }
@@ -286,11 +291,30 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             .to_pretty_bytes()
             .map_err(|e| format!("invalid mutation evidence: {e}"))?,
     )?;
-    println!("mutation run complete: {run_count} links run, {checked} checked, {survived} with survivors");
-    if engine_errors > 0 {
-        return Err(format!("mutation engine reported {engine_errors} error link(s)").into());
-    }
+    println!("mutation run complete: {run_count} links run, {checked} checked, {survived} survived, {unsupported} unsupported, {engine_errors} error");
     Ok(())
+}
+
+/// Resolve ownership from the test's path, even when its subject is unsupported.
+fn test_package_dir(entry: &TestEntry, tests_root: &Path) -> Option<PathBuf> {
+    let root = tests_root.canonicalize().ok()?;
+    let file = root.join(&entry.file).canonicalize().ok()?;
+    if !file.starts_with(&root) {
+        return None;
+    }
+    let mut directory = file.parent()?;
+    loop {
+        if directory.join("Cargo.toml").is_file() {
+            return Some(directory.to_path_buf());
+        }
+        if directory == root {
+            return None;
+        }
+        directory = directory.parent()?;
+        if !directory.starts_with(&root) {
+            return None;
+        }
+    }
 }
 
 fn print_record(record: &LinkRecord) {
@@ -357,4 +381,51 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     file.as_file().sync_all()?;
     file.persist(path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_package_dir;
+    use crate::agents::test_index::{Language, TestEntry};
+    use std::fs;
+
+    #[test]
+    fn unsupported_test_outside_selected_crate_is_excluded_by_package_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let selected = root.join("selected");
+        let other = root.join("other");
+        fs::create_dir_all(selected.join("tests")).unwrap();
+        fs::create_dir_all(other.join("tests")).unwrap();
+        fs::write(selected.join("Cargo.toml"), "[package]\n").unwrap();
+        fs::write(other.join("Cargo.toml"), "[package]\n").unwrap();
+        fs::write(
+            other.join("tests/unsupported.py"),
+            "def test_case(): pass\n",
+        )
+        .unwrap();
+
+        // Python tests have no Rust mutation subject, but --crate ownership is still knowable.
+        let entry = TestEntry {
+            id: "python:other/tests/unsupported.py:test_case".into(),
+            name: "test_case".into(),
+            file: "other/tests/unsupported.py".into(),
+            line: 1,
+            source: "def test_case(): pass\n".into(),
+            body: "pass".into(),
+            language: Language::Python,
+            should_panic: false,
+            attributes: vec![],
+            unsupported_attributes: false,
+            decorated: false,
+            case_ids: vec![],
+            unknown_cases: false,
+            fingerprint: "sha256:test".into(),
+            rename_hint: "test_case".into(),
+        };
+
+        let owner = test_package_dir(&entry, root).unwrap();
+        assert_eq!(owner, other.canonicalize().unwrap());
+        assert_ne!(owner, selected.canonicalize().unwrap());
+    }
 }

@@ -291,6 +291,7 @@ enum Scope {
     Module,
     Other,
     Conditional,
+    Test,
 }
 
 fn qualifier_start(tokens: &[crate::agents::syntax::Token], index: usize) -> usize {
@@ -424,7 +425,16 @@ fn definitions(file: &str, source: &str) -> (Vec<SubjectFunction>, BTreeSet<Stri
             });
             let mode = if has_mod && !has_cfg {
                 Scope::Module
-            } else if has_mod && !test_cfg {
+            } else if test_cfg
+                || (header.iter().any(|t| t.text == "fn")
+                    && header.windows(4).any(|w| {
+                        w.iter()
+                            .map(|t| t.text.as_str())
+                            .eq(["#", "[", "test", "]"])
+                    }))
+            {
+                Scope::Test
+            } else if has_mod {
                 Scope::Conditional
             } else {
                 Scope::Other
@@ -441,19 +451,20 @@ fn definitions(file: &str, source: &str) -> (Vec<SubjectFunction>, BTreeSet<Stri
         } else if ts[i].text == ";" {
             last_boundary = i + 1;
         }
-        if ts[i].text != "fn" || scopes.contains(&Scope::Other) {
+        if ts[i].text != "fn" || (scopes.contains(&Scope::Other) && !scopes.contains(&Scope::Test))
+        {
             continue;
         }
         let Some(name_token) = ts.get(i + 1).filter(|t| t.kind == Kind::Ident) else {
             continue;
         };
-        if cfg_test_fn(&ts, i) {
-            continue;
-        }
         *definition_counts
             .entry(name_token.text.clone())
             .or_default() += 1;
-        if scopes.contains(&Scope::Conditional) {
+        if cfg_test_fn(&ts, i)
+            || scopes.contains(&Scope::Test)
+            || scopes.contains(&Scope::Conditional)
+        {
             continue;
         }
         let qualifier = qualifier_start(&ts, i);
@@ -736,8 +747,8 @@ fn called_names(body: &str) -> BTreeSet<String> {
     names
 }
 
-fn source_files(root: &Path) -> Result<Vec<PathBuf>, Unsupported> {
-    fn visit(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), Unsupported> {
+fn source_files(root: &Path, all_files: bool) -> Result<Vec<PathBuf>, Unsupported> {
+    fn visit(dir: &Path, out: &mut Vec<PathBuf>, all_files: bool) -> Result<(), Unsupported> {
         let entries = fs::read_dir(dir).map_err(|_| unsupported("no resolvable subject"))?;
         for entry in entries {
             let entry = entry.map_err(|_| unsupported("no resolvable subject"))?;
@@ -746,8 +757,8 @@ fn source_files(root: &Path) -> Result<Vec<PathBuf>, Unsupported> {
                 .map_err(|_| unsupported("no resolvable subject"))?;
             let path = entry.path();
             if kind.is_dir() {
-                visit(&path, out)?;
-            } else if kind.is_file() && path.extension().is_some_and(|e| e == "rs") {
+                visit(&path, out, all_files)?;
+            } else if kind.is_file() && (all_files || path.extension().is_some_and(|e| e == "rs")) {
                 out.push(path);
             } else if kind.is_symlink() {
                 return Err(unsupported("no resolvable subject"));
@@ -756,9 +767,97 @@ fn source_files(root: &Path) -> Result<Vec<PathBuf>, Unsupported> {
         Ok(())
     }
     let mut out = Vec::new();
-    visit(&root.join("src"), &mut out)?;
+    visit(root, &mut out, all_files)?;
     out.sort();
     Ok(out)
+}
+
+// Only a preceding, unqualified macro_rules declaration in this module can be
+// established as visible without resolving imports or external crates.
+fn opaque_item_macros(source: &str) -> bool {
+    let ts = lex_rust(source);
+    if ts.windows(3).any(|w| {
+        w[0].text == "include" && w[1].text == "!" && matches!(w[2].text.as_str(), "(" | "{")
+    }) {
+        return true;
+    }
+    let mut scopes = vec![(true, BTreeSet::<String>::new())];
+    let mut boundary = 0;
+    let mut i = 0;
+    while i < ts.len() {
+        if ts[i].text == "#" && ts.get(i + 1).is_some_and(|t| t.text == "[") {
+            i = close(&ts, i + 1).unwrap_or(ts.len() - 1) + 1;
+            if scopes.last().is_some_and(|s| s.0) {
+                boundary = i;
+            }
+            continue;
+        }
+        if ts[i].text == "!" && i > 0 {
+            let declaration = ts[i - 1].text == "macro_rules";
+            let open = i + if declaration { 2 } else { 1 };
+            if ts
+                .get(open)
+                .is_some_and(|t| matches!(t.text.as_str(), "(" | "[" | "{"))
+            {
+                let Some(end) = close(&ts, open) else {
+                    return true;
+                };
+                if declaration {
+                    if scopes.last().is_some_and(|s| s.0) {
+                        if ts[open + 1..end].iter().any(|t| t.text == "fn") {
+                            return true;
+                        }
+                        if let Some(name) = ts.get(i + 1) {
+                            scopes.last_mut().unwrap().1.insert(name.text.clone());
+                        }
+                    }
+                } else if scopes.last().is_some_and(|s| s.0) {
+                    let mut path_start = i - 1;
+                    while path_start >= 2 && ts[path_start - 1].text == "::" {
+                        path_start -= 2;
+                    }
+                    if path_start != boundary {
+                        i = end + 1;
+                        continue;
+                    }
+                    let qualified = i >= 2 && ts[i - 2].text == "::";
+                    let std_path = qualified
+                        && i >= 3
+                        && path_start == i - 3
+                        && matches!(ts[i - 3].text.as_str(), "std" | "core" | "alloc");
+                    if !std_path
+                        && (qualified || !scopes.last().unwrap().1.contains(&ts[i - 1].text))
+                    {
+                        return true;
+                    }
+                }
+                i = end + 1;
+                boundary = i;
+                continue;
+            }
+        }
+        match ts[i].text.as_str() {
+            "{" => {
+                let header = &ts[boundary..i];
+                let module = scopes.last().is_some_and(|s| s.0)
+                    && header.len() >= 2
+                    && header[header.len() - 2].text == "mod"
+                    && header[header.len() - 1].kind == Kind::Ident;
+                scopes.push((module, BTreeSet::new()));
+                boundary = i + 1;
+            }
+            "}" => {
+                if scopes.len() > 1 {
+                    scopes.pop();
+                }
+                boundary = i + 1;
+            }
+            ";" => boundary = i + 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    false
 }
 
 pub fn resolve_subject(entry: &TestEntry, tests_root: &Path) -> Result<Subject, Unsupported> {
@@ -780,7 +879,17 @@ pub fn resolve_subject(entry: &TestEntry, tests_root: &Path) -> Result<Subject, 
     let mut excluded = Vec::new();
     let mut conditional = Vec::new();
     let mut ambiguous_macros = false;
-    for path in source_files(&package_dir)? {
+    let paths = source_files(&package_dir.join("src"), true)?;
+    for path in &paths {
+        let source = fs::read(path).map_err(|_| unsupported("no resolvable subject"))?;
+        if opaque_item_macros(&String::from_utf8_lossy(&source)) {
+            return Err(unsupported("opaque item macros"));
+        }
+    }
+    for path in paths
+        .into_iter()
+        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+    {
         let source = fs::read_to_string(&path).map_err(|_| unsupported("no resolvable subject"))?;
         let tokens = lex_rust(&source);
         for (i, window) in tokens.windows(3).enumerate() {
@@ -898,13 +1007,10 @@ pub fn resolve_subject(entry: &TestEntry, tests_root: &Path) -> Result<Subject, 
         return Err(unsupported("no resolvable subject"));
     }
     for (path, source) in sources {
-        if matches!(
+        let test_file = matches!(
             path.file_name().and_then(|s| s.to_str()),
             Some("tests.rs" | "test.rs")
-        ) || excluded.iter().any(|p| path == *p || path.starts_with(p))
-        {
-            continue;
-        }
+        ) || excluded.iter().any(|p| path == *p || path.starts_with(p));
         let relative = path
             .strip_prefix(&package_dir)
             .ok()
@@ -918,7 +1024,11 @@ pub fn resolve_subject(entry: &TestEntry, tests_root: &Path) -> Result<Subject, 
                 .map(|t| t.text.as_str())
                 .eq(["#", "!", "[", "cfg", "(", "test", ")", "]"])
         });
-        if inner_test {
+        if inner_test || test_file {
+            let (_, test_names) =
+                definitions("", &format!("#[cfg(test)] mod test_code {{ {source} }}"));
+            uncertain_names.extend(test_names);
+            uncertain_names.extend(functions.into_iter().map(|f| f.name));
             continue;
         }
         let inner_cfg = tokens.windows(4).any(|w| {
@@ -939,6 +1049,19 @@ pub fn resolve_subject(entry: &TestEntry, tests_root: &Path) -> Result<Subject, 
             defs.entry(function.name.clone())
                 .or_default()
                 .push(function);
+        }
+    }
+    for dir in ["tests", "benches", "examples"] {
+        let dir = package_dir.join(dir);
+        if dir.is_dir() {
+            for path in source_files(&dir, false)? {
+                let source =
+                    fs::read_to_string(path).map_err(|_| unsupported("no resolvable subject"))?;
+                let (functions, uncertain) =
+                    definitions("", &format!("#[cfg(test)] mod test_code {{ {source} }}"));
+                uncertain_names.extend(uncertain);
+                uncertain_names.extend(functions.into_iter().map(|f| f.name));
+            }
         }
     }
     let mut functions = Vec::new();
@@ -1084,6 +1207,65 @@ mod tests {
         assert!(called_names("assert_eq!(value(), 1);").contains("value"));
     }
     #[test]
+    fn cfg_test_helper_with_same_name_makes_name_ambiguous() {
+        let temp = fixture();
+        let root = temp.path();
+        for source in [
+            "fn value() {} #[cfg(test)] mod tests { fn value() { super::value() } }",
+            "fn value() {} #[cfg(test)] fn value() {}",
+            "fn value() {} #[test] fn case() { fn value() {} value(); }",
+        ] {
+            fs::write(root.join("src/lib.rs"), source).unwrap();
+            assert!(resolve_subject(&entry("src/lib.rs", "value();"), root).is_err());
+        }
+        fs::write(root.join("src/lib.rs"), "fn value() {}").unwrap();
+        for dir in ["tests", "benches", "examples"] {
+            fs::create_dir_all(root.join(dir)).unwrap();
+            let helper = root.join(dir).join("helper.rs");
+            fs::write(&helper, "fn value() {}").unwrap();
+            assert!(resolve_subject(&entry("tests/a.rs", "value();"), root).is_err());
+            fs::remove_file(helper).unwrap();
+        }
+    }
+    #[test]
+    fn include_generated_wrapper_stays_unsupported() {
+        let temp = fixture();
+        let root = temp.path();
+        for invocation in [
+            "include! (\"generated.rs\");",
+            "include! {\"generated.rs\"}",
+            "external::generate!();",
+        ] {
+            fs::write(
+                root.join("src/lib.rs"),
+                format!("fn value() {{}} mod generated {{ {invocation} }}"),
+            )
+            .unwrap();
+            fs::write(
+                root.join("src/generated.rs"),
+                "fn value() { super::value() }",
+            )
+            .unwrap();
+            assert_eq!(
+                resolve_subject(&entry("tests/a.rs", "generated::value();"), root)
+                    .unwrap_err()
+                    .0,
+                "opaque item macros"
+            );
+        }
+        fs::write(root.join("src/lib.rs"), "fn value() {}").unwrap();
+        fs::write(root.join("src/generated.inc"), "include ! (\"other.rs\");").unwrap();
+        assert_eq!(
+            resolve_subject(&entry("tests/a.rs", "value();"), root)
+                .unwrap_err()
+                .0,
+            "opaque item macros"
+        );
+        assert!(!opaque_item_macros(
+            "macro_rules! harmless { () => { struct X; } } harmless!(); fn value() {}"
+        ));
+    }
+    #[test]
     fn quoted_git_key_unsupported() {
         assert!(path_values("[dependencies]\nexternal = { 'git' = 'url' }").is_err());
     }
@@ -1098,7 +1280,7 @@ mod tests {
             found.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
             ["visible"]
         );
-        assert!(!uncertain.contains("helper"));
+        assert!(uncertain.contains("helper"));
         assert!(uncertain.contains("other"));
     }
     #[test]
@@ -1143,13 +1325,7 @@ mod tests {
             "fn visible() {}\nfn hidden() {}\n",
         )
         .unwrap();
-        assert_eq!(
-            resolve_subject(&entry("tests/a.rs", "visible(); hidden();"), root)
-                .unwrap()
-                .functions
-                .len(),
-            1
-        );
+        assert!(resolve_subject(&entry("tests/a.rs", "visible(); hidden();"), root).is_err());
         assert!(resolve_subject(&entry("tests/a.rs", "hidden();"), root).is_err());
     }
 
@@ -1280,7 +1456,7 @@ mod tests {
         let source =
             "#[cfg(test)] mod tests { fn hidden() -> i32 { 4 } }\nfn visible() -> i32 { 2 }";
         let (found, uncertain) = definitions("src/lib.rs", source);
-        assert!(uncertain.is_empty());
+        assert!(uncertain.contains("hidden"));
         assert_eq!(
             found.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
             vec!["visible"]

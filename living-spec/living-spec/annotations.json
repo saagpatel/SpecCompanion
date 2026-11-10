@@ -441,8 +441,8 @@
       "links": [
         {
           "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
-          "fingerprint": "sha256:eb953377e2f312161438c8ede7da75515f53afca0d1b76f3ebdada973638602e",
-          "rename_hint": "sha256:18f450326c7519ccf0048855f5f32f7eaf09953dfb3ab4614310cd3630e6bdaa",
+          "fingerprint": "sha256:e81f3034c518f656eff967c1273a01c8a864fffb49e807cdc784a4fac2c6da1b",
+          "rename_hint": "sha256:88f2ef43906ffaf462de2cf854c2bec8dbb611eff7d913c7419747ce7a38d913",
           "revision": "sha256:7181853d21a4c6c8f1ce7954ea032839b51308af44d7f6e66de26766904e7d34",
           "explanation": "matched \"list\", \"project\", \"spec\" in test name; matched \"no\" in called identifiers; matched \"has\", \"liv\", \"no\", \"project\", \"spec\" in body literals",
           "proposed_by": "linker",
@@ -740,8 +740,8 @@
       "links": [
         {
           "test_id": "libtest:web:tests/web.rs:rollup_excludes_archived_and_lists_the_project_without_a_spec",
-          "fingerprint": "sha256:eb953377e2f312161438c8ede7da75515f53afca0d1b76f3ebdada973638602e",
-          "rename_hint": "sha256:18f450326c7519ccf0048855f5f32f7eaf09953dfb3ab4614310cd3630e6bdaa",
+          "fingerprint": "sha256:e81f3034c518f656eff967c1273a01c8a864fffb49e807cdc784a4fac2c6da1b",
+          "rename_hint": "sha256:88f2ef43906ffaf462de2cf854c2bec8dbb611eff7d913c7419747ce7a38d913",
           "revision": "sha256:a0e4205f8312b7b6a89d67351be939dbe9bfe78a1964f0900985b4abd589e951",
           "explanation": "matched \"archiv\", \"exclude\", \"project\", \"spec\", \"without\" in test name; matched \"count\", \"project\", \"spec\" in body literals",
           "proposed_by": "linker",

@@ -276,7 +276,11 @@ struct SourceReauditor<'a>(&'a TestIndex);
 
 impl Reauditor for SourceReauditor<'_> {
     fn reaudit(&self, line: &RequirementLine, link: &mut Link, changed_source: bool) {
-        if let Some(entry) = self.0.get(&link.test_id) {
+        let base_id = link
+            .test_id
+            .split_once('#')
+            .map_or(link.test_id.as_str(), |(base, _)| base);
+        if let Some(entry) = self.0.get(base_id) {
             link.retire_stale_override();
             if changed_source
                 || link.fingerprint != entry.fingerprint

@@ -47,3 +47,5 @@ For this standalone crate, run pushes from the repository root with
 is opt-in; CI scores independently on every push and pull request.
 
 Mutation checks are opt-in. `living-spec mutate <spec-dir> --tests <source-root>` runs bounded Rust mutants for currently accepted links and writes or merges `<spec-dir>/mutation.json`. `living-spec score ... --mutation [<path>]` (or `rescore`) attaches current tiers; the default path is `<spec-dir>/mutation.json`, and a missing file is an input error. Scoring without `--mutation` does not read mutation evidence.
+
+`living-spec signoff <spec-dir> link <REQ> <test_id> --tests <source-root> --reason <text> --signed-by <handle>` records a human signoff. The optional `--tests` selects the same source root as mutation; it defaults to the spec directory's parent. It also applies to mutant signoffs.

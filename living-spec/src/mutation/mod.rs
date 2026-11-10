@@ -4,7 +4,7 @@ pub mod runner;
 pub mod subject;
 
 use crate::{
-    agents::test_index::TestEntry,
+    agents::test_index::{Language, TestEntry},
     core::mutation::{
         subject_digest, LinkRecord, LinkStatus, Mutant, MutantOutcome, Target, TargetKind,
     },
@@ -79,6 +79,10 @@ pub fn run_link(
         infra_failure: None,
         mutants: vec![],
     };
+    if entry.language == Language::Rust && entry.id.contains('#') {
+        record.reason = Some("parameterized case".into());
+        return record;
+    }
     let subject = match subject::resolve_subject(entry, tests_root) {
         Ok(subject) => subject,
         Err(reason) => {

@@ -160,7 +160,11 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                 );
                 continue;
             }
-            let Some(entry) = index.get(&link.test_id) else {
+            let base_id = link
+                .test_id
+                .split_once('#')
+                .map_or(link.test_id.as_str(), |(base, _)| base);
+            let Some(entry) = index.get(base_id) else {
                 println!("{requirement} {} skipped: unresolved test", link.test_id);
                 continue;
             };
@@ -223,8 +227,10 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                     *cursor += 1;
                     i
                 };
-                let (req, _, _, revision, entry) = &selected[i];
-                let record = run_link(options, entry, req, revision, tests_root);
+                let (req, test_id, _, revision, entry) = &selected[i];
+                let mut entry = entry.clone();
+                entry.id.clone_from(test_id);
+                let record = run_link(options, &entry, req, revision, tests_root);
                 results.lock().expect("result lock").push((i, record));
             });
         }

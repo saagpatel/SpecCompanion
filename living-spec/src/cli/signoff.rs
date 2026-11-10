@@ -1,11 +1,11 @@
 use super::{link::load, Exit};
 use crate::{
-    agents::test_index::TestIndex,
+    agents::test_index::{identity_root, TestIndex},
     core::mutation::{LinkStatus, MutationFile, Signoff},
 };
 use std::{error::Error, fs, path::Path};
 
-const USAGE: &str = "usage: living-spec signoff <spec dir> link <REQ> <test_id> --reason <text> --signed-by <handle>\n       living-spec signoff <spec dir> mutant <REQ> <test_id> <mutant_id> --reason <text> --signed-by <handle>";
+const USAGE: &str = "usage: living-spec signoff <spec dir> link <REQ> <test_id> [--tests <root>] --reason <text> --signed-by <handle>\n       living-spec signoff <spec dir> mutant <REQ> <test_id> <mutant_id> [--tests <root>] --reason <text> --signed-by <handle>";
 
 pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     let usage = || Exit::Usage(USAGE.into());
@@ -21,10 +21,12 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     };
     let mut reason = None;
     let mut signed_by = None;
+    let mut tests = None;
     while i < args.len() {
         let (slot, flag) = match args[i].as_str() {
             "--reason" if reason.is_none() => (&mut reason, "--reason"),
             "--signed-by" if signed_by.is_none() => (&mut signed_by, "--signed-by"),
+            "--tests" if tests.is_none() => (&mut tests, "--tests"),
             _ => return Err(usage().into()),
         };
         let value = args
@@ -59,21 +61,19 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     {
         return Err("link is challenged or stale; re-audit it before signing off".into());
     }
-    // Resolve from the project directory containing this spec so callers do
-    // not need to run the command from a particular cwd.
-    let tests_root = dir.parent().unwrap_or(Path::new("."));
-    let tests_root = if tests_root.file_name().is_some_and(|name| name == "tests")
-        && tests_root
-            .parent()
-            .is_some_and(|parent| parent.join("Cargo.toml").is_file())
-    {
-        tests_root.parent().unwrap()
-    } else {
-        tests_root
-    };
-    let index = TestIndex::build(tests_root)?;
+    let scan_root = crate::mutation::canonical_input(
+        tests
+            .map(Path::new)
+            .unwrap_or_else(|| dir.parent().unwrap_or(Path::new("."))),
+    )?;
+    let tests_root = identity_root(&scan_root);
+    let index = TestIndex::build(&scan_root)?;
     let entry = index
-        .get(test_id)
+        .get(
+            test_id
+                .split_once('#')
+                .map_or(test_id.as_str(), |(base, _)| base),
+        )
         .ok_or_else(|| format!("test not found: {test_id}"))?;
     if entry.fingerprint != link.fingerprint {
         return Err("test fingerprint is stale".into());

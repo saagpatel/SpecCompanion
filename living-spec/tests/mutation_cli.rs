@@ -622,3 +622,148 @@ fn uncanonicalizable_root_is_error_not_unsupported_record() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid input"));
     assert_eq!(fs::read(spec.join("mutation.json")).unwrap(), before);
 }
+
+fn python_signoff_case(parameterized: bool) {
+    let dir = temp();
+    let spec_dir = dir.path().join("spec");
+    let tests = dir.path().join("tests");
+    fs::create_dir(&spec_dir).unwrap();
+    fs::create_dir(&tests).unwrap();
+    let text = "- [LS-001] Export preserves the value.\n";
+    fs::write(spec_dir.join("spec.md"), text).unwrap();
+    let source = if parameterized {
+        "@pytest.mark.parametrize('value', [30])\ndef test_export(value):\n    assert export_value(value) == value\n"
+    } else {
+        "def test_export():\n    assert export_value(30) == 30\n"
+    };
+    fs::write(tests.join("test_export.py"), source).unwrap();
+    let entry = TestIndex::build(&tests).unwrap().entries.remove(0);
+    assert!(entry.id.starts_with("pytest:"));
+    let id = if parameterized {
+        format!("{}#30", entry.id)
+    } else {
+        entry.id.clone()
+    };
+    let revision = &Spec::parse(text).unwrap().lines[0].revision;
+    let annotations = json!({"schema":"living-spec.annotations/v1","requirements":{"LS-001":{"links":[{
+        "test_id":id,"fingerprint":entry.fingerprint,"revision":revision,
+        "rename_hint":entry.rename_hint,"explanation":"reviewed","proposed_by":"human",
+        "audit":{"verdict":"accepted","revision":revision,"notes":[],"override":{
+            "by":"human","reason":"reviewed assertion","test_id":id,"fingerprint":entry.fingerprint,"revision":revision
+        }}
+    }]}}});
+    fs::write(
+        spec_dir.join("annotations.json"),
+        serde_json::to_vec_pretty(&annotations).unwrap(),
+    )
+    .unwrap();
+    let spec = spec_dir.to_str().unwrap();
+    let tests_root = tests.to_str().unwrap();
+    cli::run(&["mutate", spec, "--tests", tests_root].map(str::to_owned)).unwrap();
+    let file =
+        MutationFile::from_bytes(&fs::read(spec_dir.join("mutation.json")).unwrap()).unwrap();
+    assert_eq!(file.links.len(), 1);
+    assert_eq!(file.links[0].test_id, id);
+    assert_eq!(file.links[0].status, LinkStatus::Unsupported);
+    cli::run(
+        &[
+            "signoff",
+            spec,
+            "link",
+            "LS-001",
+            &id,
+            "--tests",
+            tests_root,
+            "--reason",
+            "reviewed",
+            "--signed-by",
+            "reviewer",
+        ]
+        .map(str::to_owned),
+    )
+    .unwrap();
+    let file =
+        MutationFile::from_bytes(&fs::read(spec_dir.join("mutation.json")).unwrap()).unwrap();
+    assert!(matches!(&file.signoffs[0], Signoff::Link { test_id, .. } if test_id == &id));
+    let results = spec_dir.join("results.xml");
+    let name = if parameterized {
+        "test_export[30]"
+    } else {
+        "test_export"
+    };
+    fs::write(&results, format!("<testsuite tests=\"1\"><testcase classname=\"test_export\" name=\"{name}\"/></testsuite>")).unwrap();
+    cli::run(
+        &[
+            "score",
+            spec,
+            "--results",
+            results.to_str().unwrap(),
+            "--format",
+            "junit",
+            "--tests",
+            tests_root,
+            "--mutation",
+        ]
+        .map(str::to_owned),
+    )
+    .unwrap();
+    let status: serde_json::Value =
+        serde_json::from_slice(&fs::read(spec_dir.join("status.json")).unwrap()).unwrap();
+    assert_eq!(status["statuses"][0]["mutation"]["state"], "signed_off");
+}
+
+#[test]
+fn mutate_then_signoff_non_rust_link_with_sibling_tests_dir() {
+    python_signoff_case(false);
+}
+
+#[test]
+fn parameterized_case_link_mutate_signoff_score() {
+    python_signoff_case(true);
+}
+
+#[test]
+fn rust_case_is_unsupported_without_spawning_cargo_and_can_be_signed_off() {
+    let (_temp, root, spec, base) = setup();
+    let id = format!("{base}#case");
+    let path = spec.join("annotations.json");
+    let mut annotations: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    annotations["requirements"]["LS-001"]["links"][0]["test_id"] = json!(id);
+    fs::write(path, serde_json::to_vec_pretty(&annotations).unwrap()).unwrap();
+    let marker = root.join("spawned");
+    let cargo = root.join("cargo-stub");
+    fs::write(
+        &cargo,
+        format!("#!/bin/sh\ntouch '{}'\nexit 1\n", marker.display()),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&cargo, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    mutate(&root, &spec, &cargo).unwrap();
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    assert_eq!(file.links[0].test_id, id);
+    assert_eq!(file.links[0].status, LinkStatus::Unsupported);
+    assert_eq!(file.links[0].reason.as_deref(), Some("parameterized case"));
+    assert!(!marker.exists());
+    cli::run(
+        &[
+            "signoff",
+            spec.to_str().unwrap(),
+            "link",
+            "LS-001",
+            &id,
+            "--tests",
+            root.to_str().unwrap(),
+            "--reason",
+            "reviewed",
+            "--signed-by",
+            "reviewer",
+        ]
+        .map(str::to_owned),
+    )
+    .unwrap();
+}

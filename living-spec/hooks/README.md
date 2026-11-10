@@ -45,3 +45,5 @@ For this standalone crate, run pushes from the repository root with
 `LIVING_SPEC_DIR=living-spec/living-spec`, `LIVING_SPEC_TESTS=living-spec`, and
 `LIVING_SPEC_TEST_CMD='cd living-spec && cargo test --locked'`. Hook installation
 is opt-in; CI scores independently on every push and pull request.
+
+Mutation checks are opt-in. `living-spec mutate <spec-dir> --tests <source-root>` runs bounded Rust mutants for currently accepted links and writes or merges `<spec-dir>/mutation.json`. `living-spec score ... --mutation [<path>]` (or `rescore`) attaches current tiers; the default path is `<spec-dir>/mutation.json`, and a missing file is an input error. Scoring without `--mutation` does not read mutation evidence.

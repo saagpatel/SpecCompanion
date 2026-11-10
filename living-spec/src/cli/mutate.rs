@@ -2,7 +2,7 @@ use super::{link::load, Exit};
 use crate::{
     agents::test_index::{identity_root, TestEntry, TestIndex},
     core::mutation::{LinkRecord, MutationFile},
-    mutation::{run_link, Options},
+    mutation::{canonical_input, run_link, Options},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -105,14 +105,16 @@ fn parse(args: &[String]) -> Result<Args, Box<dyn Error>> {
         }
         i += 2;
     }
-    if parsed.tests.as_os_str().is_empty() {
+    if !seen.contains("--tests") {
         return Err(usage("--tests is required"));
     }
     Ok(parsed)
 }
 
 pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
-    let args = parse(args)?;
+    let mut args = parse(args)?;
+    args.dir = canonical_input(&args.dir)?;
+    args.tests = canonical_input(&args.tests)?;
     let (spec, annotations) = load(&args.dir)?;
     let index = TestIndex::build(&args.tests)?;
     let lines: BTreeMap<_, _> = spec
@@ -125,7 +127,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         .crate_dir
         .as_ref()
         .map(|path| {
-            let canonical = path.canonicalize()?;
+            let canonical = canonical_input(path)?;
             if !canonical.is_dir() {
                 return Err(std::io::Error::other("--crate must be a directory"));
             }

@@ -504,3 +504,121 @@ fn mutate_then_score_with_crate_tests_dir_as_tests_root() {
         "mutation_checked"
     );
 }
+
+fn relative_mutate(root: &Path, cargo: &Path, extra: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_living-spec"))
+        .current_dir(root)
+        .args([
+            "mutate",
+            "spec",
+            "--tests",
+            "tests",
+            "--max-mutants",
+            "1",
+            "--cargo",
+        ])
+        .arg(cargo)
+        .args(extra)
+        .output()
+        .unwrap()
+}
+
+fn assert_success(output: &std::process::Output) {
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn relative_tests_dir_from_crate_root_mutate_with_crate_dot() {
+    let (_temp, root, spec, test_id) = setup();
+    let output = relative_mutate(&root, &cargo_stub(&root, true), &["--crate", "."]);
+    assert_success(&output);
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    assert_eq!(file.links.len(), 1);
+    assert_eq!(file.links[0].test_id, test_id);
+    assert_eq!(file.links[0].status, LinkStatus::Checked);
+}
+
+#[test]
+fn empty_tests_path_resolves_to_current_directory() {
+    let (_temp, root, spec, _) = setup();
+    let cargo = cargo_stub(&root, true);
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_living-spec"))
+        .current_dir(&root)
+        .args([
+            "mutate",
+            "spec",
+            "--tests",
+            "",
+            "--crate",
+            ".",
+            "--max-mutants",
+            "1",
+            "--cargo",
+        ])
+        .arg(cargo)
+        .output()
+        .unwrap();
+    assert_success(&output);
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    assert_eq!(file.links[0].status, LinkStatus::Checked);
+}
+
+#[test]
+fn relative_tests_dir_without_crate_flag_keeps_existing_evidence() {
+    let (_temp, root, spec, _) = setup();
+    let cargo = cargo_stub(&root, true);
+    mutate(&root, &spec, &cargo).unwrap();
+    let before = fs::read(spec.join("mutation.json")).unwrap();
+    assert_success(&relative_mutate(&root, &cargo, &[]));
+    assert_eq!(fs::read(spec.join("mutation.json")).unwrap(), before);
+}
+
+#[test]
+fn relative_tests_dir_then_score_keeps_checked() {
+    let (_temp, root, spec, test_id) = setup();
+    assert_success(&relative_mutate(&root, &cargo_stub(&root, true), &[]));
+    let (class, name) = test_id.rsplit_once(':').unwrap();
+    fs::write(spec.join("results.xml"), format!("<testsuites tests=\"1\"><testsuite tests=\"1\"><testcase classname=\"{class}\" name=\"{name}\"/></testsuite></testsuites>")).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_living-spec"))
+        .current_dir(&root)
+        .args([
+            "score",
+            "spec",
+            "--results",
+            "spec/results.xml",
+            "--format",
+            "junit",
+            "--tests",
+            "tests",
+            "--mutation",
+        ])
+        .output()
+        .unwrap();
+    assert_success(&output);
+    let status: serde_json::Value =
+        serde_json::from_slice(&fs::read(spec.join("status.json")).unwrap()).unwrap();
+    assert_eq!(
+        status["statuses"][0]["mutation"]["state"],
+        "mutation_checked"
+    );
+}
+
+#[test]
+fn uncanonicalizable_root_is_error_not_unsupported_record() {
+    let (_temp, root, spec, _) = setup();
+    let cargo = cargo_stub(&root, true);
+    mutate(&root, &spec, &cargo).unwrap();
+    let before = fs::read(spec.join("mutation.json")).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_living-spec"))
+        .current_dir(&root)
+        .args(["mutate", "spec", "--tests", "missing", "--crate", "."])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid input"));
+    assert_eq!(fs::read(spec.join("mutation.json")).unwrap(), before);
+}

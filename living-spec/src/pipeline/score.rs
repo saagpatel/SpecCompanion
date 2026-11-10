@@ -80,10 +80,26 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     {
         return Err(CommandExit::Usage(usage()).into());
     }
+    let normalized_dir = if mutation_seen {
+        Some(crate::mutation::canonical_input(Path::new(dir))?)
+    } else {
+        None
+    };
+    let normalized_tests = if mutation_seen {
+        Some(crate::mutation::canonical_input(
+            options
+                .get("--tests")
+                .or_else(|| options.get("--fingerprints-from"))
+                .map(Path::new)
+                .unwrap_or(Path::new(".")),
+        )?)
+    } else {
+        None
+    };
     let index = options
         .get("--fingerprints-from")
         .or_else(|| options.get("--tests"))
-        .map(|root| TestIndex::build(Path::new(root)))
+        .map(|root| TestIndex::build(normalized_tests.as_deref().unwrap_or(Path::new(root))))
         .transpose()?;
     let file = options
         .get("--results")
@@ -115,7 +131,7 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         Some(path) => load_fingerprints(&fs::read_to_string(path)?)?,
         None => Fingerprints::new(),
     };
-    let dir = Path::new(dir);
+    let dir = normalized_dir.as_deref().unwrap_or(Path::new(dir));
     let commit = options
         .get("--commit")
         .map(|s| s.to_string())
@@ -132,18 +148,18 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             .map(Path::new)
             .map(Path::to_path_buf)
             .unwrap_or_else(|| dir.join("mutation.json"));
+        let mutation_path = crate::mutation::canonical_input(&mutation_path)?;
         let mutation_bytes = fs::read(&mutation_path)
             .map_err(|error| format!("mutation file {}: {error}", mutation_path.display()))?;
         let mutation = crate::core::mutation::MutationFile::from_bytes(&mutation_bytes)
             .map_err(|error| format!("invalid mutation file: {error}"))?;
         let digest = crate::core::freshness::sha256_bytes(&mutation_bytes);
         let locator = relative_locator(dir, &mutation_path)?;
-        let tests_root = options
-            .get("--tests")
-            .or_else(|| options.get("--fingerprints-from"))
-            .map(Path::new)
-            .unwrap_or(Path::new("."));
-        let tests_root = identity_root(tests_root);
+        let tests_root = identity_root(
+            normalized_tests
+                .as_deref()
+                .expect("mutation root normalized"),
+        );
         rescore_with_results_and_mutation(
             dir,
             &outcomes,

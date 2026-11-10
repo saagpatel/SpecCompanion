@@ -14,6 +14,21 @@ use std::{
     time::Duration,
 };
 
+/// Resolve a filesystem input before deriving roots or reading from it.
+pub(crate) fn canonical_input(path: &Path) -> std::io::Result<PathBuf> {
+    let path = if path.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        path
+    };
+    path.canonicalize().map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{}: {error}", path.display()),
+        )
+    })
+}
+
 #[derive(Debug, Clone)]
 pub struct Options {
     pub max_mutants: usize,

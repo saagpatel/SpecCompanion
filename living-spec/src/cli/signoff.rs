@@ -12,7 +12,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     if args.len() < 2 {
         return Err(usage().into());
     }
-    let dir = Path::new(&args[0]);
+    let dir = crate::mutation::canonical_input(Path::new(&args[0]))?;
     let kind = args[1].as_str();
     let (requirement, test_id, mutant_id, mut i) = match kind {
         "link" if args.len() >= 4 => (&args[2], &args[3], None, 4),
@@ -39,7 +39,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     let reason = reason.ok_or_else(usage)?;
     let signed_by = signed_by.ok_or_else(usage)?;
-    let (spec, annotations) = load(dir)?;
+    let (spec, annotations) = load(&dir)?;
     let line = spec
         .lines
         .iter()
@@ -61,8 +61,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     }
     // Resolve from the project directory containing this spec so callers do
     // not need to run the command from a particular cwd.
-    let canonical_dir = dir.canonicalize()?;
-    let tests_root = canonical_dir.parent().unwrap_or(Path::new("."));
+    let tests_root = dir.parent().unwrap_or(Path::new("."));
     let tests_root = if tests_root.file_name().is_some_and(|name| name == "tests")
         && tests_root
             .parent()

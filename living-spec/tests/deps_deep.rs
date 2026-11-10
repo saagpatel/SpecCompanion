@@ -122,6 +122,7 @@ fn finding_07_deps_3_large_cycle_qualification_shares_its_witness() {
             badge: Badge::Proven,
             reasons: vec![],
             tests: vec![],
+            mutation: None,
         })
         .collect();
     apply_qualified(&mut statuses, &graph);

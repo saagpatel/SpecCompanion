@@ -1,5 +1,6 @@
 pub use crate::core::providers::{
-    BoundaryGapProvider, NoBoundaryEvidence, NoQualification, QualifiedProvider, Reauditor, Result,
+    BoundaryGapProvider, MutationTierProvider, NoBoundaryEvidence, NoQualification,
+    QualifiedProvider, Reauditor, Result,
 };
 use crate::core::{
     annotations::{Annotations, RequirementAnnotations},
@@ -90,6 +91,7 @@ pub fn rescore_with_providers(
             reauditor: None,
             results: None,
             quantifier_reports: &|_, _| Ok(Vec::new()),
+            mutation: None,
         },
     )
 }
@@ -104,6 +106,7 @@ pub struct RescoreContext<'a> {
     pub qualified: &'a dyn QualifiedProvider,
     pub reauditor: Option<&'a dyn Reauditor>,
     pub quantifier_reports: &'a QuantifierReports,
+    pub mutation: Option<&'a dyn MutationTierProvider>,
 }
 
 pub fn rescore_with_context(
@@ -120,6 +123,7 @@ pub fn rescore_with_context(
         results,
         reauditor: sources,
         quantifier_reports,
+        mutation,
     } = context;
     if outcomes.is_empty() || commit.trim().is_empty() {
         return Err("nonempty outcomes and commit required".into());
@@ -272,6 +276,9 @@ pub fn rescore_with_context(
             );
         }
     }
+    if let Some(evidence) = mutation {
+        evidence.attach(&spec, &annotations, &mut report.statuses)?;
+    }
     // Quantifier observations remain separate from badges and test outcomes.
     report.quantifier_reports = quantifier_reports(&spec, &annotations)?;
     for status in &report.statuses {
@@ -335,7 +342,7 @@ pub fn rescore_with_context(
         // for scoring, without re-reading a possibly replaced file.
         annotation_value = serde_json::to_value(&annotations)?;
     }
-    let inputs = crate::core::freshness::ScoreInputs::capture(
+    let mut inputs = crate::core::freshness::ScoreInputs::capture(
         &spec_bytes,
         &annotation_value,
         results,
@@ -344,6 +351,10 @@ pub fn rescore_with_context(
         &report.boundary_reports,
         &report.quantifier_reports,
     )?;
+    if let Some(evidence) = mutation {
+        inputs.mutation_digest = Some(evidence.digest().to_owned());
+        inputs.mutation_file = Some(evidence.locator().to_owned());
+    }
     if annotations_changed || !report.renamed_links.is_empty() {
         annotations.save(spec_dir.join("annotations.json"))?;
     }

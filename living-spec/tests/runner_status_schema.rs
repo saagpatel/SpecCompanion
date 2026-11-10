@@ -326,6 +326,7 @@ fn serialized_status(
             reauditor: None,
             results: None,
             quantifier_reports: &quantifier_fn,
+            mutation: None,
         },
     )
     .unwrap();
@@ -436,5 +437,27 @@ fn finding_3_every_persisted_status_document_matches_its_schema() {
         ))
         .is_err(),
         "unknown schema keywords must fail closed"
+    );
+}
+
+#[test]
+fn status_schema_accepts_mutation_tier_and_optional_input_bindings() {
+    let schema: Value = serde_json::from_str(include_str!(
+        "../../contracts/living-spec-status-v1.schema.json"
+    ))
+    .unwrap();
+    let mut document = serialized_status(&NoBoundaryEvidence, &NoQualification, &[]);
+    document["statuses"][0]["mutation"] = serde_json::json!({
+        "state": "survived", "waived": 0, "signed_off": 0,
+        "survivors": [{"id":"m-0123456789ab", "file":"src/lib.rs", "function":"clamp", "line":12,
+            "ordinal":0, "operator":"cmp_flip", "original":"<=", "replacement":">", "outcome":"survived"}]
+    });
+    document["inputs"]["mutation_digest"] = serde_json::json!(format!("sha256:{}", "a".repeat(64)));
+    document["inputs"]["mutation_file"] = serde_json::json!("mutation.json");
+    assert!(validate(&schema, &document, &schema));
+    let decoded: StatusDocument = serde_json::from_value(document).unwrap();
+    assert_eq!(
+        decoded.statuses[0].mutation.as_ref().unwrap().state,
+        living_spec::core::mutation::TierState::Survived
     );
 }

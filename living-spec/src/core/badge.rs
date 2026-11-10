@@ -49,6 +49,8 @@ pub struct LineStatus {
     pub badge: Badge,
     pub reasons: Vec<Reason>,
     pub tests: Vec<TestEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutation: Option<super::mutation::Tier>,
 }
 /// Compatibility entry point. Without a current requirement revision, proof is unavailable.
 pub fn score_line(
@@ -91,6 +93,7 @@ pub fn score_line_at_revision(
         badge: Badge::Unproven,
         reasons: vec![],
         tests: vec![],
+        mutation: None,
     };
     let mut admissible = 0;
     if annotations.links.is_empty() {

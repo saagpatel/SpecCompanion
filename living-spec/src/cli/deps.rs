@@ -68,6 +68,7 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                         badge: Badge::Unproven,
                         reasons: Vec::new(),
                         tests: Vec::new(),
+                        mutation: None,
                     })
                     .collect()
             };

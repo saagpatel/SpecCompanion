@@ -14,6 +14,8 @@ struct RawLine {
     reasons: Vec<Reason>,
     #[serde(default)]
     tests: Vec<RawTest>,
+    #[serde(default)]
+    mutation: Option<crate::core::mutation::Tier>,
 }
 
 #[derive(Deserialize)]
@@ -42,6 +44,7 @@ impl From<RawLine> for LineStatus {
                     admissible: test.admissible,
                 })
                 .collect(),
+            mutation: raw.mutation,
         }
     }
 }
@@ -159,5 +162,16 @@ mod tests {
             assert!(load_boundary_reports(&path).is_err());
             assert!(load_quantifier_reports(&path).is_err());
         }
+    }
+
+    #[test]
+    fn reader_preserves_mutation_and_accepts_legacy_lines() {
+        let text = r#"{"statuses":[{"id":"R-001","badge":"proven","reasons":[],"tests":[],"mutation":{"state":"mutation_checked","waived":0,"signed_off":0,"survivors":[]}}, {"id":"R-002","badge":"unproven","reasons":[],"tests":[]}] }"#;
+        let lines = parse_status(text).unwrap();
+        assert_eq!(
+            lines[0].mutation.as_ref().unwrap().state,
+            crate::core::mutation::TierState::MutationChecked
+        );
+        assert!(lines[1].mutation.is_none());
     }
 }

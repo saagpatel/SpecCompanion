@@ -99,6 +99,13 @@ Extra roots can be added with `--include PATH` (for a project newly revived but 
 
 ## Honesty rules (acceptance-relevant)
 
+### Proof tiers
+
+Plain `proven` rests on the static allowlist auditor, the documented best-effort baseline; it is no longer being hardened. Its known limits remain listed below.
+
+An opt-in mutation-checked tier is being added in stacked changes. It will test sensitivity to deliberate subject changes, which is stronger evidence but does not prove a requirement is met; human signoffs remain visible. See [the mutation architecture](30-mutation-architecture.md).
+
+
 - The auditor is a deterministic, best-effort static check aimed at lazy or accidental non-tests: placeholders,
   irrelevant or tautological assertions, and unexecuted or unsupported shapes. Unsupported shapes are always
   challenged. It is not a sandbox or a proof that a test is adversarially sound; a deliberately obfuscated test can

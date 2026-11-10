@@ -262,6 +262,37 @@ fn timeout_is_error_not_kill() {
     assert!(f.validate().is_err());
 }
 #[test]
+fn killed_mutant_then_infra_failure_is_error_and_keeps_evidence() {
+    let f = sample();
+    let link = &f.links[4];
+    assert_eq!(link.status, LinkStatus::Error);
+    assert_eq!(link.mutants[0].outcome, MutantOutcome::Killed);
+    assert_eq!(
+        evaluate_link(Some(link), &bindings(), &[]),
+        LinkState::Error
+    );
+    let round_trip = MutationFile::from_bytes(&f.to_pretty_bytes().unwrap()).unwrap();
+    assert_eq!(round_trip.links[4].mutants, link.mutants);
+}
+#[test]
+fn infra_failure_blocks_checked_even_if_all_killed() {
+    let mut f = sample();
+    f.links[4].status = LinkStatus::Checked;
+    assert!(f.validate().is_err());
+    assert_eq!(
+        evaluate_link(Some(&f.links[4]), &bindings(), &[]),
+        LinkState::Error
+    );
+}
+#[test]
+fn empty_infra_failure_rejected() {
+    let mut f = sample();
+    for value in ["", " \t"] {
+        f.links[4].infra_failure = Some(value.into());
+        assert!(f.validate().is_err());
+    }
+}
+#[test]
 fn stored_status_must_match_evidence() {
     let mut f = sample();
     f.links[0].status = LinkStatus::Survived;
@@ -404,24 +435,46 @@ fn schema_and_rust_validation_reject_invalid_evidence() {
     .unwrap();
     let fixture: Value =
         serde_json::from_slice(include_bytes!("fixtures/mutation/sample.json")).unwrap();
-    let accepts = |value: &Value| {
-        validate(&schema, value, &schema)
-            && MutationFile::from_bytes(&serde_json::to_vec(value).unwrap()).is_ok()
+    let results = |value: &Value| {
+        (
+            validate(&schema, value, &schema),
+            MutationFile::from_bytes(&serde_json::to_vec(value).unwrap()).is_ok(),
+        )
     };
-    assert!(accepts(&fixture));
+    assert_eq!(results(&fixture), (true, true));
     let mut bad = fixture.clone();
     bad["links"][0]["status"] = json!("survived");
-    assert!(!accepts(&bad));
-    let mut bad = fixture.clone();
-    bad["links"][0]["mutants"][0]["id"] = json!("m-000000000000");
-    assert!(!accepts(&bad));
+    assert_eq!(results(&bad), (false, false));
     let mut bad = fixture.clone();
     bad["links"][0]["mutants"][0]["file"] = json!("../src/lib.rs");
-    assert!(!accepts(&bad));
+    assert_eq!(results(&bad), (false, false));
+    for value in ["", " \t"] {
+        let mut bad = fixture.clone();
+        bad["links"][4]["infra_failure"] = json!(value);
+        assert_eq!(results(&bad), (false, false));
+    }
     let mut bad = fixture.clone();
-    bad["links"]
+    bad["links"][4]["infra_failure"] = Value::Null;
+    assert_eq!(results(&bad), (false, false));
+    let mut bad = fixture.clone();
+    bad["links"][4]["status"] = json!("checked");
+    assert_eq!(results(&bad), (false, false));
+    let mut bad = fixture.clone();
+    bad["links"][1]["status"] = json!("error");
+    bad["links"][1]["reason"] = json!("spawn failed");
+    bad["links"][1]["infra_failure"] = json!("spawn failed");
+    assert_eq!(results(&bad), (true, true));
+
+    // Hash recomputation and link-key uniqueness are intentionally Rust-only;
+    // status-from-evidence is also expressible and enforced by this schema.
+    let mut bad_hash = fixture.clone();
+    bad_hash["links"][0]["mutants"][0]["id"] = json!("m-000000000000");
+    let mut duplicate_link = fixture.clone();
+    duplicate_link["links"]
         .as_array_mut()
         .unwrap()
         .push(fixture["links"][0].clone());
-    assert!(!accepts(&bad));
+    for value in [bad_hash, duplicate_link] {
+        assert_eq!(results(&value), (true, false));
+    }
 }

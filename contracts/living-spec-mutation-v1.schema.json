@@ -215,27 +215,60 @@
           "items": {
             "$ref": "#/$defs/mutant"
           }
+        },
+        "infra_failure": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
         }
       },
       "allOf": [
         {
           "if": {
+            "required": [
+              "infra_failure"
+            ]
+          },
+          "then": {
             "properties": {
-              "mutants": {
-                "contains": {
-                  "properties": {
-                    "outcome": {
-                      "const": "survived"
-                    }
-                  },
-                  "required": [
-                    "outcome"
-                  ]
-                }
+              "status": {
+                "const": "error"
               }
             },
             "required": [
-              "mutants"
+              "status"
+            ]
+          }
+        },
+        {
+          "if": {
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "infra_failure"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "mutants": {
+                    "contains": {
+                      "properties": {
+                        "outcome": {
+                          "const": "survived"
+                        }
+                      },
+                      "required": [
+                        "outcome"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "mutants"
+                ]
+              }
             ]
           },
           "then": {
@@ -254,42 +287,53 @@
             "allOf": [
               {
                 "not": {
-                  "properties": {
-                    "mutants": {
-                      "contains": {
-                        "properties": {
-                          "outcome": {
-                            "const": "survived"
-                          }
-                        },
-                        "required": [
-                          "outcome"
-                        ]
-                      }
-                    }
-                  },
                   "required": [
-                    "mutants"
+                    "infra_failure"
                   ]
                 }
               },
               {
-                "properties": {
-                  "mutants": {
-                    "contains": {
+                "allOf": [
+                  {
+                    "not": {
                       "properties": {
-                        "outcome": {
-                          "const": "timeout"
+                        "mutants": {
+                          "contains": {
+                            "properties": {
+                              "outcome": {
+                                "const": "survived"
+                              }
+                            },
+                            "required": [
+                              "outcome"
+                            ]
+                          }
                         }
                       },
                       "required": [
-                        "outcome"
+                        "mutants"
                       ]
                     }
+                  },
+                  {
+                    "properties": {
+                      "mutants": {
+                        "contains": {
+                          "properties": {
+                            "outcome": {
+                              "const": "timeout"
+                            }
+                          },
+                          "required": [
+                            "outcome"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "mutants"
+                    ]
                   }
-                },
-                "required": [
-                  "mutants"
                 ]
               }
             ]
@@ -450,75 +494,86 @@
           "if": {
             "allOf": [
               {
-                "properties": {
-                  "baseline_passes": {
-                    "const": 2
-                  }
-                },
-                "required": [
-                  "baseline_passes"
-                ]
+                "not": {
+                  "required": [
+                    "infra_failure"
+                  ]
+                }
               },
               {
-                "properties": {
-                  "mutants": {
-                    "contains": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "baseline_passes": {
+                        "const": 2
+                      }
+                    },
+                    "required": [
+                      "baseline_passes"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "mutants": {
+                        "contains": {
+                          "properties": {
+                            "outcome": {
+                              "const": "killed"
+                            }
+                          },
+                          "required": [
+                            "outcome"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "mutants"
+                    ]
+                  },
+                  {
+                    "not": {
                       "properties": {
-                        "outcome": {
-                          "const": "killed"
+                        "mutants": {
+                          "contains": {
+                            "properties": {
+                              "outcome": {
+                                "const": "survived"
+                              }
+                            },
+                            "required": [
+                              "outcome"
+                            ]
+                          }
                         }
                       },
                       "required": [
-                        "outcome"
+                        "mutants"
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "properties": {
+                        "mutants": {
+                          "contains": {
+                            "properties": {
+                              "outcome": {
+                                "const": "timeout"
+                              }
+                            },
+                            "required": [
+                              "outcome"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "mutants"
                       ]
                     }
                   }
-                },
-                "required": [
-                  "mutants"
                 ]
-              },
-              {
-                "not": {
-                  "properties": {
-                    "mutants": {
-                      "contains": {
-                        "properties": {
-                          "outcome": {
-                            "const": "survived"
-                          }
-                        },
-                        "required": [
-                          "outcome"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "mutants"
-                  ]
-                }
-              },
-              {
-                "not": {
-                  "properties": {
-                    "mutants": {
-                      "contains": {
-                        "properties": {
-                          "outcome": {
-                            "const": "timeout"
-                          }
-                        },
-                        "required": [
-                          "outcome"
-                        ]
-                      }
-                    }
-                  },
-                  "required": [
-                    "mutants"
-                  ]
-                }
               }
             ]
           },

@@ -94,6 +94,34 @@
           "outcome": "survived"
         }
       ]
+    },
+    {
+      "requirement": "LS-005",
+      "test_id": "libtest:lib:src/lib.rs:test_5",
+      "test_fingerprint": "sha256:test",
+      "requirement_revision": "sha256:revision",
+      "subject_digest": "sha256:subject",
+      "target": {
+        "kind": "lib",
+        "name": "library"
+      },
+      "baseline_passes": 2,
+      "status": "error",
+      "reason": "mutation run interrupted",
+      "infra_failure": "failed to spawn cargo",
+      "mutants": [
+        {
+          "id": "m-7b99e8a21032",
+          "file": "src/lib.rs",
+          "function": "clamp",
+          "line": 12,
+          "ordinal": 0,
+          "operator": "cmp_flip",
+          "original": "<=",
+          "replacement": ">",
+          "outcome": "killed"
+        }
+      ]
     }
   ],
   "signoffs": [

@@ -24,6 +24,12 @@ pub struct LinkRecord {
     pub status: LinkStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_string"
+    )]
+    pub infra_failure: Option<String>,
     pub mutants: Vec<Mutant>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,6 +115,11 @@ pub enum Signoff {
 }
 fn nonempty(s: &str) -> bool {
     !s.trim().is_empty()
+}
+fn present_string<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    String::deserialize(deserializer).map(Some)
 }
 // Components are framed by their byte length as a big-endian u64. IDs use
 // UTF-8 fields and decimal ordinal. Subject tuples sort lexicographically by
@@ -211,6 +222,9 @@ impl MutationFile {
                     return Err("invalid or duplicate mutant id".into());
                 }
             }
+            if l.infra_failure.as_deref().is_some_and(|s| !nonempty(s)) {
+                return Err("empty infrastructure failure".into());
+            }
             let survivor = l
                 .mutants
                 .iter()
@@ -220,7 +234,9 @@ impl MutationFile {
                 .iter()
                 .any(|m| m.outcome == MutantOutcome::Timeout);
             let killed = l.mutants.iter().any(|m| m.outcome == MutantOutcome::Killed);
-            let valid = if survivor {
+            let valid = if l.infra_failure.is_some() {
+                l.status == LinkStatus::Error
+            } else if survivor {
                 l.status == LinkStatus::Survived
             } else if timeout {
                 l.status == LinkStatus::Error

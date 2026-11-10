@@ -44,6 +44,7 @@ annotation layer). Shape:
       "baseline_passes": 2,
       "status": "checked | survived | unsupported | error",
       "reason": "free text for unsupported or error",
+      "infra_failure": "optional non-empty infrastructure failure detail",
       "mutants": [
         { "id": "m-<12 hex>", "file": "src/x.rs", "function": "clamp", "line": 12, "ordinal": 0,
           "operator": "cmp_flip", "original": "<=", "replacement": ">",
@@ -63,12 +64,16 @@ annotation layer). Shape:
 
 `mutant.id` is stable: the first 12 hex of sha256 over `file`, `function`, `operator`, `original`, `replacement` and
 `ordinal` (the index of that token inside its function). **`status` is evidence, not trust:** the validator recomputes
-it from `baseline_passes` and the mutant outcomes and rejects a file whose stored status disagrees. `subject_digest` is sha256 over the sorted `(file, function name, function source
+it from `infra_failure`, `baseline_passes` and the mutant outcomes and rejects a file whose stored status disagrees. `subject_digest` is sha256 over the sorted `(file, function name, function source
 bytes)` of every mutated subject function, so any edit to the code under test invalidates the record.
 
 ## Status rules (fail closed)
 
 Per link, computed at scoring time from the file plus current bindings:
+
+An optional `infra_failure` must contain non-whitespace text. When present it takes precedence over all outcomes and
+requires `status: error` and a non-empty `reason`. Completed mutants remain as evidence and the link is never counted
+as checked. When absent, the following rules apply unchanged.
 
 1. `status: checked`: at least 1 viable mutant, every viable mutant `killed`, no `timeout`, and `baseline_passes` is
    2 (the unmutated test passed twice). Counts as **checked** only while `test_fingerprint`, `requirement_revision` and `subject_digest` all equal

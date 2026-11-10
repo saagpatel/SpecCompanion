@@ -142,6 +142,9 @@ def mutation_job_is_manual_and_uploads_evidence
   assert(job.dig('env', 'CARGO_TERM_COLOR') == 'never' && job.dig('env', 'NO_COLOR') == '1', 'mutation job disables cargo color')
   steps = job.fetch('steps')
   assert(steps.any? { |step| step['run'] == 'make living-spec-mutate' }, 'manual job runs mutation command')
+  fetch_index = steps.index { |step| step['name'] == 'Fetch mutation dependencies' && step['run'] == 'cargo fetch --locked --manifest-path living-spec/Cargo.toml' }
+  mutate_index = steps.index { |step| step['run'] == 'make living-spec-mutate' }
+  assert(fetch_index && mutate_index && fetch_index < mutate_index, 'manual job fetches locked dependencies before offline mutation checks')
   assert(steps.any? { |step| step['run'] == 'make living-spec-score-mutation' }, 'manual job scores mutation evidence')
   upload = steps.find { |step| step.dig('with', 'name') == 'living-spec-mutation' }
   assert(upload && upload.dig('with', 'path') == 'living-spec/living-spec/mutation.json', 'manual job uploads mutation file')

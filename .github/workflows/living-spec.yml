@@ -23,6 +23,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: living-spec
+      - name: Fetch mutation dependencies
+        run: cargo fetch --locked --manifest-path living-spec/Cargo.toml
       - name: Run opt-in mutation checks
         run: make living-spec-mutate
       - name: Score mutation evidence

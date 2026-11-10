@@ -136,15 +136,7 @@ impl TestIndex {
     pub fn build(root: &Path) -> io::Result<Self> {
         // A crate's tests directory is a scan boundary, not an identity root.
         // Cargo reports integration paths relative to the crate manifest.
-        let identity_root = if root.file_name().is_some_and(|name| name == "tests")
-            && root
-                .parent()
-                .is_some_and(|parent| parent.join("Cargo.toml").is_file())
-        {
-            root.parent().unwrap()
-        } else {
-            root
-        };
+        let identity_root = identity_root(root);
         let mut paths = Vec::new();
         collect(root, &mut paths)?;
         paths.sort();
@@ -204,6 +196,19 @@ impl TestIndex {
             ));
         }
         Ok(Self { entries })
+    }
+}
+
+/// Root used for stable identities when scanning a crate's tests directory.
+pub fn identity_root(root: &Path) -> &Path {
+    if root.file_name().is_some_and(|name| name == "tests")
+        && root
+            .parent()
+            .is_some_and(|parent| parent.join("Cargo.toml").is_file())
+    {
+        root.parent().unwrap()
+    } else {
+        root
     }
 }
 // Accept only scalar labels whose framework rendering is unambiguous.

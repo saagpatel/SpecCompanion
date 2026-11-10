@@ -16,7 +16,7 @@ impl std::error::Error for CommandExit {}
 
 use crate::{
     adapters::{parse_junit, parse_junit_with, parse_libtest},
-    agents::test_index::TestIndex,
+    agents::test_index::{identity_root, TestIndex},
     core::{badge::Badge, test_identity::Fingerprints},
     pipeline::rescore::{
         rescore_with_results, rescore_with_results_and_mutation, MutationScoreInput,
@@ -143,6 +143,7 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             .or_else(|| options.get("--fingerprints-from"))
             .map(Path::new)
             .unwrap_or(Path::new("."));
+        let tests_root = identity_root(tests_root);
         rescore_with_results_and_mutation(
             dir,
             &outcomes,

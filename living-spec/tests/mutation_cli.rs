@@ -417,3 +417,90 @@ fn score_flag_missing_file_is_an_input_error() {
     assert!(result.is_err());
     assert!(!spec.join("status.json").exists());
 }
+
+#[test]
+fn overridden_link_can_be_mutated_and_signed_off() {
+    let (_temp, root, spec, test_id) = setup();
+    let path = spec.join("annotations.json");
+    let mut annotations: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    let link = &mut annotations["requirements"]["LS-001"]["links"][0];
+    link["audit"]["verdict"] = json!("challenged");
+    link["audit"]["override"] = json!({"by":"human", "reason":"reviewed limitation", "test_id":link["test_id"], "fingerprint":link["fingerprint"], "revision":link["revision"]});
+    fs::write(path, serde_json::to_vec_pretty(&annotations).unwrap()).unwrap();
+    mutate(&root, &spec, &cargo_stub(&root, true)).unwrap();
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    assert_eq!(file.links[0].status, LinkStatus::Checked);
+    cli::run(&[
+        "signoff".into(),
+        spec.to_string_lossy().into_owned(),
+        "link".into(),
+        "LS-001".into(),
+        test_id,
+        "--reason".into(),
+        "reviewed".into(),
+        "--signed-by".into(),
+        "reviewer".into(),
+    ])
+    .unwrap();
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    assert_eq!(file.signoffs.len(), 1);
+}
+
+#[test]
+fn relative_single_component_spec_supports_both_signoffs() {
+    for (fail_mutants, kind) in [(true, "link"), (false, "mutant")] {
+        let (_temp, root, spec, test_id) = setup();
+        mutate(&root, &spec, &cargo_stub(&root, fail_mutants)).unwrap();
+        let file =
+            MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+        let mut args = vec!["signoff", "spec", kind, "LS-001", test_id.as_str()];
+        if kind == "mutant" {
+            args.push(&file.links[0].mutants[0].id);
+        }
+        args.extend(["--reason", "reviewed", "--signed-by", "reviewer"]);
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_living-spec"))
+            .current_dir(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let signed =
+            MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+        assert_eq!(signed.signoffs.len(), 1);
+    }
+}
+
+#[test]
+fn mutate_then_score_with_crate_tests_dir_as_tests_root() {
+    let (_temp, root, spec, test_id) = setup();
+    let tests = root.join("tests");
+    mutate_scoped(&tests, &spec, &root, &cargo_stub(&root, true)).unwrap();
+    let file = MutationFile::from_bytes(&fs::read(spec.join("mutation.json")).unwrap()).unwrap();
+    assert_eq!(file.links[0].status, LinkStatus::Checked);
+    let (class, name) = test_id.rsplit_once(':').unwrap();
+    let results = spec.join("results.xml");
+    fs::write(&results, format!("<testsuites tests=\"1\"><testsuite tests=\"1\"><testcase classname=\"{class}\" name=\"{name}\"/></testsuite></testsuites>")).unwrap();
+    cli::run(&[
+        "score".into(),
+        spec.to_string_lossy().into_owned(),
+        "--results".into(),
+        results.to_string_lossy().into_owned(),
+        "--format".into(),
+        "junit".into(),
+        "--tests".into(),
+        tests.to_string_lossy().into_owned(),
+        "--mutation".into(),
+    ])
+    .unwrap();
+    let status: serde_json::Value =
+        serde_json::from_slice(&fs::read(spec.join("status.json")).unwrap()).unwrap();
+    assert_eq!(
+        status["statuses"][0]["mutation"]["state"],
+        "mutation_checked"
+    );
+}

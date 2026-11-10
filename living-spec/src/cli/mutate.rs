@@ -1,10 +1,7 @@
 use super::{link::load, Exit};
 use crate::{
-    agents::test_index::{TestEntry, TestIndex},
-    core::{
-        annotations::AuditVerdict,
-        mutation::{LinkRecord, MutationFile},
-    },
+    agents::test_index::{identity_root, TestEntry, TestIndex},
+    core::mutation::{LinkRecord, MutationFile},
     mutation::{run_link, Options},
 };
 use std::{
@@ -123,16 +120,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         .iter()
         .map(|line| (line.id.as_str(), line))
         .collect();
-    let tests_root = if args.tests.file_name().is_some_and(|name| name == "tests")
-        && args
-            .tests
-            .parent()
-            .is_some_and(|parent| parent.join("Cargo.toml").is_file())
-    {
-        args.tests.parent().unwrap()
-    } else {
-        &args.tests
-    };
+    let tests_root = identity_root(&args.tests);
     let requested_crate = args
         .crate_dir
         .as_ref()
@@ -159,7 +147,7 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
             continue;
         };
         for link in &annotation.links {
-            if link.audit.verdict != AuditVerdict::Accepted {
+            if !link.is_accepted() {
                 println!("{requirement} {} skipped: challenged link", link.test_id);
                 continue;
             }

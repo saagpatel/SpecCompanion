@@ -1,10 +1,7 @@
 use super::{link::load, Exit};
 use crate::{
     agents::test_index::TestIndex,
-    core::{
-        annotations::AuditVerdict,
-        mutation::{LinkStatus, MutationFile, Signoff},
-    },
+    core::mutation::{LinkStatus, MutationFile, Signoff},
 };
 use std::{error::Error, fs, path::Path};
 
@@ -58,15 +55,14 @@ pub(super) fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                 .find(|link| link.test_id == *test_id)
         })
         .ok_or_else(|| format!("link not found: {requirement} {test_id}"))?;
-    if link.audit.verdict != AuditVerdict::Accepted
-        || link.revision != line.revision
-        || link.audit.revision != line.revision
+    if !link.is_accepted() || link.revision != line.revision || link.audit.revision != line.revision
     {
         return Err("link is challenged or stale; re-audit it before signing off".into());
     }
     // Resolve from the project directory containing this spec so callers do
     // not need to run the command from a particular cwd.
-    let tests_root = dir.parent().unwrap_or(Path::new("."));
+    let canonical_dir = dir.canonicalize()?;
+    let tests_root = canonical_dir.parent().unwrap_or(Path::new("."));
     let tests_root = if tests_root.file_name().is_some_and(|name| name == "tests")
         && tests_root
             .parent()

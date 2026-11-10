@@ -309,17 +309,31 @@ fn definitions(file: &str, source: &str) -> (Vec<SubjectFunction>, BTreeSet<Stri
         *definition_counts
             .entry(name_token.text.clone())
             .or_default() += 1;
-        // Generic parameter and argument list must be closed; body must be a block.
-        let paren = i + 2;
-        if ts.get(paren).is_none_or(|t| t.text != "(") {
-            continue;
+        // Braces inside a signature (notably const generic expressions) are
+        // not a function body. Reject these shapes rather than guessing.
+        let mut delimiters = Vec::new();
+        let mut uncertain_signature = false;
+        let mut signature_end = None;
+        for (j, token) in ts.iter().enumerate().skip(i + 2) {
+            match token.text.as_str() {
+                "(" => delimiters.push(")"),
+                "[" => delimiters.push("]"),
+                "<" => delimiters.push(">"),
+                ")" | "]" | ">" if delimiters.last() == Some(&token.text.as_str()) => {
+                    delimiters.pop();
+                }
+                "{" if !delimiters.is_empty() => {
+                    uncertain_signature = true;
+                    break;
+                }
+                "{" | ";" if delimiters.is_empty() => {
+                    signature_end = Some(j);
+                    break;
+                }
+                _ => {}
+            }
         }
-        let Some(paren_end) = close(&ts, paren) else {
-            continue;
-        };
-        let Some(open) =
-            (paren_end + 1..ts.len()).find(|j| ts[*j].text == "{" || ts[*j].text == ";")
-        else {
+        let Some(open) = signature_end.filter(|_| !uncertain_signature) else {
             continue;
         };
         if ts[open].text != "{" {
@@ -705,6 +719,22 @@ mod tests {
             found.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
             vec!["visible"]
         );
+    }
+
+    #[test]
+    fn where_clause_brace_function_skipped() {
+        let source = "fn value<const N: usize>() where [(); { N + 1 }]: Sized { }";
+        let (found, uncertain) = definitions("src/lib.rs", source);
+        assert!(found.is_empty());
+        assert!(uncertain.contains("value"));
+    }
+
+    #[test]
+    fn raw_string_braces_do_not_end_function() {
+        let source = r###"fn value<'a>(s: &'a str) -> &'a str { let f = || r#"}"#; f(); s }"###;
+        let (found, uncertain) = definitions("src/lib.rs", source);
+        assert!(uncertain.is_empty());
+        assert_eq!(&source[found[0].span.clone()], source);
     }
 
     #[test]

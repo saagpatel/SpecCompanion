@@ -4,7 +4,8 @@ use living_spec::{
         annotations::Annotations,
         badge::Badge,
         freshness::{Freshness, ResultsSnapshot},
-        providers::NoBoundaryEvidence,
+        mutation::{Tier, TierState},
+        providers::{MutationTierProvider, NoBoundaryEvidence},
         spec::Spec,
         test_identity::{load_fingerprints, Fingerprints, TestOutcome},
     },
@@ -51,6 +52,67 @@ fn freshness(dir: &Path) -> Freshness {
             &document.quantifier_reports,
         )
         .unwrap()
+}
+
+struct MutationFixture(String);
+impl MutationTierProvider for MutationFixture {
+    fn attach(
+        &self,
+        _: &living_spec::core::spec::Spec,
+        _: &Annotations,
+        statuses: &mut [living_spec::core::badge::LineStatus],
+    ) -> Result<()> {
+        statuses[0].mutation = Some(Tier {
+            state: TierState::MutationChecked,
+            waived: 0,
+            signed_off: 0,
+            survivors: vec![],
+        });
+        Ok(())
+    }
+    fn digest(&self) -> &str {
+        &self.0
+    }
+    fn locator(&self) -> &str {
+        "evidence.json"
+    }
+}
+
+#[test]
+fn mutation_file_edit_stales_only_the_tier() {
+    let (dir, identities) = fixture();
+    let mutation_path = dir.path().join("evidence.json");
+    fs::write(&mutation_path, b"first").unwrap();
+    let digest = living_spec::core::freshness::sha256_bytes(b"first");
+    let provider = MutationFixture(digest);
+    let outcomes = parse_libtest(RESULTS).unwrap();
+    rescore_with_context(
+        dir.path(),
+        &outcomes,
+        &identities,
+        "fixture",
+        dir.path().join("results.txt").to_str().unwrap(),
+        RescoreContext {
+            results: None,
+            boundary: &NoBoundaryEvidence,
+            qualified: &NoQualification,
+            reauditor: None,
+            quantifier_reports: &|_, _| Ok(Vec::new()),
+            mutation: Some(&provider),
+        },
+    )
+    .unwrap();
+    let initial = freshness(dir.path());
+    assert!(
+        !initial.stale,
+        "initial mutation score freshness: stale={}, lines={:?}, mutation_stale={}",
+        initial.stale, initial.lines, initial.mutation_stale
+    );
+    fs::write(&mutation_path, b"edited").unwrap();
+    let current = freshness(dir.path());
+    assert!(!current.stale);
+    assert!(current.lines.is_empty());
+    assert!(current.mutation_stale);
 }
 
 fn score_file(dir: &Path, identities: &Fingerprints, file: &Path) {
@@ -144,6 +206,7 @@ fn spec_change_during_scoring_is_not_fresh() {
                 qualified: &NoQualification,
                 reauditor: None,
                 quantifier_reports: &mutate,
+                mutation: None,
             },
         )
         .unwrap();
@@ -245,6 +308,7 @@ fn reordered_outcomes_map_by_id() {
                 qualified: &NoQualification,
                 reauditor: None,
                 quantifier_reports: &|_, _| Ok(Vec::new()),
+                mutation: None,
             },
         )
         .unwrap();

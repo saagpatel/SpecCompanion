@@ -142,6 +142,9 @@
             },
             "additionalProperties": false
           }
+        },
+        "mutation": {
+          "$ref": "#/$defs/mutation_tier"
         }
       },
       "additionalProperties": false
@@ -212,6 +215,29 @@
     "digest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mutation_tier": {
+      "type": "object",
+      "required": ["state", "waived", "signed_off", "survivors"],
+      "properties": {
+        "state": {"enum": ["mutation_checked", "signed_off", "survived", "stale", "error", "unsupported", "not_run"]},
+        "waived": {"type": "integer", "minimum": 0},
+        "signed_off": {"type": "integer", "minimum": 0},
+        "survivors": {"type": "array", "items": {"$ref": "#/$defs/mutant"}}
+      },
+      "additionalProperties": false
+    },
+    "mutant": {
+      "type": "object",
+      "required": ["id", "file", "function", "line", "ordinal", "operator", "original", "replacement", "outcome"],
+      "properties": {
+        "id": {"type": "string"}, "file": {"type": "string"}, "function": {"type": "string"},
+        "line": {"type": "integer", "minimum": 0}, "ordinal": {"type": "integer", "minimum": 0},
+        "operator": {"enum": ["cmp_flip", "arith_swap", "bool_swap", "int_bump"]},
+        "original": {"type": "string"}, "replacement": {"type": "string"},
+        "outcome": {"enum": ["killed", "survived", "timeout", "unviable"]}
+      },
+      "additionalProperties": false
     },
     "outcome": {
       "type": "object",
@@ -335,6 +361,13 @@
           "additionalProperties": {
             "type": "string"
           }
+        },
+        "mutation_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "mutation_file": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false

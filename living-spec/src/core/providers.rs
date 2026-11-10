@@ -65,3 +65,16 @@ impl QualifiedProvider for NoQualification {
 pub trait Reauditor {
     fn reaudit(&self, line: &RequirementLine, link: &mut Link, changed_source: bool);
 }
+
+/// Optional mutation tier attachment; implemented by the pipeline so the runner
+/// remains independent of source indexing and the mutation engine.
+pub trait MutationTierProvider {
+    fn attach(
+        &self,
+        spec: &Spec,
+        annotations: &Annotations,
+        statuses: &mut [LineStatus],
+    ) -> Result<()>;
+    fn digest(&self) -> &str;
+    fn locator(&self) -> &str;
+}

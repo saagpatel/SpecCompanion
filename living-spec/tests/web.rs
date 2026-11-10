@@ -5,6 +5,7 @@ use living_spec::{
         badge::{Badge, LineStatus, Reason},
         freshness::{ResultsSnapshot, ScoreInputs},
         history::{History, Transition},
+        mutation::{Mutant, Operator, Tier, TierState},
         spec::Spec,
         test_identity::TestOutcome,
         views::{BoundaryReport, QuantifierReport},
@@ -61,6 +62,25 @@ fn assert_no_urls(html: &str) {
 
 fn names(rows: &[RollupRow]) -> Vec<&str> {
     rows.iter().map(|row| row.project.as_str()).collect()
+}
+
+fn mutation_tier(state: TierState) -> Tier {
+    Tier {
+        state,
+        waived: 1,
+        signed_off: 2,
+        survivors: vec![Mutant {
+            id: "m-123456789abc".into(),
+            file: "src/<subject>.rs".into(),
+            function: "clamp".into(),
+            line: 12,
+            ordinal: 0,
+            operator: Operator::CmpFlip,
+            original: "<=".into(),
+            replacement: ">".into(),
+            outcome: living_spec::core::mutation::MutantOutcome::Survived,
+        }],
+    }
 }
 
 fn copy_tree(source: &Path, destination: &Path) {
@@ -131,6 +151,91 @@ fn seeded_view_reports_counts_and_broken_drilldown() {
 }
 
 #[test]
+fn page_without_mutation_is_byte_identical() {
+    let dir = Path::new(SEEDED);
+    let spec = Spec::parse(&fs::read_to_string(dir.join("spec.md")).unwrap()).unwrap();
+    let annotations = Annotations::load(dir.join("annotations.json")).unwrap();
+    let history = History::new(dir.join("history.jsonl")).read().unwrap();
+    let mut status = load_status(&dir.join("status.json")).unwrap();
+    let old_status_bytes = fs::read_to_string(dir.join("status.json")).unwrap();
+    assert!(!old_status_bytes.contains("\"mutation\""));
+    let before = render_spec(&spec, &annotations, Some(&status), &history);
+    for line in &mut status {
+        line.mutation = None;
+    }
+    let after = render_spec(&spec, &annotations, Some(&status), &history);
+    assert_eq!(before.as_bytes(), after.as_bytes());
+    assert!(!after.contains("mutation-checked"));
+}
+
+fn single_proven_page(tier: Tier) -> String {
+    let spec = Spec::parse("- [R-001] Returns a bounded result.\n").unwrap();
+    let annotations = Annotations {
+        schema: "living-spec.annotations/v1".into(),
+        requirements: BTreeMap::new(),
+        extra: BTreeMap::new(),
+    };
+    let status = vec![LineStatus {
+        id: "R-001".into(),
+        badge: Badge::Proven,
+        reasons: vec![],
+        tests: vec![],
+        mutation: Some(tier),
+    }];
+    render_spec(&spec, &annotations, Some(&status), &[])
+}
+
+#[test]
+fn checked_line_shows_second_badge() {
+    let html = single_proven_page(Tier {
+        state: TierState::MutationChecked,
+        waived: 0,
+        signed_off: 0,
+        survivors: vec![],
+    });
+    assert!(html.contains("proven (mutation-checked)"));
+    assert!(html.contains("of which mutation-checked 1"));
+}
+
+#[test]
+fn survivor_flag_lists_location() {
+    let html = single_proven_page(mutation_tier(TierState::Survived));
+    assert!(html.contains("mutation survivor"));
+    assert!(html.contains("src/&lt;subject&gt;.rs:12"));
+    assert!(html.contains("cmp_flip"));
+    assert!(html.contains("<details class=\"mutation-survivors\">"));
+}
+
+#[test]
+fn html_escaped_survivor_text() {
+    let html = single_proven_page(mutation_tier(TierState::Survived));
+    assert!(!html.contains("src/<subject>.rs"));
+    assert!(html.contains("src/&lt;subject&gt;.rs"));
+}
+
+#[test]
+fn waived_count_shown_as_human_signoff() {
+    let html = single_proven_page(mutation_tier(TierState::SignedOff));
+    assert!(html.contains("proven (mutation sign-off)"));
+    assert!(html.contains("waivers: 1; sign-offs: 2"));
+    assert!(!html.contains("mutation-checked 1"));
+}
+
+#[test]
+fn signed_off_not_counted_as_checked() {
+    let html = single_proven_page(mutation_tier(TierState::SignedOff));
+    assert!(html.contains("of which mutation-checked 0"));
+}
+
+#[test]
+fn stale_tier_not_shown_as_checked() {
+    let html = single_proven_page(mutation_tier(TierState::Stale));
+    assert!(html.contains("mutation: stale"));
+    assert!(!html.contains("proven (mutation-checked)"));
+    assert!(html.contains("of which mutation-checked 0"));
+}
+
+#[test]
 fn unproven_lines_come_after_every_other_line() {
     let html = seeded_html();
     assert_eq!(
@@ -170,6 +275,7 @@ fn history_note_markup_is_escaped() {
         badge: Badge::Broken,
         reasons: vec![Reason::TestFailed],
         tests: vec![],
+        mutation: None,
     }];
     let history = vec![Transition {
         at: "2026-01-01T00:00:00Z".into(),
@@ -312,6 +418,10 @@ fn rollup_excludes_archived_and_lists_the_project_without_a_spec() {
             path: "amber-ledger".into(),
             lines: 4,
             proven: 1,
+            proven_mutation_checked: 0,
+            proven_signed_off: 0,
+            mutation_survivors: 0,
+            mutation_present: false,
             broken: 1,
             unproven: 1,
             qualified: 1,
@@ -365,7 +475,7 @@ fn parse_rollup_json(rows: &[RollupRow]) -> Value {
 }
 
 #[test]
-fn rollup_can_include_a_newly_revived_repo_with_proven_lines() {
+fn rollup_reports_both_counts() {
     let tmp = tempfile::tempdir_in(Path::new(env!("CARGO_MANIFEST_DIR")).join("target")).unwrap();
     let repo = tmp.path().join("speccompanion");
     let living_spec = repo.join("living-spec");
@@ -377,7 +487,7 @@ fn rollup_can_include_a_newly_revived_repo_with_proven_lines() {
     .unwrap();
     fs::write(
         living_spec.join("status.json"),
-        r#"{"lines":[{"id":"SC-001","badge":"proven","tests":[{"test_id":"fixture", "status":"passed"}]},{"id":"SC-002","badge":"broken"}]}"#,
+        r#"{"lines":[{"id":"SC-001","badge":"proven","tests":[{"test_id":"fixture", "status":"passed"}],"mutation":{"state":"mutation_checked","waived":0,"signed_off":0,"survivors":[]}},{"id":"SC-002","badge":"broken"}]}"#,
     )
     .unwrap();
     write_rollup_fixture_links(&living_spec);
@@ -391,6 +501,80 @@ fn rollup_can_include_a_newly_revived_repo_with_proven_lines() {
     assert_eq!(row.proven, 1);
     assert_eq!(row.lines, 2);
     assert_eq!(row.proven_pct, 50.0);
+    assert_eq!(row.proven_mutation_checked, 1);
+    assert_eq!(row.proven_signed_off, 0);
+    assert_eq!(row.mutation_survivors, 0);
+    assert!(row.mutation_present);
+    let json: Value = serde_json::from_str(&export_rollup_json(&rows)).unwrap();
+    let exported = json["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|candidate| candidate["project"] == "speccompanion")
+        .unwrap();
+    assert_eq!(exported["proven_mutation_checked"].as_u64(), Some(1));
+    assert_eq!(exported["proven_signed_off"].as_u64(), Some(0));
+    assert_eq!(exported["mutation_survivors"].as_u64(), Some(0));
+    let html = render_rollup(&rows);
+    assert!(html.contains("Mutation checked"));
+    assert!(html.contains("50.0% proven, 100.0% mutation-checked (0 signed off)"));
+}
+
+#[test]
+fn quantifier_views_have_no_mutation_text() {
+    let html = living_spec::quantifier::view::html(&[]).unwrap();
+    assert!(!html.to_ascii_lowercase().contains("mutation"));
+}
+
+#[test]
+fn rollup_json_additive_fields_only() {
+    let rows = vec![RollupRow {
+        project: "Sample".into(),
+        path: "sample".into(),
+        lines: 2,
+        proven: 1,
+        proven_mutation_checked: 0,
+        proven_signed_off: 0,
+        mutation_survivors: 0,
+        mutation_present: false,
+        broken: 0,
+        unproven: 1,
+        qualified: 0,
+        proven_pct: 50.0,
+        state: ProjectState::Scored,
+    }];
+    let document = parse_rollup_json(&rows);
+    let row = &document["rows"][0];
+    assert_eq!(row["proven"].as_u64(), Some(1));
+    assert_eq!(row["proven_mutation_checked"].as_u64(), Some(0));
+    assert_eq!(row["proven_signed_off"].as_u64(), Some(0));
+    assert_eq!(row["mutation_survivors"].as_u64(), Some(0));
+    let html = render_rollup(&rows);
+    assert!(!html.contains("Mutation checked"));
+    assert!(!html.contains("mutation-checked"));
+}
+
+#[test]
+fn rollup_html_without_mutation_unchanged() {
+    let rows = vec![RollupRow {
+        project: "Sample".into(),
+        path: "sample".into(),
+        lines: 2,
+        proven: 1,
+        proven_mutation_checked: 0,
+        proven_signed_off: 0,
+        mutation_survivors: 0,
+        mutation_present: false,
+        broken: 0,
+        unproven: 1,
+        qualified: 0,
+        proven_pct: 50.0,
+        state: ProjectState::Scored,
+    }];
+    let old_shape = render_rollup(&rows);
+    let with_zero_mutation_counts = render_rollup(&rows);
+    assert_eq!(old_shape.as_bytes(), with_zero_mutation_counts.as_bytes());
+    assert!(!old_shape.contains("Mutation checked"));
 }
 
 #[test]

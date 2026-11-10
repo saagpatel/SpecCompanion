@@ -16,9 +16,12 @@ impl std::error::Error for CommandExit {}
 
 use crate::{
     adapters::{parse_junit, parse_junit_with, parse_libtest},
-    agents::test_index::TestIndex,
+    agents::test_index::{identity_root, TestIndex},
     core::{badge::Badge, test_identity::Fingerprints},
-    pipeline::rescore::rescore_with_results,
+    pipeline::rescore::{
+        rescore_with_results, rescore_with_results_and_mutation, MutationScoreInput,
+        RescoreSnapshot,
+    },
     runner::rescore::default_commit,
 };
 use std::{collections::BTreeMap, error::Error, fs, path::Path};
@@ -27,22 +30,47 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         return Err(CommandExit::Usage(usage()).into());
     };
     let mut options = BTreeMap::new();
-    for pair in args[1..].chunks(2) {
-        if pair.len() != 2
-            || ![
-                "--results",
-                "--format",
-                "--commit",
-                "--fingerprints",
-                "--fingerprints-from",
-                "--tests",
-                "--html",
-            ]
-            .contains(&pair[0].as_str())
-            || options.insert(pair[0].as_str(), pair[1].as_str()).is_some()
+    let mut mutation_path = None;
+    let mut mutation_seen = false;
+    let mut index_arg = 1;
+    while index_arg < args.len() {
+        let flag = args[index_arg].as_str();
+        if flag == "--mutation" {
+            if mutation_seen {
+                return Err(CommandExit::Usage(usage()).into());
+            }
+            mutation_seen = true;
+            if let Some(path) = args
+                .get(index_arg + 1)
+                .filter(|value| !value.starts_with('-'))
+            {
+                mutation_path = Some(path.as_str());
+                index_arg += 2;
+            } else {
+                index_arg += 1;
+            }
+            continue;
+        }
+        if ![
+            "--results",
+            "--format",
+            "--commit",
+            "--fingerprints",
+            "--fingerprints-from",
+            "--tests",
+            "--html",
+        ]
+        .contains(&flag)
         {
             return Err(CommandExit::Usage(usage()).into());
         }
+        let value = args
+            .get(index_arg + 1)
+            .ok_or_else(|| CommandExit::Usage(usage()))?;
+        if value.starts_with('-') || options.insert(flag, value.as_str()).is_some() {
+            return Err(CommandExit::Usage(usage()).into());
+        }
+        index_arg += 2;
     }
     if ["--fingerprints", "--fingerprints-from", "--tests"]
         .iter()
@@ -52,10 +80,26 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     {
         return Err(CommandExit::Usage(usage()).into());
     }
+    let normalized_dir = if mutation_seen {
+        Some(crate::mutation::canonical_input(Path::new(dir))?)
+    } else {
+        None
+    };
+    let normalized_tests = if mutation_seen {
+        Some(crate::mutation::canonical_input(
+            options
+                .get("--tests")
+                .or_else(|| options.get("--fingerprints-from"))
+                .map(Path::new)
+                .unwrap_or(Path::new(".")),
+        )?)
+    } else {
+        None
+    };
     let index = options
         .get("--fingerprints-from")
         .or_else(|| options.get("--tests"))
-        .map(|root| TestIndex::build(Path::new(root)))
+        .map(|root| TestIndex::build(normalized_tests.as_deref().unwrap_or(Path::new(root))))
         .transpose()?;
     let file = options
         .get("--results")
@@ -87,7 +131,7 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         Some(path) => load_fingerprints(&fs::read_to_string(path)?)?,
         None => Fingerprints::new(),
     };
-    let dir = Path::new(dir);
+    let dir = normalized_dir.as_deref().unwrap_or(Path::new(dir));
     let commit = options
         .get("--commit")
         .map(|s| s.to_string())
@@ -99,15 +143,51 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         format.expect("validated format"),
         outcome_ids,
     )?;
-    let report = rescore_with_results(
-        dir,
-        &outcomes,
-        &fingerprints,
-        &commit,
-        file,
-        &results,
-        index.as_ref(),
-    )?;
+    let report = if mutation_seen {
+        let mutation_path = mutation_path
+            .map(Path::new)
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| dir.join("mutation.json"));
+        let mutation_path = crate::mutation::canonical_input(&mutation_path)?;
+        let mutation_bytes = fs::read(&mutation_path)
+            .map_err(|error| format!("mutation file {}: {error}", mutation_path.display()))?;
+        let mutation = crate::core::mutation::MutationFile::from_bytes(&mutation_bytes)
+            .map_err(|error| format!("invalid mutation file: {error}"))?;
+        let digest = crate::core::freshness::sha256_bytes(&mutation_bytes);
+        let locator = relative_locator(dir, &mutation_path)?;
+        let tests_root = identity_root(
+            normalized_tests
+                .as_deref()
+                .expect("mutation root normalized"),
+        );
+        rescore_with_results_and_mutation(
+            dir,
+            &outcomes,
+            &fingerprints,
+            &commit,
+            file,
+            RescoreSnapshot {
+                results: &results,
+                index: index.as_ref(),
+                mutation: Some(MutationScoreInput {
+                    file: &mutation,
+                    digest: &digest,
+                    tests_root,
+                    locator: &locator,
+                }),
+            },
+        )?
+    } else {
+        rescore_with_results(
+            dir,
+            &outcomes,
+            &fingerprints,
+            &commit,
+            file,
+            &results,
+            index.as_ref(),
+        )?
+    };
     let html = crate::web::render_dir(dir)?;
     let destination = options
         .get("--html")
@@ -149,8 +229,27 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn relative_locator(base: &Path, path: &Path) -> Result<String, Box<dyn Error>> {
+    let base = base.canonicalize()?;
+    let path = path.canonicalize()?;
+    let left: Vec<_> = base.components().collect();
+    let right: Vec<_> = path.components().collect();
+    let common = left.iter().zip(&right).take_while(|(a, b)| a == b).count();
+    if common == 0 {
+        return Err("mutation path cannot be made relative to spec directory".into());
+    }
+    let mut relative = std::path::PathBuf::new();
+    for _ in common..left.len() {
+        relative.push("..");
+    }
+    for component in &right[common..] {
+        relative.push(component);
+    }
+    Ok(relative.to_string_lossy().into_owned())
+}
+
 fn usage() -> String {
-    "usage: living-spec score|rescore <spec-dir> --results <file> --format libtest|junit [--commit SHA] [--html out.html] [--fingerprints <json> | --fingerprints-from <source-root> | --tests <source-root>]".into()
+    "usage: living-spec score|rescore <spec-dir> --results <file> --format libtest|junit [--commit SHA] [--html out.html] [--fingerprints <json> | --fingerprints-from <source-root> | --tests <source-root>] [--mutation [<path>]]".into()
 }
 fn badge_name(badge: Badge) -> &'static str {
     match badge {

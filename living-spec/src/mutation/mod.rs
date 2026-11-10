@@ -4,7 +4,7 @@ pub mod runner;
 pub mod subject;
 
 use crate::{
-    agents::test_index::TestEntry,
+    agents::test_index::{Language, TestEntry},
     core::mutation::{
         subject_digest, LinkRecord, LinkStatus, Mutant, MutantOutcome, Target, TargetKind,
     },
@@ -13,6 +13,21 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+
+/// Resolve a filesystem input before deriving roots or reading from it.
+pub(crate) fn canonical_input(path: &Path) -> std::io::Result<PathBuf> {
+    let path = if path.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        path
+    };
+    path.canonicalize().map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{}: {error}", path.display()),
+        )
+    })
+}
 
 #[derive(Debug, Clone)]
 pub struct Options {
@@ -64,6 +79,10 @@ pub fn run_link(
         infra_failure: None,
         mutants: vec![],
     };
+    if entry.language == Language::Rust && entry.id.contains('#') {
+        record.reason = Some("parameterized case".into());
+        return record;
+    }
     let subject = match subject::resolve_subject(entry, tests_root) {
         Ok(subject) => subject,
         Err(reason) => {

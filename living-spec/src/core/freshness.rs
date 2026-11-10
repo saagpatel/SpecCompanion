@@ -113,6 +113,10 @@ pub struct ScoreInputs {
     pub results_digest: String,
     pub results_format: Option<String>,
     pub outcome_ids: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutation_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutation_file: Option<String>,
     pub requirements: BTreeMap<String, RequirementInputs>,
 }
 
@@ -134,6 +138,7 @@ pub struct RequirementInputs {
 pub struct Freshness {
     pub stale: bool,
     pub lines: BTreeMap<String, String>,
+    pub mutation_stale: bool,
 }
 
 fn hash(parts: &[&[u8]]) -> String {
@@ -143,6 +148,10 @@ fn hash(parts: &[&[u8]]) -> String {
         hash.update(part);
     }
     format!("sha256:{:x}", hash.finalize())
+}
+
+pub fn sha256_bytes(bytes: &[u8]) -> String {
+    format!("sha256:{:x}", Sha256::digest(bytes))
 }
 
 fn canonical(path: &Path) -> Result<Value> {
@@ -292,6 +301,8 @@ impl ScoreInputs {
             results_digest: hash(&[&results.bytes]),
             results_format: results.format.clone(),
             outcome_ids: results.outcome_ids.clone(),
+            mutation_digest: None,
+            mutation_file: None,
             requirements,
         })
     }
@@ -355,6 +366,12 @@ impl ScoreInputs {
             stale: !digest_matches || !version_matches,
             ..Default::default()
         };
+        freshness.mutation_stale = self.mutation_digest.as_ref().is_some_and(|saved| {
+            let path = self.mutation_file.as_deref().unwrap_or("mutation.json");
+            fs::read(dir.join(path))
+                .map(|bytes| sha256_bytes(&bytes) != *saved)
+                .unwrap_or(true)
+        });
         for line in &spec.lines {
             let reason = match self.requirements.get(&line.id) {
                 None => Some("requirement was not present in this score"),
@@ -422,6 +439,7 @@ pub fn missing_inputs(spec: &Spec) -> Freshness {
 fn stale_all(spec: &Spec, reason: &str) -> Freshness {
     Freshness {
         stale: true,
+        mutation_stale: false,
         lines: spec
             .lines
             .iter()

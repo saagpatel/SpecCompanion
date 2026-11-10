@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add an opt-in Rust mutation-checked tier with CLI signoffs, score freshness, web badges, roll-up counts, and a manual-only CI job.
+- Document mutation outcomes, stale bindings, runtime cost, and the limits of mutation evidence.
 - Add the Living Spec crate's unified score pipeline, dogfood evidence, CI gate, and offline portfolio roll-up.
 - Document Living Spec badges, annotations, commands, hook, CI, and evidence limits.
 - Preserve punctuation inside Quantifier Map Markdown code spans while escaping surrounding prose.

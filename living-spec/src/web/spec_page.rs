@@ -47,6 +47,8 @@ struct Counts {
     qualified: usize,
     unscored: usize,
     stale: usize,
+    mutation_checked: usize,
+    has_mutation: bool,
 }
 
 struct Page<'a> {
@@ -262,6 +264,8 @@ fn classify(
         qualified: 0,
         unscored: 0,
         stale: 0,
+        mutation_checked: 0,
+        has_mutation: false,
     };
     for (index, line) in spec.lines.iter().enumerate() {
         let status = if scored {
@@ -269,6 +273,16 @@ fn classify(
         } else {
             None
         };
+        if let Some(tier) = status.and_then(|line| line.mutation.as_ref()) {
+            counts.has_mutation = true;
+            if !freshness.mutation_stale
+                && shown_badge(scored, status, freshness.lines.contains_key(&line.id))
+                    == ShownBadge::Proven
+                && tier.state == crate::core::mutation::TierState::MutationChecked
+            {
+                counts.mutation_checked += 1;
+            }
+        }
         match shown_badge(scored, status, freshness.lines.contains_key(&line.id)) {
             ShownBadge::Broken => {
                 counts.broken += 1;
@@ -359,6 +373,10 @@ fn push_counts(out: &mut String, counts: &Counts, scored: bool) {
     if counts.stale > 0 {
         out.push_str(" · stale ");
         push_usize(out, counts.stale);
+    }
+    if counts.has_mutation {
+        out.push_str(" · of which mutation-checked ");
+        push_usize(out, counts.mutation_checked);
     }
     out.push_str(" · ");
     if scored {
@@ -482,6 +500,11 @@ fn push_line(out: &mut String, page: &Page<'_>, index: usize) {
     out.push_str(badge.label());
     out.push_str("\">\n<summary>");
     push_badge(out, badge);
+    if badge == ShownBadge::Proven {
+        if let Some(tier) = status.and_then(|status| status.mutation.as_ref()) {
+            push_mutation_tier(out, tier, page.freshness.mutation_stale);
+        }
+    }
     out.push_str(" <span class=\"req-text\">");
     out.push_str(&escape(&line.text));
     out.push_str("</span> <code class=\"req-id\">");
@@ -503,6 +526,59 @@ fn push_line(out: &mut String, page: &Page<'_>, index: usize) {
     }
     push_dependency_path(out, requirement, status);
     out.push_str("</div></details>\n");
+}
+
+fn push_mutation_tier(out: &mut String, tier: &crate::core::mutation::Tier, mutation_stale: bool) {
+    use crate::core::mutation::TierState;
+    if mutation_stale || tier.state == TierState::Stale {
+        out.push_str(" <span class=\"mutation-note muted\">mutation: stale</span>");
+        return;
+    }
+    match tier.state {
+        TierState::MutationChecked => {
+            out.push_str(
+                " <span class=\"badge badge-mutation-checked\">proven (mutation-checked)</span>",
+            );
+        }
+        TierState::SignedOff => {
+            out.push_str(" <span class=\"badge badge-mutation-signed-off\">proven (mutation sign-off)</span>");
+            out.push_str(" <span class=\"mutation-note\">waivers: ");
+            out.push_str(&tier.waived.to_string());
+            out.push_str("; sign-offs: ");
+            out.push_str(&tier.signed_off.to_string());
+            out.push_str("</span>");
+        }
+        TierState::Survived => {
+            out.push_str(" <span class=\"mutation-survivor\">mutation survivor</span>");
+            out.push_str(
+                " <details class=\"mutation-survivors\"><summary>Surviving mutants</summary><ul>",
+            );
+            for mutant in &tier.survivors {
+                out.push_str("<li><code>");
+                out.push_str(&escape(&mutant.file));
+                out.push(':');
+                out.push_str(&mutant.line.to_string());
+                out.push_str("</code> ");
+                let operator = match mutant.operator {
+                    crate::core::mutation::Operator::CmpFlip => "cmp_flip",
+                    crate::core::mutation::Operator::ArithSwap => "arith_swap",
+                    crate::core::mutation::Operator::BoolSwap => "bool_swap",
+                    crate::core::mutation::Operator::IntBump => "int_bump",
+                };
+                out.push_str(operator);
+                out.push_str("</li>");
+            }
+            out.push_str("</ul></details>");
+        }
+        TierState::Stale => unreachable!(),
+        TierState::Error => {
+            out.push_str(" <span class=\"mutation-note muted\">mutation: error</span>")
+        }
+        TierState::Unsupported => {
+            out.push_str(" <span class=\"mutation-note muted\">mutation: unsupported</span>")
+        }
+        TierState::NotRun => {}
+    }
 }
 
 fn push_badge(out: &mut String, badge: ShownBadge) {

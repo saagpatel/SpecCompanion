@@ -48,6 +48,7 @@ fn report_fixture() -> tempfile::TempDir {
             badge: Badge::Broken,
             reasons: vec![Reason::LinkUnresolved],
             tests: vec![],
+            mutation: None,
         },
         LineStatus {
             id: "R-002".into(),
@@ -56,6 +57,7 @@ fn report_fixture() -> tempfile::TempDir {
                 path: vec!["R-002".into(), "R-001".into()],
             }],
             tests: vec![],
+            mutation: None,
         },
     ];
     let outcomes = living_spec::adapters::parse_libtest(results).unwrap();
@@ -621,18 +623,21 @@ fn finding_drill2_dependency_report_schema_accepts_nonempty_prerequisites() {
             badge: Badge::Broken,
             reasons: vec![Reason::TestFailed],
             tests: vec![],
+            mutation: None,
         },
         LineStatus {
             id: "R-002".into(),
             badge: Badge::Unproven,
             reasons: vec![Reason::BoundaryGap],
             tests: vec![],
+            mutation: None,
         },
         LineStatus {
             id: "R-003".into(),
             badge: Badge::Proven,
             reasons: vec![],
             tests: vec![],
+            mutation: None,
         },
         LineStatus {
             id: "R-004".into(),
@@ -641,12 +646,14 @@ fn finding_drill2_dependency_report_schema_accepts_nonempty_prerequisites() {
                 path: vec!["R-004".into(), "R-005".into()],
             }],
             tests: vec![],
+            mutation: None,
         },
         LineStatus {
             id: "R-005".into(),
             badge: Badge::Unproven,
             reasons: vec![Reason::BoundaryGap],
             tests: vec![],
+            mutation: None,
         },
     ];
     apply_qualified(&mut statuses, &graph);
@@ -754,6 +761,7 @@ fn finding_07_deps_2_fifty_thousand_proven_chain_finishes_without_qualification(
             badge: Badge::Proven,
             reasons: vec![],
             tests: vec![],
+            mutation: None,
         })
         .collect();
 
@@ -789,6 +797,7 @@ fn report_size_is_linear_for_large_cycle() {
                 badge: Badge::Proven,
                 reasons: vec![],
                 tests: vec![],
+                mutation: None,
             })
             .collect();
         if !cyclic {

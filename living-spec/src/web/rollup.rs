@@ -26,6 +26,11 @@ pub struct RollupRow {
     pub path: String,
     pub lines: u64,
     pub proven: u64,
+    pub proven_mutation_checked: u64,
+    pub proven_signed_off: u64,
+    pub mutation_survivors: u64,
+    #[serde(skip)]
+    pub mutation_present: bool,
     pub broken: u64,
     pub unproven: u64,
     pub qualified: u64,
@@ -174,18 +179,25 @@ pub fn render_rollup(rows: &[RollupRow]) -> String {
         "Unproven",
         "Qualified",
         "Proven %",
-        "State",
     ] {
         html.push_str("<th scope=\"col\">");
         html.push_str(heading);
         html.push_str("</th>");
     }
+    if rows.iter().any(|row| row.mutation_present) {
+        for heading in ["Mutation checked", "Signed off", "Survivors"] {
+            html.push_str("<th scope=\"col\">");
+            html.push_str(heading);
+            html.push_str("</th>");
+        }
+    }
+    html.push_str("<th scope=\"col\">State</th>");
     html.push_str("</tr>\n</thead>\n<tbody>\n");
     for row in rows
         .iter()
         .filter(|row| row.state != ProjectState::NoLivingSpec)
     {
-        push_row(&mut html, row);
+        push_row(&mut html, row, rows.iter().any(|row| row.mutation_present));
     }
     html.push_str("</tbody>\n</table>\n");
     push_tally(&mut html, rows, summary.no_spec_count);
@@ -195,7 +207,7 @@ pub fn render_rollup(rows: &[RollupRow]) -> String {
     html
 }
 
-fn push_row(out: &mut String, row: &RollupRow) {
+fn push_row(out: &mut String, row: &RollupRow, mutation_group: bool) {
     out.push_str("<tr data-project=\"");
     out.push_str(&escape(&row.project));
     out.push_str("\" data-state=\"");
@@ -223,6 +235,11 @@ fn push_row(out: &mut String, row: &RollupRow) {
     push_cell(out, &row.unproven.to_string());
     push_cell(out, &row.qualified.to_string());
     push_cell(out, &pct_label(row));
+    if mutation_group {
+        push_cell(out, &row.proven_mutation_checked.to_string());
+        push_cell(out, &row.proven_signed_off.to_string());
+        push_cell(out, &row.mutation_survivors.to_string());
+    }
     push_cell(out, state_label(row.state));
     out.push_str("</tr>\n");
 }
@@ -258,6 +275,12 @@ fn push_tally(out: &mut String, rows: &[RollupRow], count: usize) {
 
 fn pct_label(row: &RollupRow) -> String {
     match row.state {
+        ProjectState::Scored if row.mutation_present => format!(
+            "{}% proven, {}% mutation-checked ({} signed off)",
+            format_percentage(row.proven, row.lines),
+            format_percentage(row.proven_mutation_checked, row.proven),
+            row.proven_signed_off
+        ),
         ProjectState::Scored => format!("{}%", format_percentage(row.proven, row.lines)),
         ProjectState::Stale => "stale".to_owned(),
         ProjectState::NotScored => "not yet scored".to_owned(),
@@ -353,6 +376,10 @@ fn row_for_root(
                 path,
                 lines: spec.lines.len() as u64,
                 proven: 0,
+                proven_mutation_checked: 0,
+                proven_signed_off: 0,
+                mutation_survivors: 0,
+                mutation_present: lines.iter().any(|line| line.mutation.is_some()),
                 broken: 0,
                 unproven: 0,
                 qualified: 0,
@@ -373,9 +400,31 @@ fn row_for_root(
         let mut broken = 0;
         let mut unproven = 0;
         let mut qualified = 0;
+        let mut proven_mutation_checked = 0;
+        let mut proven_signed_off = 0;
+        let mut mutation_survivors = 0;
+        let mutation_present = lines.iter().any(|line| line.mutation.is_some());
         for line in &lines {
             match line.badge {
-                crate::core::badge::Badge::Proven => proven += 1,
+                crate::core::badge::Badge::Proven => {
+                    proven += 1;
+                    if !freshness.mutation_stale {
+                        if let Some(tier) = &line.mutation {
+                            match tier.state {
+                                crate::core::mutation::TierState::MutationChecked => {
+                                    proven_mutation_checked += 1
+                                }
+                                crate::core::mutation::TierState::SignedOff => {
+                                    proven_signed_off += 1
+                                }
+                                crate::core::mutation::TierState::Survived => {
+                                    mutation_survivors += 1
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
                 crate::core::badge::Badge::Broken => broken += 1,
                 crate::core::badge::Badge::Unproven => unproven += 1,
                 crate::core::badge::Badge::Qualified => qualified += 1,
@@ -387,6 +436,10 @@ fn row_for_root(
             path,
             lines: count,
             proven,
+            proven_mutation_checked,
+            proven_signed_off,
+            mutation_survivors,
+            mutation_present,
             broken,
             unproven,
             qualified,
@@ -402,6 +455,10 @@ fn row_for_root(
             path,
             lines: count,
             proven: 0,
+            proven_mutation_checked: 0,
+            proven_signed_off: 0,
+            mutation_survivors: 0,
+            mutation_present: false,
             broken: 0,
             unproven: 0,
             qualified: 0,
@@ -414,6 +471,10 @@ fn row_for_root(
         path,
         lines: 0,
         proven: 0,
+        proven_mutation_checked: 0,
+        proven_signed_off: 0,
+        mutation_survivors: 0,
+        mutation_present: false,
         broken: 0,
         unproven: 0,
         qualified: 0,

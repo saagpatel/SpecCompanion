@@ -57,6 +57,9 @@ impl Runner {
         let temp = tempfile::tempdir()?;
         let copy = temp.path().join("crate");
         copy_tree(&subject.package_dir, &copy)?;
+        // Tests may use a crate-relative target directory for temporary files.
+        // Cargo artifacts remain isolated in the sibling CARGO_TARGET_DIR.
+        fs::create_dir_all(copy.join("target"))?;
         let target = temp.path().join("target");
         Ok(Self {
             _temp: temp,
@@ -206,5 +209,102 @@ impl Runner {
                 ..candidate.mutant
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::mutation::{Target, TargetKind};
+
+    #[test]
+    fn copy_has_empty_target_dir_for_tests_that_need_it() {
+        let crate_dir = tempfile::tempdir().unwrap();
+        fs::create_dir_all(crate_dir.path().join("tests")).unwrap();
+        fs::write(
+            crate_dir.path().join("Cargo.toml"),
+            "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        fs::write(
+            crate_dir.path().join("tests/needs_target.rs"),
+            "#[test] fn writes_in_target() { std::fs::write(\"target/test-file\", \"ok\").unwrap(); }\n",
+        )
+        .unwrap();
+        let subject = Subject {
+            package_dir: crate_dir.path().to_path_buf(),
+            target: Target {
+                kind: TargetKind::Test,
+                name: "needs_target".into(),
+            },
+            functions: vec![],
+        };
+
+        let runner = Runner::new(&subject).unwrap();
+        let copied_target = runner.copy.join("target");
+        assert!(copied_target.is_dir());
+        assert_eq!(fs::read_dir(&copied_target).unwrap().count(), 0);
+        let test_binary = runner._temp.path().join("sample-test");
+        let compile = Command::new("rustc")
+            .args(["--test", "tests/needs_target.rs", "-o"])
+            .arg(&test_binary)
+            .current_dir(&runner.copy)
+            .output()
+            .unwrap();
+        assert!(
+            compile.status.success(),
+            "rustc failed: stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&compile.stdout),
+            String::from_utf8_lossy(&compile.stderr)
+        );
+        let run = Command::new(test_binary)
+            .current_dir(&runner.copy)
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "test binary failed: stdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+        assert_eq!(
+            fs::read_to_string(copied_target.join("test-file")).unwrap(),
+            "ok"
+        );
+        assert_ne!(copied_target, runner.target);
+    }
+
+    #[test]
+    fn nested_test_binary_output_never_reaches_parent_log() {
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "mutation::runner::tests::copy_has_empty_target_dir_for_tests_that_need_it",
+                "--exact",
+                "--nocapture",
+            ])
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "stdout: {stdout}\nstderr: {stderr}"
+        );
+        let suite_headers: Vec<_> = stdout
+            .lines()
+            .filter(|line| {
+                line.strip_prefix("running ")
+                    .and_then(|line| {
+                        line.strip_suffix(" test")
+                            .or_else(|| line.strip_suffix(" tests"))
+                    })
+                    .is_some_and(|count| count.parse::<usize>().is_ok())
+            })
+            .collect();
+        assert_eq!(
+            suite_headers,
+            ["running 1 test"],
+            "stdout: {stdout}\nstderr: {stderr}"
+        );
     }
 }

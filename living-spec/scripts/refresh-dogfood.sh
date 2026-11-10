@@ -22,11 +22,15 @@ trap cleanup EXIT HUP INT TERM
 
 cp -R "$spec_source/." "$stage/spec"
 score_code=0
+mutation_args=()
+if [[ -f "$stage/spec/mutation.json" ]]; then
+  mutation_args=(--mutation "$stage/spec/mutation.json")
+fi
 (
   cd "$repo_root"
   "$cargo_bin" run --offline --locked -q --manifest-path living-spec/Cargo.toml \
     -- score "$stage/spec" --results "$results" --format libtest --tests living-spec \
-    --html "$stage/spec.html"
+    "${mutation_args[@]}" --html "$stage/spec.html"
 ) || score_code=$?
 if [[ $score_code != 0 && $score_code != 2 ]]; then
   exit "$score_code"

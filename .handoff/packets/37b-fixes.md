@@ -1,0 +1,14 @@
+# Packet 37b: review fixes on PR 146 plus one runner fix found by the dogfood run
+
+Read `.handoff/packets/30-mutation-architecture.md`. Base = the PR 146 branch. Run cargo one job at a time; skip `make verify`. Fail closed; one named regression per item.
+
+1. **Overridden links must participate in the tier** (`src/pipeline/rescore.rs`, ~line 201). Use the plain scorer's acceptance and admissibility rules (`Link::is_accepted()`, same revision/resolution checks as `score_line_at_revision`). A link accepted through a valid human override with no mutation record is `NotRun` and blocks `mutation_checked`. Regression `overridden_unchecked_link_blocks_checked_tier`.
+2. **Parameterized tests.** Plain scoring stores evidence under `test#case` ids while an annotation links the base `test`. Match admissible links using the same base/case identity rules as plain scoring; every admissible annotation link must contribute a mutation state (missing record = `NotRun`). Regression `parameterized_base_link_contributes_not_run_state`.
+3. **CI cold cache** (`.github/workflows/living-spec.yml` mutation job): add a step before `make living-spec-mutate` that runs `cargo fetch --locked --manifest-path living-spec/Cargo.toml` (network allowed in that step) so the offline invocations work on a cold runner. Extend `living-spec/scripts/test-ci.rb` to assert the step order.
+4. **`mutate --crate` filtering** (`src/cli/mutate.rs`): decide package ownership of each link's test independently of subject resolution (nearest `Cargo.toml` above the test file), exclude out-of-scope links before running or replacing any record, so a run scoped to one crate never touches another crate's records. Regression with two crates and an unsupported test outside the selected crate.
+5. **Runner: create an empty `target/` directory inside the crate copy** (src/mutation/runner.rs). The copy excludes `target/` but many tests (the dogfood crate's own, e.g. `tempfile::tempdir_in("target")`) expect a relative `target` dir to exist; four dogfood links currently fail their baseline for that reason. It must not be the cargo target dir (that stays the separate `CARGO_TARGET_DIR`). Regression `copy_has_empty_target_dir_for_tests_that_need_it` using a sample test that writes into `target`.
+6. `mutate` prints `error` links but must still write the file (already true); keep exit code 1 only for invalid input, and exit 0 when the run completed with some `error` links, printing a summary line with counts of checked/survived/unsupported/error. Update the affected test and usage text.
+
+## Acceptance (from `living-spec/`)
+`cargo fmt -- --check`, `cargo clippy --offline --locked --all-targets -- -D warnings`, `sh scripts/check-layers.sh`,
+`CARGO_TERM_COLOR=never NO_COLOR=1 cargo test --offline --locked`, `ruby living-spec/scripts/test-ci.rb` from the repo root. Status `done` only when all pass.

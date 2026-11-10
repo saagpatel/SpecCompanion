@@ -140,66 +140,114 @@ fn package_dir(root: &Path, file: &Path) -> Result<PathBuf, Unsupported> {
 
 fn path_values(manifest: &str) -> Result<Vec<String>, Unsupported> {
     let mut paths = Vec::new();
-    let mut dependencies = false;
+    let mut table = "";
     for raw in manifest.lines() {
-        let line = raw.trim();
-        let compact: String = line.chars().filter(|c| !c.is_whitespace()).collect();
-        if line.starts_with('[') && line.ends_with(']') {
-            dependencies = line
-                .split(']')
-                .next()
-                .is_some_and(|h| h.contains("dependencies"));
+        let bytes = raw.as_bytes();
+        let (mut end, mut quote, mut escaped) = (bytes.len(), None, false);
+        for (i, &byte) in bytes.iter().enumerate() {
+            if let Some(q) = quote {
+                if escaped {
+                    escaped = false;
+                } else if q == b'"' && byte == b'\\' {
+                    escaped = true;
+                } else if byte == q {
+                    quote = None;
+                }
+            } else if byte == b'"' || byte == b'\'' {
+                quote = Some(byte);
+            } else if byte == b'#' {
+                end = i;
+                break;
+            }
         }
-        let inline_dependencies = ["dependencies=", "dev-dependencies=", "build-dependencies="]
-            .iter()
-            .any(|key| compact.starts_with(key));
-        if (dependencies || inline_dependencies)
-            && (compact.contains("\"=")
-                || compact.contains("'=")
-                || [
-                    "\"path\"",
-                    "'path'",
-                    "\"git\"",
-                    "'git'",
-                    "\"workspace\"",
-                    "'workspace'",
-                ]
-                .iter()
-                .any(|key| compact.contains(key)))
-        {
+        if quote.is_some() {
             return Err(unsupported("dependencies outside crate"));
         }
-        if compact.contains("[workspace]")
-            || compact.contains("workspace=true")
-            || compact.contains("git=")
-        {
-            return Err(unsupported("dependencies outside crate"));
+        let line = raw[..end].trim();
+        if line.starts_with('[') {
+            let Some(close) = line.find(']') else {
+                return Err(unsupported("dependencies outside crate"));
+            };
+            if line.starts_with("[[") && line.as_bytes().get(close + 1) != Some(&b']') {
+                return Err(unsupported("dependencies outside crate"));
+            }
+            let header_end =
+                if line.starts_with("[[") && line.as_bytes().get(close + 1) == Some(&b']') {
+                    close + 2
+                } else {
+                    close + 1
+                };
+            if !line[header_end..].trim().is_empty() {
+                return Err(unsupported("dependencies outside crate"));
+            }
+            table = &line[..header_end];
+            if table.contains("workspace") {
+                return Err(unsupported("dependencies outside crate"));
+            }
+            continue;
         }
-        let mut remaining = line;
-        while let Some(index) = remaining.find("path") {
-            if (index > 0
-                && (remaining.as_bytes()[index - 1].is_ascii_alphanumeric()
-                    || remaining.as_bytes()[index - 1] == b'_'))
-                || !remaining[index + 4..].trim_start().starts_with('=')
-            {
-                remaining = &remaining[index + 4..];
+        let exempt = matches!(table, "[package]" | "[lib]" | "[[test]]" | "[[bin]]");
+        let bytes = line.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let start = i;
+            let quoted = matches!(bytes[i], b'"' | b'\'');
+            if quoted {
+                let q = bytes[i];
+                i += 1;
+                while i < bytes.len() && bytes[i] != q {
+                    if q == b'"' && bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                i += 1;
+            } else if bytes[i].is_ascii_alphanumeric() || matches!(bytes[i], b'_' | b'-') {
+                i += 1;
+                while i < bytes.len()
+                    && (bytes[i].is_ascii_alphanumeric() || matches!(bytes[i], b'_' | b'-'))
+                {
+                    i += 1;
+                }
+            } else {
+                i += 1;
                 continue;
             }
-            let after_key = &remaining[index + 4..];
-            let Some((_, value)) = after_key.split_once('=') else {
-                // A path-like key whose meaning is unknown is not safe to ignore.
+            let token = &line[start..i];
+            let rest = line[i..].trim_start();
+            if !rest.starts_with('=') {
+                continue;
+            }
+            if quoted && table != "[package]" {
                 return Err(unsupported("dependencies outside crate"));
-            };
-            let value = value.trim_start();
-            let Some(quote) = value.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+            }
+            if token == "workspace" || (!exempt && token == "git") {
                 return Err(unsupported("dependencies outside crate"));
-            };
-            let value = &value[quote.len_utf8()..];
-            let Some(end) = value.find(quote) else {
-                return Err(unsupported("dependencies outside crate"));
-            };
-            paths.push(value[..end].to_owned());
-            remaining = &value[end + quote.len_utf8()..];
+            }
+            if !exempt && token == "path" {
+                let value = rest[1..].trim_start();
+                let Some(q) = value
+                    .as_bytes()
+                    .first()
+                    .copied()
+                    .filter(|q| matches!(q, b'"' | b'\''))
+                else {
+                    return Err(unsupported("dependencies outside crate"));
+                };
+                let Some(end) = value[1..].find(q as char) else {
+                    return Err(unsupported("dependencies outside crate"));
+                };
+                let path = &value[1..end + 1];
+                if path.contains('\\')
+                    || Path::new(path).is_absolute()
+                    || Path::new(path)
+                        .components()
+                        .any(|c| c == Component::ParentDir)
+                {
+                    return Err(unsupported("dependencies outside crate"));
+                }
+                paths.push(path.to_owned());
+            }
         }
     }
     Ok(paths)
@@ -563,10 +611,51 @@ fn definitions(file: &str, source: &str) -> (Vec<SubjectFunction>, BTreeSet<Stri
 fn called_names(body: &str) -> BTreeSet<String> {
     let ts = lex_rust(body);
     let mut names = BTreeSet::new();
-    let mut shadowed = BTreeSet::new();
-    for pair in ts.windows(2) {
-        if matches!(pair[0].text.as_str(), "let" | "fn") && pair[1].kind == Kind::Ident {
-            shadowed.insert(pair[1].text.clone());
+    let mut shadowed: BTreeSet<_> = ts
+        .iter()
+        .enumerate()
+        .filter(|(i, token)| {
+            token.kind == Kind::Ident && ts.get(i + 1).is_none_or(|next| next.text != "(")
+        })
+        .map(|(_, token)| token.text.clone())
+        .collect();
+    // A tuple-struct pattern can itself look like a call. Treat names in
+    // binding and arm patterns as shadowed even when followed by `(`.
+    for (i, token) in ts.iter().enumerate() {
+        let end = match token.text.as_str() {
+            "let" => ts[i + 1..]
+                .iter()
+                .position(|t| t.text == "=")
+                .map(|n| i + 1 + n),
+            "for" => ts[i + 1..]
+                .iter()
+                .position(|t| t.text == "in")
+                .map(|n| i + 1 + n),
+            "|" => ts[i + 1..]
+                .iter()
+                .position(|t| t.text == "|")
+                .map(|n| i + 1 + n),
+            "fn" => ts[i + 1..]
+                .iter()
+                .position(|t| t.text == "(")
+                .and_then(|n| close(&ts, i + 1 + n)),
+            _ => None,
+        };
+        if let Some(end) = end {
+            shadowed.extend(
+                ts[i + 1..end]
+                    .iter()
+                    .filter(|t| t.kind == Kind::Ident)
+                    .map(|t| t.text.clone()),
+            );
+        }
+        if token.text == "=>" {
+            shadowed.extend(
+                ts[..i]
+                    .iter()
+                    .filter(|t| t.kind == Kind::Ident)
+                    .map(|t| t.text.clone()),
+            );
         }
     }
     let mut i = 0;
@@ -637,7 +726,9 @@ fn called_names(body: &str) -> BTreeSet<String> {
             i += 1;
             continue;
         }
-        if !shadowed.contains(&ts[i].text) {
+        if !(shadowed.contains(&ts[i].text)
+            || i > 0 && matches!(ts[i - 1].text.as_str(), "fn" | "let" | "mut" | "ref" | "|"))
+        {
             names.insert(ts[i].text.clone());
         }
         i += 1;
@@ -954,6 +1045,43 @@ mod tests {
     fn quoted_path_key_unsupported() {
         assert!(path_values("[dependencies]\nexternal = { \"path\" = '/outside' }").is_err());
         assert!(path_values("dependencies = { external = { \"path\" = '/outside' } }").is_err());
+    }
+    #[test]
+    fn commented_header_with_outside_quoted_path_unsupported() {
+        assert_eq!(
+            path_values("[dependencies] # comment\nexternal = { \"path\" = \"/outside\" }")
+                .unwrap_err()
+                .0,
+            "dependencies outside crate"
+        );
+        assert!(path_values("[dependencies] trailing\nexternal = { path = '/outside' }").is_err());
+    }
+    #[test]
+    fn comment_after_header_still_parsed() {
+        assert_eq!(path_values("[package] # comment\nname = 'x#y'\n[dependencies] # comment\nlocal = { path = 'deps/local' }").unwrap(), vec!["deps/local"]);
+    }
+    #[test]
+    fn destructured_closure_does_not_select_free_fn() {
+        assert!(
+            !called_names("let (value, _) = (|| 1, ()); assert_eq!(value(), 1);").contains("value")
+        );
+        assert!(
+            !called_names("match x { (value(), _) => (), _ => () }; value();").contains("value")
+        );
+    }
+    #[test]
+    fn let_mut_closure_shadows_free_fn() {
+        assert!(!called_names("let mut value = || 1; assert_eq!(value(), 1);").contains("value"));
+    }
+    #[test]
+    fn closure_param_named_like_free_fn_shadows() {
+        assert!(
+            !called_names("let f = |value| value(); assert_eq!(value(), 1);").contains("value")
+        );
+    }
+    #[test]
+    fn plain_call_still_resolves() {
+        assert!(called_names("assert_eq!(value(), 1);").contains("value"));
     }
     #[test]
     fn quoted_git_key_unsupported() {

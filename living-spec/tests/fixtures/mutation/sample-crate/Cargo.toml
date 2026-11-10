@@ -1,0 +1,8 @@
+[package]
+name = "mutation-sample-crate"
+version = "0.1.0"
+edition = "2021"
+
+# Keep this nested fixture independent of any surrounding Cargo workspace.
+[workspace]
+

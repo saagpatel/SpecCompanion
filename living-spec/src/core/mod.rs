@@ -4,6 +4,7 @@ pub mod boundary;
 pub mod freshness;
 pub mod history;
 pub mod json_input;
+pub mod mutation;
 pub mod providers;
 pub mod quantifier;
 pub mod spec;

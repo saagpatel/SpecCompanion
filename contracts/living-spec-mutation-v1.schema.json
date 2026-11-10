@@ -1,0 +1,600 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "engine",
+    "links",
+    "signoffs"
+  ],
+  "properties": {
+    "schema": {
+      "const": "living-spec.mutation/v1"
+    },
+    "engine": {
+      "const": "rust-cargo-v1"
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/link"
+      }
+    },
+    "signoffs": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "requirement",
+              "test_id",
+              "test_fingerprint",
+              "requirement_revision",
+              "reason",
+              "signed_by"
+            ],
+            "properties": {
+              "kind": {
+                "const": "link"
+              },
+              "requirement": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "test_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "test_fingerprint": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "requirement_revision": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "signed_by": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "mutant_id",
+              "subject_digest",
+              "requirement",
+              "test_id",
+              "test_fingerprint",
+              "requirement_revision",
+              "reason",
+              "signed_by"
+            ],
+            "properties": {
+              "kind": {
+                "const": "mutant"
+              },
+              "mutant_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "subject_digest": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "requirement": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "test_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "test_fingerprint": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "requirement_revision": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "signed_by": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement",
+        "test_id",
+        "test_fingerprint",
+        "requirement_revision",
+        "subject_digest",
+        "target",
+        "baseline_passes",
+        "status",
+        "mutants"
+      ],
+      "properties": {
+        "requirement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "test_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "test_fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requirement_revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subject_digest": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "lib",
+                "test"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "baseline_passes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "checked",
+            "survived",
+            "unsupported",
+            "error"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "mutants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/mutant"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mutants": {
+                "contains": {
+                  "properties": {
+                    "outcome": {
+                      "const": "survived"
+                    }
+                  },
+                  "required": [
+                    "outcome"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "mutants"
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "survived"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        {
+          "if": {
+            "allOf": [
+              {
+                "not": {
+                  "properties": {
+                    "mutants": {
+                      "contains": {
+                        "properties": {
+                          "outcome": {
+                            "const": "survived"
+                          }
+                        },
+                        "required": [
+                          "outcome"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "mutants"
+                  ]
+                }
+              },
+              {
+                "properties": {
+                  "mutants": {
+                    "contains": {
+                      "properties": {
+                        "outcome": {
+                          "const": "timeout"
+                        }
+                      },
+                      "required": [
+                        "outcome"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "mutants"
+                ]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "survived"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "mutants": {
+                "contains": {
+                  "properties": {
+                    "outcome": {
+                      "const": "survived"
+                    }
+                  },
+                  "required": [
+                    "outcome"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "mutants"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "checked"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "allOf": [
+              {
+                "properties": {
+                  "baseline_passes": {
+                    "const": 2
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "mutants": {
+                    "contains": {
+                      "properties": {
+                        "outcome": {
+                          "const": "killed"
+                        }
+                      },
+                      "required": [
+                        "outcome"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "mutants"
+                ]
+              },
+              {
+                "not": {
+                  "properties": {
+                    "mutants": {
+                      "contains": {
+                        "properties": {
+                          "outcome": {
+                            "const": "survived"
+                          }
+                        },
+                        "required": [
+                          "outcome"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "mutants"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "properties": {
+                    "mutants": {
+                      "contains": {
+                        "properties": {
+                          "outcome": {
+                            "const": "timeout"
+                          }
+                        },
+                        "required": [
+                          "outcome"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "mutants"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "unsupported",
+                  "error"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "pattern": "\\S"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "allOf": [
+              {
+                "properties": {
+                  "baseline_passes": {
+                    "const": 2
+                  }
+                },
+                "required": [
+                  "baseline_passes"
+                ]
+              },
+              {
+                "properties": {
+                  "mutants": {
+                    "contains": {
+                      "properties": {
+                        "outcome": {
+                          "const": "killed"
+                        }
+                      },
+                      "required": [
+                        "outcome"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "mutants"
+                ]
+              },
+              {
+                "not": {
+                  "properties": {
+                    "mutants": {
+                      "contains": {
+                        "properties": {
+                          "outcome": {
+                            "const": "survived"
+                          }
+                        },
+                        "required": [
+                          "outcome"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "mutants"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "properties": {
+                    "mutants": {
+                      "contains": {
+                        "properties": {
+                          "outcome": {
+                            "const": "timeout"
+                          }
+                        },
+                        "required": [
+                          "outcome"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "mutants"
+                  ]
+                }
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "checked"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "mutant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "file",
+        "function",
+        "line",
+        "ordinal",
+        "operator",
+        "original",
+        "replacement",
+        "outcome"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^m-[0-9a-f]{12}$"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "(^[/\\\\])|(^.:)|(^|[/\\\\])\\.\\.([/\\\\]|$)"
+          }
+        },
+        "function": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "operator": {
+          "type": "string",
+          "enum": [
+            "cmp_flip",
+            "arith_swap",
+            "bool_swap",
+            "int_bump"
+          ]
+        },
+        "original": {
+          "type": "string"
+        },
+        "replacement": {
+          "type": "string"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "killed",
+            "survived",
+            "timeout",
+            "unviable"
+          ]
+        }
+      }
+    }
+  }
+}

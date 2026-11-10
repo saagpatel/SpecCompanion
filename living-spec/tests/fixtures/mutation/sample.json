@@ -1,0 +1,121 @@
+{
+  "schema": "living-spec.mutation/v1",
+  "engine": "rust-cargo-v1",
+  "links": [
+    {
+      "requirement": "LS-001",
+      "test_id": "libtest:lib:src/lib.rs:test_1",
+      "test_fingerprint": "sha256:test",
+      "requirement_revision": "sha256:revision",
+      "subject_digest": "sha256:subject",
+      "target": {
+        "kind": "lib",
+        "name": "library"
+      },
+      "baseline_passes": 2,
+      "status": "checked",
+      "mutants": [
+        {
+          "id": "m-7b99e8a21032",
+          "file": "src/lib.rs",
+          "function": "clamp",
+          "line": 12,
+          "ordinal": 0,
+          "operator": "cmp_flip",
+          "original": "<=",
+          "replacement": ">",
+          "outcome": "killed"
+        }
+      ]
+    },
+    {
+      "requirement": "LS-002",
+      "test_id": "libtest:lib:src/lib.rs:test_2",
+      "test_fingerprint": "sha256:test",
+      "requirement_revision": "sha256:revision",
+      "subject_digest": "sha256:subject",
+      "target": {
+        "kind": "lib",
+        "name": "library"
+      },
+      "baseline_passes": 2,
+      "status": "survived",
+      "mutants": [
+        {
+          "id": "m-355484028971",
+          "file": "src/lib.rs",
+          "function": "clamp",
+          "line": 12,
+          "ordinal": 1,
+          "operator": "cmp_flip",
+          "original": "<=",
+          "replacement": ">",
+          "outcome": "survived"
+        }
+      ]
+    },
+    {
+      "requirement": "LS-003",
+      "test_id": "libtest:lib:src/lib.rs:test_3",
+      "test_fingerprint": "sha256:test",
+      "requirement_revision": "sha256:revision",
+      "subject_digest": "sha256:subject",
+      "target": {
+        "kind": "lib",
+        "name": "library"
+      },
+      "baseline_passes": 2,
+      "status": "unsupported",
+      "reason": "no subject",
+      "mutants": []
+    },
+    {
+      "requirement": "LS-004",
+      "test_id": "libtest:lib:src/lib.rs:test_4",
+      "test_fingerprint": "sha256:test",
+      "requirement_revision": "sha256:revision",
+      "subject_digest": "sha256:subject",
+      "target": {
+        "kind": "lib",
+        "name": "library"
+      },
+      "baseline_passes": 2,
+      "status": "survived",
+      "mutants": [
+        {
+          "id": "m-79bb42f99772",
+          "file": "src/lib.rs",
+          "function": "clamp",
+          "line": 12,
+          "ordinal": 2,
+          "operator": "cmp_flip",
+          "original": "<=",
+          "replacement": ">",
+          "outcome": "survived"
+        }
+      ]
+    }
+  ],
+  "signoffs": [
+    {
+      "kind": "mutant",
+      "requirement": "LS-004",
+      "test_id": "libtest:lib:src/lib.rs:test_4",
+      "mutant_id": "m-79bb42f99772",
+      "test_fingerprint": "sha256:test",
+      "requirement_revision": "sha256:revision",
+      "subject_digest": "sha256:subject",
+      "reason": "equivalent",
+      "signed_by": "reviewer"
+    },
+    {
+      "kind": "link",
+      "requirement": "LS-003",
+      "test_id": "libtest:lib:src/lib.rs:test_3",
+      "test_fingerprint": "sha256:test",
+      "requirement_revision": "sha256:revision",
+      "reason": "not supported",
+      "signed_by": "reviewer"
+    }
+  ]
+}

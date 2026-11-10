@@ -7,7 +7,7 @@ use crate::{
         mutation::{evaluate_link, line_tier, Bindings, LinkState, MutationFile},
         providers::{MutationTierProvider, Reauditor, Result},
         spec::{RequirementLine, Spec},
-        test_identity::{Fingerprints, TestOutcome},
+        test_identity::{resolve_link_with_identities, Fingerprints, Resolution, TestOutcome},
         views::QuantifierReport,
     },
     deps::propagate::DependencyQualification,
@@ -198,15 +198,14 @@ impl MutationTierProvider for PipelineMutationProvider<'_> {
                 .links
                 .iter()
                 .filter_map(|link| {
-                    if link.audit.verdict != AuditVerdict::Accepted
+                    if !link.is_accepted()
+                        || line.revision.is_empty()
                         || link.revision != line.revision
-                    {
-                        return None;
-                    }
-                    if !status
-                        .tests
-                        .iter()
-                        .any(|test| test.test_id == link.test_id && test.admissible)
+                        || link.audit.revision != line.revision
+                        || !matches!(
+                            resolve_link_with_identities(link, &[], &self.identities),
+                            Resolution::Exact
+                        )
                     {
                         return None;
                     }
@@ -214,6 +213,25 @@ impl MutationTierProvider for PipelineMutationProvider<'_> {
                         .test_id
                         .split_once('#')
                         .map_or(link.test_id.as_str(), |(base, _)| base);
+                    let case_prefix = format!("{base_id}#");
+                    let has_cases = self
+                        .identities
+                        .keys()
+                        .any(|id| id.starts_with(&case_prefix))
+                        || status
+                            .tests
+                            .iter()
+                            .any(|test| test.test_id.starts_with(&case_prefix));
+                    if !status.tests.iter().any(|test| {
+                        test.admissible
+                            && if has_cases {
+                                test.test_id.starts_with(&case_prefix)
+                            } else {
+                                test.test_id == link.test_id
+                            }
+                    }) {
+                        return None;
+                    }
                     let entry = self.index.and_then(|index| index.get(base_id));
                     let subject_digest = entry.and_then(|entry| {
                         crate::mutation::subject::subject_digest_for(entry, &self.tests_root)
@@ -490,5 +508,77 @@ mod mutation_tier_tests {
         };
         provider.attach(&spec, &annotations, &mut statuses).unwrap();
         assert!(statuses[0].mutation.is_none());
+    }
+
+    #[test]
+    fn overridden_unchecked_link_blocks_checked_tier() {
+        let (temp, spec, mut annotations, mut file, index) = fixture();
+        let link = &mut annotations.requirements.get_mut("T-001").unwrap().links[0];
+        link.audit.verdict = AuditVerdict::Challenged;
+        link.audit.extra.insert(
+            "override".into(),
+            serde_json::json!({
+                "by": "human", "reason": "reviewed", "test_id": link.test_id,
+                "fingerprint": link.fingerprint, "revision": link.revision
+            }),
+        );
+        file.links.clear();
+        let mut statuses = vec![LineStatus {
+            id: "T-001".into(),
+            badge: Badge::Proven,
+            reasons: vec![],
+            tests: vec![TestEvidence {
+                test_id: link.test_id.clone(),
+                status: TestStatus::Passed,
+                duration_ms: None,
+                admissible: true,
+            }],
+            mutation: None,
+        }];
+        let provider = PipelineMutationProvider {
+            file: &file,
+            index: Some(&index),
+            identities: index.identities(),
+            tests_root: temp.path().into(),
+            digest: "test",
+            locator: "mutation.json",
+        };
+        provider.attach(&spec, &annotations, &mut statuses).unwrap();
+        assert_eq!(
+            statuses[0].mutation.as_ref().unwrap().state,
+            TierState::NotRun
+        );
+    }
+
+    #[test]
+    fn parameterized_base_link_contributes_not_run_state() {
+        let (temp, spec, annotations, mut file, index) = fixture();
+        file.links.clear();
+        let id = &annotations.requirements["T-001"].links[0].test_id;
+        let mut statuses = vec![LineStatus {
+            id: "T-001".into(),
+            badge: Badge::Proven,
+            reasons: vec![],
+            tests: vec![TestEvidence {
+                test_id: format!("{id}#case"),
+                status: TestStatus::Passed,
+                duration_ms: None,
+                admissible: true,
+            }],
+            mutation: None,
+        }];
+        let provider = PipelineMutationProvider {
+            file: &file,
+            index: Some(&index),
+            identities: index.identities(),
+            tests_root: temp.path().into(),
+            digest: "test",
+            locator: "mutation.json",
+        };
+        provider.attach(&spec, &annotations, &mut statuses).unwrap();
+        assert_eq!(
+            statuses[0].mutation.as_ref().unwrap().state,
+            TierState::NotRun
+        );
     }
 }

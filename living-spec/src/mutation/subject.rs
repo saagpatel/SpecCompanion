@@ -140,9 +140,35 @@ fn package_dir(root: &Path, file: &Path) -> Result<PathBuf, Unsupported> {
 
 fn path_values(manifest: &str) -> Result<Vec<String>, Unsupported> {
     let mut paths = Vec::new();
+    let mut dependencies = false;
     for raw in manifest.lines() {
         let line = raw.trim();
         let compact: String = line.chars().filter(|c| !c.is_whitespace()).collect();
+        if line.starts_with('[') && line.ends_with(']') {
+            dependencies = line
+                .split(']')
+                .next()
+                .is_some_and(|h| h.contains("dependencies"));
+        }
+        let inline_dependencies = ["dependencies=", "dev-dependencies=", "build-dependencies="]
+            .iter()
+            .any(|key| compact.starts_with(key));
+        if (dependencies || inline_dependencies)
+            && (compact.contains("\"=")
+                || compact.contains("'=")
+                || [
+                    "\"path\"",
+                    "'path'",
+                    "\"git\"",
+                    "'git'",
+                    "\"workspace\"",
+                    "'workspace'",
+                ]
+                .iter()
+                .any(|key| compact.contains(key)))
+        {
+            return Err(unsupported("dependencies outside crate"));
+        }
         if compact.contains("[workspace]")
             || compact.contains("workspace=true")
             || compact.contains("git=")
@@ -219,8 +245,38 @@ enum Scope {
     Conditional,
 }
 
-fn cfg_test_fn(tokens: &[crate::agents::syntax::Token], index: usize) -> bool {
+fn qualifier_start(tokens: &[crate::agents::syntax::Token], index: usize) -> usize {
     let mut cursor = index;
+    loop {
+        if cursor >= 2
+            && tokens[cursor - 1].kind == Kind::String
+            && tokens[cursor - 2].text == "extern"
+        {
+            cursor -= 2;
+        } else if cursor > 0
+            && matches!(
+                tokens[cursor - 1].text.as_str(),
+                "pub" | "unsafe" | "async" | "const" | "extern" | "default"
+            )
+        {
+            cursor -= 1;
+        } else if cursor >= 2 && tokens[cursor - 1].text == ")" {
+            if let Some(open) = (0..cursor - 1).rev().find(|j| tokens[*j].text == "(") {
+                if open > 0 && tokens[open - 1].text == "pub" {
+                    cursor = open - 1;
+                    continue;
+                }
+            }
+            break;
+        } else {
+            break;
+        }
+    }
+    cursor
+}
+
+fn cfg_test_fn(tokens: &[crate::agents::syntax::Token], index: usize) -> bool {
+    let mut cursor = qualifier_start(tokens, index);
     loop {
         if cursor > 0
             && matches!(
@@ -352,6 +408,15 @@ fn definitions(file: &str, source: &str) -> (Vec<SubjectFunction>, BTreeSet<Stri
         if scopes.contains(&Scope::Conditional) {
             continue;
         }
+        let qualifier = qualifier_start(&ts, i);
+        if ts[qualifier..i].iter().any(|t| {
+            matches!(
+                t.text.as_str(),
+                "extern" | "unsafe" | "async" | "const" | "default"
+            )
+        }) {
+            continue;
+        }
         // Braces inside a signature (notably const generic expressions) are
         // not a function body. Reject these shapes rather than guessing.
         let mut delimiters = Vec::new();
@@ -388,7 +453,7 @@ fn definitions(file: &str, source: &str) -> (Vec<SubjectFunction>, BTreeSet<Stri
         let Some(body_end) = ts.get(end) else {
             continue;
         };
-        let mut item_index = i;
+        let mut item_index = qualifier_start(&ts, i);
         // Include conventional Rust qualifiers and visibility in the item
         // extent, including `pub(crate) unsafe fn` forms.
         loop {
@@ -552,6 +617,26 @@ fn called_names(body: &str) -> BTreeSet<String> {
             i += 1;
             continue;
         }
+        let mut path_start = i;
+        let mut valid_path = true;
+        while path_start > 0 && ts[path_start - 1].text == "::" {
+            if path_start < 2
+                || ts[path_start - 2].kind != Kind::Ident
+                || !ts[path_start - 2]
+                    .text
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_lowercase())
+            {
+                valid_path = false;
+                break;
+            }
+            path_start -= 2;
+        }
+        if !valid_path {
+            i += 1;
+            continue;
+        }
         if !shadowed.contains(&ts[i].text) {
             names.insert(ts[i].text.clone());
         }
@@ -607,6 +692,18 @@ pub fn resolve_subject(entry: &TestEntry, tests_root: &Path) -> Result<Subject, 
     for path in source_files(&package_dir)? {
         let source = fs::read_to_string(&path).map_err(|_| unsupported("no resolvable subject"))?;
         let tokens = lex_rust(&source);
+        for (i, window) in tokens.windows(3).enumerate() {
+            if window[0].text == "mod" && window[1].kind == Kind::Ident && window[2].text == "{" {
+                let end =
+                    close(&tokens, i + 2).ok_or_else(|| unsupported("nested external modules"))?;
+                if tokens[i + 3..end]
+                    .windows(3)
+                    .any(|w| w[0].text == "mod" && w[1].kind == Kind::Ident && w[2].text == ";")
+                {
+                    return Err(unsupported("nested external modules"));
+                }
+            }
+        }
         if tokens
             .windows(3)
             .any(|w| w[0].text == "#" && w[1].text == "[" && w[2].text == "path")
@@ -833,6 +930,56 @@ mod tests {
         .unwrap();
         fs::write(temp.path().join("tests/a.rs"), "").unwrap();
         temp
+    }
+
+    #[test]
+    fn external_module_under_inline_cfg_test_module_unsupported() {
+        let temp = fixture();
+        fs::create_dir_all(temp.path().join("src/outer")).unwrap();
+        fs::write(temp.path().join("src/outer/helper.rs"), "fn helper() {}").unwrap();
+        for source in [
+            "mod outer { #[cfg(test)] mod helper; } fn visible() {}",
+            "#[cfg(test)] mod outer { mod helper; } fn visible() {}",
+        ] {
+            fs::write(temp.path().join("src/lib.rs"), source).unwrap();
+            assert_eq!(
+                resolve_subject(&entry("tests/a.rs", "visible();"), temp.path())
+                    .unwrap_err()
+                    .0,
+                "nested external modules"
+            );
+        }
+    }
+    #[test]
+    fn quoted_path_key_unsupported() {
+        assert!(path_values("[dependencies]\nexternal = { \"path\" = '/outside' }").is_err());
+        assert!(path_values("dependencies = { external = { \"path\" = '/outside' } }").is_err());
+    }
+    #[test]
+    fn quoted_git_key_unsupported() {
+        assert!(path_values("[dependencies]\nexternal = { 'git' = 'url' }").is_err());
+    }
+    #[test]
+    fn quoted_workspace_key_unsupported() {
+        assert!(path_values("[dependencies.external]\n\"workspace\" = true").is_err());
+    }
+    #[test]
+    fn cfg_test_extern_fn_never_a_subject() {
+        let (found, uncertain) = definitions("src/lib.rs", "#[cfg(test)] extern \"C\" fn helper() {} fn visible() {} unsafe fn other() {} async fn later() {} const fn fixed() {} extern fn foreign() {} default fn special() {}");
+        assert_eq!(
+            found.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
+            ["visible"]
+        );
+        assert!(!uncertain.contains("helper"));
+        assert!(uncertain.contains("other"));
+    }
+    #[test]
+    fn associated_function_call_not_a_free_subject() {
+        let temp = fixture();
+        fs::write(temp.path().join("src/lib.rs"), "fn value() -> i32 { 1 } struct Counter; impl Counter { fn value() -> i32 { value() } }").unwrap();
+        assert!(resolve_subject(&entry("tests/a.rs", "Counter::value();"), temp.path()).is_err());
+        assert!(called_names("module::value();").contains("value"));
+        assert!(called_names("<T as Trait>::value(); Type::<T>::value();").is_empty());
     }
 
     #[test]

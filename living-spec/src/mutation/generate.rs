@@ -37,8 +37,31 @@ pub fn generate(
     if end + 1 != tokens.len() {
         return Vec::new();
     }
+    let mut numeric_run = vec![false; tokens.len()];
+    for i in 0..tokens.len().saturating_sub(1) {
+        if tokens[i].kind == Kind::Number
+            && tokens[i + 1].kind == Kind::Ident
+            && tokens[i].end == tokens[i + 1].start
+        {
+            numeric_run[i] = true;
+            numeric_run[i + 1] = true;
+            if matches!(tokens[i + 1].text.as_str(), "e" | "E")
+                && i + 3 < tokens.len()
+                && matches!(tokens[i + 2].text.as_str(), "+" | "-")
+                && tokens[i + 1].end == tokens[i + 2].start
+                && tokens[i + 2].end == tokens[i + 3].start
+                && tokens[i + 3].kind == Kind::Number
+            {
+                numeric_run[i + 2] = true;
+                numeric_run[i + 3] = true;
+            }
+        }
+    }
     let mut groups: [Vec<Candidate>; 4] = Default::default();
     for (index, token) in tokens.iter().enumerate().take(end).skip(open + 1) {
+        if numeric_run[index] {
+            continue;
+        }
         let prev = index.checked_sub(1).and_then(|i| tokens.get(i));
         let next = tokens.get(index + 1);
         // Suffixes, prefixes, floats and compound assignments can be split
@@ -182,6 +205,23 @@ pub fn apply(source: &str, span: Range<usize>, replacement: &str) -> Option<Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn exponent_is_not_mutated(literal: &str, operator: &str) {
+        let source = format!("fn value() -> f64 {{ {literal} {operator} 2.0 }}");
+        let start = source.find(literal).unwrap();
+        let candidates = generate(&source, "src/lib.rs", "value", 0..source.len(), 50);
+        assert!(candidates
+            .iter()
+            .all(|c| c.span.end <= start || c.span.start >= start + literal.len()));
+        assert!(candidates.iter().any(|c| c.mutant.original == operator));
+    }
+    #[test]
+    fn positive_exponent_literal_not_mutated() {
+        exponent_is_not_mutated("1e+3", "+");
+    }
+    #[test]
+    fn negative_exponent_literal_not_mutated() {
+        exponent_is_not_mutated("1e-3", "-");
+    }
     #[test]
     fn apply_then_revert_round_trips() {
         let source = "fn check(x: i32) -> bool { x <= 4 && true }";

@@ -96,6 +96,55 @@ fn plain_ambiguous_link_does_not_resolve_to_either_package() {
 }
 
 #[test]
+fn rename_detection_never_picks_a_package_for_an_ambiguous_plain_link() {
+    use living_spec::core::test_identity::{resolve_link_with_identities, Resolution};
+    // Give the two smoke tests different bodies, so a source-shape hint matches only one.
+    let temp = scratch();
+    copy_workspace(temp.path());
+    let beta = temp.path().join("beta/tests/integration.rs");
+    let text = fs::read_to_string(&beta).unwrap().replace(
+        "assert_eq!(value_length(), 3);",
+        "assert!(value_length() > 2);",
+    );
+    fs::write(&beta, text).unwrap();
+    // Alpha's second test shares smoke's body in the fixture; make it differ as well.
+    let alpha_file = temp.path().join("alpha/tests/integration.rs");
+    let text = fs::read_to_string(&alpha_file).unwrap();
+    let (head, unique) = text.split_once("fn unique()").unwrap();
+    let unique = unique.replace(
+        "assert_eq!(value_length(), 3);",
+        "assert_ne!(value_length(), 0);",
+    );
+    fs::write(&alpha_file, format!("{head}fn unique(){unique}")).unwrap();
+    let index = TestIndex::build(temp.path()).unwrap();
+    let alpha = index.get(IDS[0]).expect("alpha smoke is qualified");
+    let identities = index.identities();
+    let hint = identities[IDS[0]].rename_hint.clone();
+    assert!(hint.is_some());
+    assert_ne!(hint, identities[IDS[1]].rename_hint);
+
+    let annotations = Annotations::load(fixture().join("spec/annotations.json")).unwrap();
+    let mut link = annotations.requirements["WS-001"].links[0].clone();
+    link.test_id = "libtest:integration:tests/integration.rs:smoke".into();
+    link.fingerprint.clone_from(&identities[IDS[0]].fingerprint);
+    link.rename_hint = hint;
+    // The hint matches alpha alone, and the plain id must still bind to neither package.
+    assert_eq!(index.resolve(&link), SourceResolution::Unresolved);
+    assert_eq!(
+        resolve_link_with_identities(&link, &[], &identities),
+        Resolution::Unresolved
+    );
+    // The same hint still follows an ordinary rename when no package shares the plain id.
+    link.test_id = "libtest:integration:tests/integration.rs:smoke_before_rename".into();
+    assert_eq!(
+        resolve_link_with_identities(&link, &[], &identities),
+        Resolution::Renamed {
+            new_id: alpha.id.clone()
+        }
+    );
+}
+
+#[test]
 fn indistinguishable_source_packages_still_fail_closed() {
     for replacement in ["name = \"alpha\"", "# no package name"] {
         let temp = scratch();

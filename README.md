@@ -159,7 +159,8 @@ packages to the hashed executable names in the Running headers; retain those
 records in the stored results file so freshness checks can reproduce the ids.
 A plain capture without package artifacts still rejects duplicate ids. Links to
 the now-ambiguous plain id do not resolve to either package, and rename detection
-does not pick one for them either; update them to the qualified ids.
+does not pick one for them either; update them to the qualified ids. The mutation
+tier runs qualified ids like plain ones.
 
 From the crate directory, `living-spec link living-spec --tests . --write` proposes links for review; `living-spec audit living-spec --tests .` reports its conservative assertion audit. Add `--write` to audit to rebind and save only existing links against current requirements and source, including challenged verdicts; it does not add linker proposals. Hand-reviewed links use `proposed_by: human` and bind both the test fingerprint and the current requirement revision. `score` accepts libtest or JUnit results, optional `--commit SHA`, and `--html out.html`; `rescore` uses the same pipeline. `living-spec render living-spec --out spec.html` renders saved evidence. The [Boundary Cases](living-spec/BOUNDARY.md) and [Quantifier Map](living-spec/QUANTIFIER.md) guides describe their annotations and standalone exports. `living-spec deps report living-spec --status living-spec/status.json` explains dependency impacts.
 

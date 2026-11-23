@@ -1,9 +1,10 @@
 use super::syntax::{close, lex, lex_javascript, lex_rust, split_args, Kind, Token};
 use crate::core::annotations::Link;
 use crate::core::test_identity::fingerprint;
+use crate::core::test_results::{qualify_libtest_id, valid_package_name};
 use regex::Regex;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs, io,
     path::{Path, PathBuf},
 };
@@ -149,6 +150,7 @@ impl TestIndex {
         collect(root, &mut paths)?;
         paths.sort();
         let mut entries = Vec::new();
+        let mut packages = BTreeMap::new();
         for path in paths {
             let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
             if !matches!(
@@ -176,7 +178,8 @@ impl TestIndex {
                             .unwrap()
                             .to_string_lossy()
                             .replace('\\', "/");
-                        if let Some(target) = cargo_unit_target(crate_root, &relative)? {
+                        if let Some((target, package)) = cargo_unit_target(crate_root, &relative)? {
+                            packages.insert(file.clone(), (crate_root.to_path_buf(), package));
                             let module_path = target_module_path(crate_root, &target, &relative)
                                 .unwrap_or_default();
                             rust_tests(
@@ -194,6 +197,31 @@ impl TestIndex {
                 }
                 "py" => python_tests(&source, &file, &mut entries),
                 _ => js_tests(&source, &file, &mut entries),
+            }
+        }
+        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (i, entry) in entries.iter().enumerate() {
+            groups.entry(entry.id.clone()).or_default().push(i);
+        }
+        for (plain, group) in groups.iter().filter(|(_, group)| group.len() > 1) {
+            let mut crates = BTreeSet::new();
+            let mut names = BTreeSet::new();
+            for &i in group {
+                let context = packages.get(&entries[i].file);
+                let valid = context.is_some_and(|(root, package)| {
+                    plain.starts_with("libtest:")
+                        && crates.insert(root)
+                        && package
+                            .as_deref()
+                            .is_some_and(|name| valid_package_name(name) && names.insert(name))
+                });
+                if !valid {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "duplicate scoped test id",
+                    ));
+                }
+                entries[i].id = qualify_libtest_id(plain, context.unwrap().1.as_deref().unwrap());
             }
         }
         entries.sort_by(|a, b| a.id.cmp(&b.id));
@@ -378,7 +406,10 @@ struct CargoUnitTarget {
 
 // Read Cargo target declarations without compiling or executing the crate.
 // Unsupported/ambiguous layouts deliberately produce no test identity.
-fn cargo_unit_target(root: &Path, file: &str) -> io::Result<Option<CargoUnitTarget>> {
+fn cargo_unit_target(
+    root: &Path,
+    file: &str,
+) -> io::Result<Option<(CargoUnitTarget, Option<String>)>> {
     let manifest = fs::read_to_string(root.join("Cargo.toml"))?;
     let mut section = "";
     let mut package = None;
@@ -505,7 +536,7 @@ fn cargo_unit_target(root: &Path, file: &str) -> io::Result<Option<CargoUnitTarg
     if second.is_some() {
         return Ok(None);
     }
-    Ok(found)
+    Ok(found.map(|target| (target, package)))
 }
 
 fn finish_target(

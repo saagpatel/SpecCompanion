@@ -73,12 +73,10 @@ fn id_file(entry: &TestEntry) -> Result<PathBuf, Unsupported> {
     if parts.next() != Some("libtest") {
         return Err(unsupported("unsupported target"));
     }
-    let target = parts
+    let raw_target = parts
         .next()
         .ok_or_else(|| unsupported("unsupported target"))?;
-    if target.is_empty() {
-        return Err(unsupported("unsupported target"));
-    }
+    let target = target_component(raw_target)?;
     let file = parts
         .next()
         .ok_or_else(|| unsupported("unsupported target"))?;
@@ -105,6 +103,28 @@ fn id_file(entry: &TestEntry) -> Result<PathBuf, Unsupported> {
         return Err(unsupported("unsupported target"));
     }
     Ok(path.to_path_buf())
+}
+
+/// Accept the optional package prefix in `package/target` libtest identities.
+fn target_component(raw: &str) -> Result<&str, Unsupported> {
+    let target = if let Some((package, target)) = raw.split_once('/') {
+        if package.is_empty()
+            || !package
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+            || target.is_empty()
+            || target.contains('/')
+        {
+            return Err(unsupported("unsupported target"));
+        }
+        target
+    } else {
+        raw
+    };
+    if target.is_empty() {
+        return Err(unsupported("unsupported target"));
+    }
+    Ok(target)
 }
 
 fn within(root: &Path, path: &Path) -> bool {
@@ -868,7 +888,7 @@ pub fn resolve_subject(entry: &TestEntry, tests_root: &Path) -> Result<Subject, 
     let target_path = id_file(entry)?;
     let mut target = target_for(&target_path)?;
     if target.kind == TargetKind::Lib {
-        target.name = entry.id.split(':').nth(1).unwrap_or_default().to_owned();
+        target.name = target_component(entry.id.split(':').nth(1).unwrap_or_default())?.to_owned();
     }
     let package_dir = package_dir(tests_root, &rel)?;
     outside_dependencies(&package_dir)?;
@@ -1144,6 +1164,45 @@ mod tests {
         .unwrap();
         fs::write(temp.path().join("tests/a.rs"), "").unwrap();
         temp
+    }
+
+    #[test]
+    fn qualified_integration_id_keeps_file_target() {
+        let mut test = entry("tests/integration.rs", "value();");
+        test.id = "libtest:alpha/integration:tests/integration.rs:case".into();
+        assert_eq!(
+            id_file(&test).unwrap(),
+            PathBuf::from("tests/integration.rs")
+        );
+        assert_eq!(
+            target_for(&id_file(&test).unwrap()).unwrap().name,
+            "integration"
+        );
+    }
+
+    #[test]
+    fn qualified_package_prefix_is_validated() {
+        for target in [
+            "bad/name/integration",
+            "bad.name/integration",
+            "/integration",
+        ] {
+            assert!(target_component(target).is_err(), "{target}");
+        }
+        assert_eq!(
+            target_component("alpha_pkg/integration").unwrap(),
+            "integration"
+        );
+    }
+
+    #[test]
+    fn qualified_lib_id_uses_unqualified_target_name() {
+        let root = fixture();
+        fs::write(root.path().join("src/lib.rs"), "fn value() {}\n").unwrap();
+        let mut test = entry("src/lib.rs", "value();");
+        test.id = "libtest:alpha/lib:src/lib.rs:case".into();
+        let subject = resolve_subject(&test, root.path()).unwrap();
+        assert_eq!(subject.target.name, "lib");
     }
 
     #[test]

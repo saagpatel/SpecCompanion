@@ -5,7 +5,7 @@
 
 use super::test_identity::{TestOutcome, TestStatus};
 use quick_xml::{events::Event, Reader};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
@@ -35,11 +35,16 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
     let mut pending_stdout_test: Option<String> = None;
     let mut scope: Option<LibtestScope> = None;
     let mut target_pending = false;
+    let mut packages = BTreeMap::new();
+    let mut binaries = Vec::new();
 
     for raw_line in input.lines() {
         let line = strip_ansi_sequences(raw_line);
         let line = line.as_str();
         let trimmed = line.trim();
+        if suite_expected.is_none() && cargo_artifact(trimmed, &mut packages)? {
+            continue;
+        }
         if trimmed.starts_with("Running ") || trimmed.starts_with("Doc-tests ") {
             if target_pending || suite_expected.is_some() || pending_stdout_test.is_some() {
                 return Err(AdapterError(
@@ -47,7 +52,7 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
                 ));
             }
             finish_failure_block(&mut current_failure, &mut failure_lines);
-            scope = Some(LibtestScope::from_header(trimmed)?);
+            scope = Some(LibtestScope::from_header(trimmed, &packages)?);
             target_pending = true;
         } else if let Some(rest) = trimmed.strip_prefix("running ") {
             if suite_expected.is_some() {
@@ -66,6 +71,7 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
             }
             suite_expected = Some(expected);
             suite_start = outcomes.len();
+            ids.clear();
         } else if trimmed.starts_with("test result:") {
             let summary = parse_libtest_summary(trimmed)?;
             let Some(expected) = suite_expected.take() else {
@@ -107,6 +113,24 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
             }
             suites += 1;
             target_pending = false;
+            // Bind diagnostics before equal plain ids from other binaries exist.
+            finish_failure_block(&mut current_failure, &mut failure_lines);
+            for (id, detail) in failure_lines.drain(..) {
+                if let Some(outcome) = outcomes[suite_start..]
+                    .iter_mut()
+                    .find(|outcome| outcome.test_id == id && outcome.status == TestStatus::Failed)
+                {
+                    outcome.failure_message = Some(detail);
+                }
+            }
+            binaries.extend((suite_start..outcomes.len()).map(|_| match &scope {
+                Some(LibtestScope::Binary {
+                    executable,
+                    package,
+                    ..
+                }) => Some((executable.clone(), package.clone())),
+                _ => None,
+            }));
         } else if let Some(rest) = trimmed.strip_prefix("test ") {
             if suite_expected.is_none() {
                 return Err(AdapterError("libtest case outside a running suite".into()));
@@ -164,15 +188,112 @@ pub fn parse_libtest(input: &str) -> AdapterResult<Vec<TestOutcome>> {
         return Err(AdapterError("libtest output has zero test cases".into()));
     }
 
-    for (id, detail) in failure_lines {
-        if let Some(outcome) = outcomes
-            .iter_mut()
-            .find(|outcome| outcome.test_id == id && outcome.status == TestStatus::Failed)
-        {
-            outcome.failure_message = Some(detail);
+    let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for (i, outcome) in outcomes.iter().enumerate() {
+        groups.entry(outcome.test_id.clone()).or_default().push(i);
+    }
+    for (plain, group) in groups.iter().filter(|(_, group)| group.len() > 1) {
+        let mut seen_binaries = BTreeSet::new();
+        let mut seen_packages = BTreeSet::new();
+        for &i in group {
+            let Some((binary, Some(package))) = &binaries[i] else {
+                return Err(duplicate_libtest_id(plain));
+            };
+            if !seen_binaries.insert(binary) || !seen_packages.insert(package) {
+                return Err(duplicate_libtest_id(plain));
+            }
+            outcomes[i].test_id = qualify_libtest_id(plain, package);
+        }
+    }
+    ids.clear();
+    for outcome in &outcomes {
+        if !ids.insert(outcome.test_id.clone()) {
+            return Err(duplicate_libtest_id(&outcome.test_id));
         }
     }
     Ok(outcomes)
+}
+
+fn duplicate_libtest_id(id: &str) -> AdapterError {
+    AdapterError(format!("empty or duplicate libtest id: {id}"))
+}
+
+pub(crate) fn qualify_libtest_id(id: &str, package: &str) -> String {
+    format!("libtest:{package}/{}", id.strip_prefix("libtest:").unwrap())
+}
+
+pub(crate) fn valid_package_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
+}
+
+fn cargo_package_name(id: &str) -> AdapterResult<&str> {
+    let name = if let Some((source, fragment)) = id.rsplit_once('#') {
+        if let Some((name, _version)) = fragment.split_once('@') {
+            name
+        } else if source.starts_with("path+file://") {
+            source.rsplit('/').next().unwrap_or("")
+        } else {
+            ""
+        }
+    } else {
+        id.split_once(' ').map_or("", |(name, _)| name)
+    };
+    if !valid_package_name(name) {
+        return Err(AdapterError(
+            "invalid Cargo package name in libtest artifact".into(),
+        ));
+    }
+    Ok(name)
+}
+
+fn executable_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or("")
+}
+
+/// Only Cargo artifact records outside a running suite can supply identity.
+fn cargo_artifact(line: &str, packages: &mut BTreeMap<String, String>) -> AdapterResult<bool> {
+    if !line.starts_with('{') {
+        return Ok(false);
+    }
+    let value: serde_json::Value = match serde_json::from_str(line) {
+        Ok(value) => value,
+        Err(error) if line.contains("compiler-artifact") => {
+            return Err(AdapterError(format!(
+                "invalid Cargo libtest artifact: {error}"
+            )));
+        }
+        Err(_) => return Ok(false),
+    };
+    if value.get("reason").and_then(serde_json::Value::as_str) != Some("compiler-artifact") {
+        return Ok(false);
+    }
+    let Some(executable) = value.get("executable").and_then(serde_json::Value::as_str) else {
+        return Ok(false);
+    };
+    super::json_input::reject_duplicate_keys(line.as_bytes())
+        .map_err(|error| AdapterError(format!("invalid Cargo libtest artifact: {error}")))?;
+    let package = cargo_package_name(
+        value
+            .get("package_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(""),
+    )?;
+    let binary = executable_name(executable);
+    if binary.is_empty() {
+        return Err(AdapterError(
+            "empty Cargo libtest executable file name".into(),
+        ));
+    }
+    if packages.get(binary).is_some_and(|prior| prior != package) {
+        return Err(AdapterError(format!(
+            "conflicting Cargo packages for libtest executable: {binary}"
+        )));
+    }
+    packages.insert(binary.to_owned(), package.to_owned());
+    Ok(true)
 }
 
 fn strip_ansi_sequences(line: &str) -> String {
@@ -243,11 +364,18 @@ fn libtest_name(mut name: &str) -> &str {
 }
 
 enum LibtestScope {
-    Binary { target: String, file: String },
-    DocTests { target: String },
+    Binary {
+        target: String,
+        file: String,
+        executable: String,
+        package: Option<String>,
+    },
+    DocTests {
+        target: String,
+    },
 }
 impl LibtestScope {
-    fn from_header(header: &str) -> AdapterResult<Self> {
+    fn from_header(header: &str, packages: &BTreeMap<String, String>) -> AdapterResult<Self> {
         if let Some(target) = header.strip_prefix("Doc-tests ").map(str::trim) {
             if !target.is_empty() {
                 return Ok(Self::DocTests {
@@ -260,7 +388,8 @@ impl LibtestScope {
             .and_then(|s| s.rsplit_once(" ("))
         {
             let file = source.strip_prefix("unittests ").unwrap_or(source).trim();
-            let binary = executable.rsplit('/').next().unwrap_or("");
+            let executable = executable_name(executable);
+            let binary = executable;
             let binary = binary.strip_suffix(".exe").unwrap_or(binary);
             // Cargo appends a build hash, which is not part of stable identity.
             let target = match binary.rsplit_once('-') {
@@ -275,6 +404,8 @@ impl LibtestScope {
                 return Ok(Self::Binary {
                     target: target.into(),
                     file: file.into(),
+                    executable: executable.into(),
+                    package: packages.get(executable).cloned(),
                 });
             }
         }
@@ -288,7 +419,9 @@ fn scoped_libtest_id(scope: Option<&LibtestScope>, name: &str) -> String {
         return String::new();
     }
     match scope {
-        Some(LibtestScope::Binary { target, file }) => format!("libtest:{target}:{file}:{name}"),
+        Some(LibtestScope::Binary { target, file, .. }) => {
+            format!("libtest:{target}:{file}:{name}")
+        }
         Some(LibtestScope::DocTests { target }) => {
             let file = name.split_whitespace().next().unwrap_or("");
             format!("libtest:{target}:{file}:{name}")
@@ -867,4 +1000,198 @@ fn duration_ms(attrs: &std::collections::BTreeMap<String, String>) -> AdapterRes
         return Err(AdapterError(format!("invalid JUnit duration: {seconds}")));
     }
     Ok(Some((seconds * 1000.0).round() as u64))
+}
+
+#[cfg(test)]
+mod package_tests {
+    use super::*;
+
+    fn artifact(binary: &str, package_id: &str) -> String {
+        serde_json::json!({
+            "reason": "compiler-artifact", "package_id": package_id,
+            "executable": format!("/capture/target/debug/deps/{binary}")
+        })
+        .to_string()
+    }
+
+    fn suite(binary: &str, name: &str) -> String {
+        format!("Running tests/integration.rs (target/debug/deps/{binary})\nrunning 1 test\ntest {name} ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n")
+    }
+
+    fn capture() -> String {
+        format!(
+            "{}\n{}\n{}{}",
+            artifact("integration-abc", "path+file:///fixture/alpha#0.1.0"),
+            artifact("integration-def", "path+file:///fixture/x#beta@0.1.0"),
+            suite("integration-abc", "smoke"),
+            suite("integration-def", "smoke")
+        )
+    }
+
+    #[test]
+    fn package_id_forms_keep_cargo_package_spelling() {
+        for id in [
+            "path+file:///fixture/alpha-test_2#0.1.0",
+            "path+file:///fixture/x#alpha-test_2@0.1.0",
+            "registry+https://example.invalid/index#alpha-test_2@0.1.0",
+            "alpha-test_2 0.1.0 (path+file:///fixture/x)",
+        ] {
+            assert_eq!(cargo_package_name(id).unwrap(), "alpha-test_2");
+        }
+        for id in [
+            "",
+            "path+file:///fixture/x#@0.1.0",
+            "registry+index#bad/name@1.0.0",
+            "registry+index#café@1.0.0",
+        ] {
+            assert!(cargo_package_name(id).is_err(), "{id}");
+        }
+    }
+
+    #[test]
+    fn unique_outcomes_keep_plain_ids_with_package_context() {
+        let input = format!(
+            "{}\n{}",
+            artifact(
+                "integration-abc",
+                "alpha 0.1.0 (path+file:///fixture/alpha)"
+            ),
+            suite("integration-abc", "unique")
+        );
+        assert_eq!(
+            parse_libtest(&input).unwrap()[0].test_id,
+            "libtest:integration:tests/integration.rs:unique"
+        );
+    }
+
+    #[test]
+    fn artifact_conflicts_and_invalid_records_fail_closed() {
+        let alpha = artifact("integration-abc", "path+file:///fixture/alpha#0.1.0");
+        let cases = [
+            artifact("integration-abc", "path+file:///fixture/beta#0.1.0"),
+            alpha.replace(
+                "\"reason\":",
+                "\"reason\":\"compiler-artifact\",\"reason\":",
+            ),
+            alpha.replace(
+                "\"reason\":",
+                "\"nested\":{\"key\":1,\"key\":2},\"reason\":",
+            ),
+            alpha.trim_end_matches('}').to_owned(),
+            artifact("integration-aaa", "path+file:///fixture/x#bad/name@0.1.0"),
+        ];
+        for bad in cases {
+            assert!(
+                parse_libtest(&format!(
+                    "{alpha}\n{bad}\n{}",
+                    suite("integration-abc", "unique")
+                ))
+                .is_err(),
+                "{bad}"
+            );
+        }
+        // Repeated identical mappings are harmless.
+        assert!(parse_libtest(&format!(
+            "{alpha}\n{alpha}\n{}",
+            suite("integration-abc", "unique")
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn artifacts_inside_suites_are_only_test_output() {
+        let input = capture();
+        let injected = input.replace(
+            "running 1 test\n",
+            &format!(
+                "running 1 test\n{}\n{{\"reason\":\"compiler-artifact\",\n",
+                artifact("integration-abc", "path+file:///fixture/spoof#0.1.0")
+            ),
+        );
+        assert_eq!(
+            parse_libtest(&injected).unwrap(),
+            parse_libtest(&input).unwrap()
+        );
+        // A record first printed inside a suite cannot supply missing context.
+        let no_context = format!(
+            "{}{}",
+            suite("integration-abc", "smoke"),
+            suite("integration-def", "smoke")
+        )
+        .replace(
+            "running 1 test\n",
+            &format!(
+                "running 1 test\n{}\n",
+                artifact("integration-abc", "path+file:///fixture/alpha#0.1.0")
+            ),
+        );
+        assert!(parse_libtest(&no_context)
+            .unwrap_err()
+            .0
+            .contains("duplicate libtest id"));
+    }
+
+    #[test]
+    fn missing_or_indistinguishable_binary_context_cannot_disambiguate() {
+        let input = capture();
+        for ambiguous in [
+            input.replace("/x#beta@0.1.0", "/x#alpha@0.1.0"),
+            input.replace(
+                "\"executable\":\"/capture/target/debug/deps/integration-def\"",
+                "\"executable\":null",
+            ),
+            format!("{}{}", input, suite("integration-abc", "smoke")),
+        ] {
+            assert!(parse_libtest(&ambiguous)
+                .unwrap_err()
+                .0
+                .contains("duplicate libtest id"));
+        }
+        let duplicate_row = input.replace(
+            "test smoke ... ok\n",
+            "test smoke ... ok\ntest smoke ... ok\n",
+        );
+        assert!(parse_libtest(&duplicate_row)
+            .unwrap_err()
+            .0
+            .contains("duplicate libtest id"));
+    }
+
+    #[test]
+    fn qualified_failures_keep_each_binarys_diagnostic() {
+        let input = capture().replace(" ... ok", " ... FAILED").replace(
+            "test result: ok. 1 passed; 0 failed",
+            "test result: FAILED. 0 passed; 1 failed",
+        );
+        let mut count = 0;
+        let input = input
+            .lines()
+            .map(|line| {
+                if line.starts_with("test result:") {
+                    count += 1;
+                    format!("---- smoke stdout ----\nfailure in binary {count}\n{line}")
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let outcomes = parse_libtest(&input).unwrap();
+        assert_eq!(
+            outcomes[0].test_id,
+            "libtest:alpha/integration:tests/integration.rs:smoke"
+        );
+        assert_eq!(
+            outcomes[0].failure_message.as_deref(),
+            Some("failure in binary 1")
+        );
+        assert_eq!(
+            outcomes[1].test_id,
+            "libtest:beta/integration:tests/integration.rs:smoke"
+        );
+        assert_eq!(
+            outcomes[1].failure_message.as_deref(),
+            Some("failure in binary 2")
+        );
+    }
 }

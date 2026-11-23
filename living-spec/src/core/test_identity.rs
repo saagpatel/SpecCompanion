@@ -110,6 +110,19 @@ pub fn resolve_link_with_identities(
     let Some(hint) = &link.rename_hint else {
         return Resolution::Unresolved;
     };
+    // A plain id that workspace packages now share is ambiguous. Source shape must not
+    // choose a package for it: a copied test could rebind the link to the wrong one.
+    let base = |id: &str| {
+        id.rsplit_once('#')
+            .map_or(id.to_owned(), |(base, _)| base.to_owned())
+    };
+    let linked = base(&link.test_id);
+    if identities
+        .keys()
+        .any(|id| plain_libtest_id(&base(id)).as_deref() == Some(linked.as_str()))
+    {
+        return Resolution::Unresolved;
+    }
     // A declaration-only snippet has no body evidence for a safe rename.
     if hint == &fingerprint("") {
         return Resolution::Unresolved;
@@ -128,6 +141,16 @@ pub fn resolve_link_with_identities(
         },
         _ => Resolution::Unresolved,
     }
+}
+
+/// The plain form of a package-qualified libtest id (`libtest:{package}/{target}:...`),
+/// or `None` when `id` is not package-qualified.
+pub fn plain_libtest_id(id: &str) -> Option<String> {
+    let rest = id.strip_prefix("libtest:")?;
+    let (scope, tail) = rest.split_once(':')?;
+    let (package, target) = scope.split_once('/')?;
+    (!package.is_empty() && !target.is_empty() && !target.contains('/'))
+        .then(|| format!("libtest:{target}:{tail}"))
 }
 
 /// Read either legacy fingerprint digests or complete source identities.

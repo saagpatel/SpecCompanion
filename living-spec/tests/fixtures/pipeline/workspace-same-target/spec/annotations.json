@@ -1,0 +1,53 @@
+{
+  "schema": "living-spec.annotations/v1",
+  "requirements": {
+    "WS-001": {
+      "links": [
+        {
+          "test_id": "libtest:alpha/integration:tests/integration.rs:smoke",
+          "fingerprint": "sha256:7011ea84622a8e2db83aa444bcf3fb66a9e721001d5e3f321b6024aff8fa8de7",
+          "revision": "sha256:1d1cb8f9ca8cee0f00ebbefdd3948e28e088f72d44973c46db88e111507ce0e3",
+          "explanation": "Checks the value length in the owning package.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:1d1cb8f9ca8cee0f00ebbefdd3948e28e088f72d44973c46db88e111507ce0e3",
+            "notes": []
+          }
+        }
+      ]
+    },
+    "WS-002": {
+      "links": [
+        {
+          "test_id": "libtest:beta/integration:tests/integration.rs:smoke",
+          "fingerprint": "sha256:7011ea84622a8e2db83aa444bcf3fb66a9e721001d5e3f321b6024aff8fa8de7",
+          "revision": "sha256:6c5c8b23ab71d5a0feba9d8eb2bc0e2a03c0bf6284a95fea287c6f762c964f1d",
+          "explanation": "Checks the value length in the owning package.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:6c5c8b23ab71d5a0feba9d8eb2bc0e2a03c0bf6284a95fea287c6f762c964f1d",
+            "notes": []
+          }
+        }
+      ]
+    },
+    "WS-003": {
+      "links": [
+        {
+          "test_id": "libtest:integration:tests/integration.rs:unique",
+          "fingerprint": "sha256:4b519b420d9af58aafa7ab092022096dc720d37e0ec0f0d77ad022e2e6a80d88",
+          "revision": "sha256:bbc607f31a02a4935efb53cfd76c54ba115101042717aaf33ae13971f8e0c4ac",
+          "explanation": "Checks the value length in the owning package.",
+          "proposed_by": "human",
+          "audit": {
+            "verdict": "accepted",
+            "revision": "sha256:bbc607f31a02a4935efb53cfd76c54ba115101042717aaf33ae13971f8e0c4ac",
+            "notes": []
+          }
+        }
+      ]
+    }
+  }
+}

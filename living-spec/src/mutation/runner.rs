@@ -146,9 +146,15 @@ impl Runner {
             String::from_utf8_lossy(&err),
             String::from_utf8_lossy(&out)
         );
+        // The isolated run covers one package, so its capture reports the plain id even when
+        // the index qualified this test by package.
+        let plain = crate::core::test_identity::plain_libtest_id(id);
         match parse_libtest(&combined) {
             Ok(cases)
-                if cases.len() == 1 && (cases[0].test_id == id || cases[0].test_id == name) =>
+                if cases.len() == 1
+                    && (cases[0].test_id == id
+                        || plain.as_deref() == Some(cases[0].test_id.as_str())
+                        || cases[0].test_id == name) =>
             {
                 match cases[0].status {
                     TestStatus::Passed if status.success() => Run::Passed,

@@ -172,3 +172,50 @@ mod stub {
         assert!(!dir.path().join("called").exists());
     }
 }
+
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for e in fs::read_dir(from).unwrap() {
+        let e = e.unwrap();
+        let dest = to.join(e.file_name());
+        if e.file_type().unwrap().is_dir() {
+            if e.file_name() != "target" {
+                copy_tree(&e.path(), &dest);
+            }
+        } else {
+            fs::copy(e.path(), dest).unwrap();
+        }
+    }
+}
+
+#[test]
+fn package_qualified_id_runs_its_baseline() {
+    // Two packages with the same integration target and test name: the index qualifies both ids.
+    let temp =
+        tempfile::tempdir_in(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target")).unwrap();
+    for package in ["alpha", "beta"] {
+        copy_tree(&sample(), &temp.path().join(package));
+    }
+    let manifest = temp.path().join("beta/Cargo.toml");
+    let text = fs::read_to_string(&manifest).unwrap().replace(
+        "name = \"mutation-sample-crate\"",
+        "name = \"mutation-sample-crate-b\"",
+    );
+    fs::write(&manifest, text).unwrap();
+    let id = format!("libtest:mutation-sample-crate/strong:tests/strong.rs:{STRONG}");
+    let entry = TestIndex::build(temp.path())
+        .unwrap()
+        .entries
+        .into_iter()
+        .find(|e| e.id == id)
+        .expect("alpha's strong test is package-qualified");
+    assert_eq!(entry.file, "alpha/tests/strong.rs");
+    let options = Options {
+        max_mutants: 2,
+        ..Options::default()
+    };
+    let record = run_link(&options, &entry, "R-001", "sha256:revision", temp.path());
+    // The isolated run reports the plain id; it must still count as this test's baseline.
+    assert_eq!(record.baseline_passes, 2, "{record:?}");
+    assert_eq!(record.status, LinkStatus::Checked, "{record:?}");
+}

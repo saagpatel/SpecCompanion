@@ -1,0 +1,20 @@
+   Compiling alpha v0.1.0 (/fixture/workspace-same-target/alpha)
+   Compiling beta v0.1.0 (/fixture/workspace-same-target/beta)
+{"reason":"compiler-artifact","package_id":"path+file:///fixture/workspace-same-target/beta#0.1.0","manifest_path":"/fixture/workspace-same-target/beta/Cargo.toml","target":{"kind":["test"],"crate_types":["bin"],"name":"integration","src_path":"/fixture/workspace-same-target/beta/tests/integration.rs","edition":"2021","doc":false,"doctest":false,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":true},"features":[],"filenames":["/fixture/workspace-same-target/target/debug/deps/integration-d47320faeff42da3"],"executable":"/fixture/workspace-same-target/target/debug/deps/integration-d47320faeff42da3","fresh":false}
+{"reason":"compiler-artifact","package_id":"path+file:///fixture/workspace-same-target/alpha#0.1.0","manifest_path":"/fixture/workspace-same-target/alpha/Cargo.toml","target":{"kind":["test"],"crate_types":["bin"],"name":"integration","src_path":"/fixture/workspace-same-target/alpha/tests/integration.rs","edition":"2021","doc":false,"doctest":false,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":true},"features":[],"filenames":["/fixture/workspace-same-target/target/debug/deps/integration-213174fddb465f36"],"executable":"/fixture/workspace-same-target/target/debug/deps/integration-213174fddb465f36","fresh":false}
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s
+     Running tests/integration.rs (/fixture/workspace-same-target/target/debug/deps/integration-213174fddb465f36)
+
+running 2 tests
+test smoke ... ok
+test unique ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration.rs (/fixture/workspace-same-target/target/debug/deps/integration-d47320faeff42da3)
+
+running 1 test
+test smoke ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

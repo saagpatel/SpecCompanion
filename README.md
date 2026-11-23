@@ -141,6 +141,26 @@ cargo test --offline --locked 2>&1 | tee target/test-output.txt
 cargo run --offline --locked -q -- score living-spec --results target/test-output.txt --format libtest --tests .
 ```
 
+Libtest ids normally use `libtest:{target}:{file}:{name}`, for example
+`libtest:integration:tests/integration.rs:smoke`. When workspace packages share
+that entire id, capture Cargo package metadata alongside the harness output:
+
+```sh
+cargo test --workspace --offline --message-format=json 2>&1 | tee out.txt
+living-spec score <spec-dir> --results out.txt --format libtest --tests <workspace-root>
+```
+
+Only colliding ids become `libtest:{package}/{target}:{file}:{name}`, for example
+`libtest:alpha/integration:tests/integration.rs:smoke` and
+`libtest:beta/integration:tests/integration.rs:smoke`. Package names retain their
+hyphens; unique tests keep their existing plain ids. Both the capture and source
+scan must cover the same workspace tests. Cargo compiler-artifact records bind
+packages to the hashed executable names in the Running headers; retain those
+records in the stored results file so freshness checks can reproduce the ids.
+A plain capture without package artifacts still rejects duplicate ids. Links to
+the now-ambiguous plain id do not resolve to either package; update them to the
+qualified ids.
+
 From the crate directory, `living-spec link living-spec --tests . --write` proposes links for review; `living-spec audit living-spec --tests .` reports its conservative assertion audit. Add `--write` to audit to rebind and save only existing links against current requirements and source, including challenged verdicts; it does not add linker proposals. Hand-reviewed links use `proposed_by: human` and bind both the test fingerprint and the current requirement revision. `score` accepts libtest or JUnit results, optional `--commit SHA`, and `--html out.html`; `rescore` uses the same pipeline. `living-spec render living-spec --out spec.html` renders saved evidence. The [Boundary Cases](living-spec/BOUNDARY.md) and [Quantifier Map](living-spec/QUANTIFIER.md) guides describe their annotations and standalone exports. `living-spec deps report living-spec --status living-spec/status.json` explains dependency impacts.
 
 With `--tests` (or `--fingerprints-from`), scoring re-audits every resolved link against current sources, including human-proposed links with unchanged fingerprints. A stored `accepted` verdict cannot bypass this audit. To accept a challenge explicitly, add `"override": { "by": "human", "reason": "Explain the reviewed limitation", "test_id": "<reviewed test_id>", "fingerprint": "<reviewed fingerprint>", "revision": "<reviewed requirement revision>" }` inside that link's `audit` object. The reason must contain non-whitespace text, and all three binding fields must match the current link. An override with a missing or changed binding is inactive; write commands retain it in `audit.invalidated_overrides` as history. The auditor's challenged verdict is retained; scoring records `human_override`, the spec page displays “accepted by human override” with the reason, and `status.json` counts these links separately as `human_overrides`. Overrides do not bypass source identity, requirement revisions, execution results, or boundary gates. Without sources, scoring uses saved verdicts and labels `status.json` with `"audit": "stored"`; source-backed scoring records `"audit": "fresh"`. The dogfood spec uses no overrides.
